@@ -21,6 +21,7 @@ const emptyDashboard: FieldDashboard = {
   insights: [],
   guardianParticipants: [],
   guardianAlerts: [],
+  guardianZones: [],
   guardianActions: [],
   conflicts: [],
   offlineMapRegions: [],

@@ -4,6 +4,7 @@ import {
   demoEcologicalSites,
   demoFields,
   demoGuardianParticipants,
+  demoGuardianZones,
   demoInsights,
   demoReadings,
 } from '../domain/seed'
@@ -13,6 +14,7 @@ import {
   fieldCollection,
   formatSensorValue,
   guardianParticipantCollection,
+  guardianZoneCollection,
   guardianUncertaintyCollection,
   insightCollection,
   observationCollection,
@@ -176,6 +178,22 @@ describe('operational field map layers', () => {
         : []
     expect(ring).toHaveLength(33)
     expect(ring[0]).toEqual(ring.at(-1))
+  })
+
+  it('maps only active Guardian geofences with explicit safety levels', () => {
+    const collection = guardianZoneCollection([
+      demoGuardianZones[0],
+      { ...demoGuardianZones[1], active: false },
+    ])
+
+    expect(collection.features).toHaveLength(1)
+    expect(collection.features[0].geometry.type).toBe('Polygon')
+    expect(collection.features[0].properties).toMatchObject({
+      title: 'Property operating area',
+      level: 'green',
+      eyebrow: 'Guardian · green zone',
+    })
+    expect(collection.features[0].properties?.detail).toContain('entry dwell')
   })
 
   it('uses conservative uncertainty when a Guardian source has no accuracy', () => {

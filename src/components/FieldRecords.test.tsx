@@ -49,6 +49,7 @@ const dashboard: FieldDashboard = {
   insights: demoSnapshot.insights,
   guardianParticipants: demoSnapshot.guardianParticipants,
   guardianAlerts: demoSnapshot.guardianAlerts,
+  guardianZones: demoSnapshot.guardianZones,
   guardianActions: [],
   conflicts: [],
   offlineMapRegions: [],

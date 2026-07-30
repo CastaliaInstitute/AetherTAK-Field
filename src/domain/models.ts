@@ -302,6 +302,50 @@ export const guardianAlertSchema = z
 
 export type GuardianAlert = z.infer<typeof guardianAlertSchema>
 
+const guardianBoundaryPointSchema = z.tuple([
+  z.number().min(-180).max(180),
+  z.number().min(-90).max(90),
+])
+
+export const guardianZoneSchema = z
+  .object({
+    id: z.string().uuid(),
+    propertyId: z.string().uuid(),
+    name: z.string().min(1).max(120),
+    level: z.enum(['green', 'yellow', 'red']),
+    boundary: z.array(guardianBoundaryPointSchema).min(4).max(257),
+    enterDwellSeconds: z.number().int().min(0).max(86_400),
+    exitDwellSeconds: z.number().int().min(0).max(86_400),
+    active: z.boolean(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((zone, context) => {
+    const first = zone.boundary[0]
+    const last = zone.boundary.at(-1)
+    if (!last || first[0] !== last[0] || first[1] !== last[1]) {
+      context.addIssue({
+        code: 'custom',
+        message: 'A Guardian zone boundary must be closed.',
+        path: ['boundary'],
+      })
+    }
+    const distinct = new Set(
+      zone.boundary
+        .slice(0, -1)
+        .map(([longitude, latitude]) => `${longitude},${latitude}`),
+    )
+    if (distinct.size < 3) {
+      context.addIssue({
+        code: 'custom',
+        message: 'A Guardian zone requires three distinct vertices.',
+        path: ['boundary'],
+      })
+    }
+  })
+
+export type GuardianZone = z.infer<typeof guardianZoneSchema>
+
 export const tileSourceIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 export const offlineMapRegionSchema = z.object({
@@ -395,5 +439,6 @@ export interface DashboardSnapshot {
   insights: AlInsight[]
   guardianParticipants: GuardianParticipantState[]
   guardianAlerts: GuardianAlert[]
+  guardianZones: GuardianZone[]
   contacts: TakContact[]
 }

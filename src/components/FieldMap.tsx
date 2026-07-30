@@ -13,6 +13,7 @@ import type {
   EcologicalSite,
   Field,
   GuardianParticipantState,
+  GuardianZone,
   Observation,
   SensorReading,
   TakContact,
@@ -29,6 +30,7 @@ import {
   ecologicalSiteCollection,
   fieldCollection,
   guardianParticipantCollection,
+  guardianZoneCollection,
   guardianUncertaintyCollection,
   insightCollection,
   observationCollection,
@@ -43,6 +45,7 @@ interface FieldMapProps {
   alerts: Alert[]
   insights: AlInsight[]
   guardianParticipants?: GuardianParticipantState[]
+  guardianZones?: GuardianZone[]
   contacts: TakContact[]
   activity: TakActivity[]
   draft: {
@@ -171,6 +174,8 @@ function draftCollection(
 
 const detailLayerIds = [
   'guardian-participants',
+  'guardian-zone-outline',
+  'guardian-zone-fill',
   'monitoring-alerts',
   'al-insights',
   'observations',
@@ -204,6 +209,7 @@ export function FieldMap({
   alerts,
   insights,
   guardianParticipants = [],
+  guardianZones = [],
   contacts,
   activity,
   draft,
@@ -223,6 +229,7 @@ export function FieldMap({
   const alertsRef = useRef(alerts)
   const insightsRef = useRef(insights)
   const guardianParticipantsRef = useRef(guardianParticipants)
+  const guardianZonesRef = useRef(guardianZones)
   const activityRef = useRef(activity)
   const draftRef = useRef(draft)
   onMapPressRef.current = onMapPress
@@ -233,6 +240,7 @@ export function FieldMap({
   alertsRef.current = alerts
   insightsRef.current = insights
   guardianParticipantsRef.current = guardianParticipants
+  guardianZonesRef.current = guardianZones
   activityRef.current = activity
   activityClockRef.current = activityClock
   draftRef.current = draft
@@ -503,6 +511,45 @@ export function FieldMap({
           guardianParticipantsRef.current,
         ),
       })
+      nextMap.addSource('guardian-zones', {
+        type: 'geojson',
+        data: guardianZoneCollection(guardianZonesRef.current),
+      })
+      nextMap.addLayer({
+        id: 'guardian-zone-fill',
+        type: 'fill',
+        source: 'guardian-zones',
+        paint: {
+          'fill-color': [
+            'match',
+            ['get', 'level'],
+            'red',
+            '#ef6b63',
+            'yellow',
+            '#efb75e',
+            '#89cf78',
+          ],
+          'fill-opacity': 0.1,
+        },
+      })
+      nextMap.addLayer({
+        id: 'guardian-zone-outline',
+        type: 'line',
+        source: 'guardian-zones',
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'level'],
+            'red',
+            '#ef6b63',
+            'yellow',
+            '#efb75e',
+            '#89cf78',
+          ],
+          'line-width': 2.5,
+          'line-dasharray': [3, 1.5],
+        },
+      })
       nextMap.addLayer({
         id: 'guardian-uncertainty',
         type: 'fill',
@@ -759,11 +806,17 @@ export function FieldMap({
         | GeoJSONSource
         | undefined
     )?.setData(guardianUncertaintyCollection(guardianParticipants))
+    ;(
+      currentMap.getSource('guardian-zones') as
+        | GeoJSONSource
+        | undefined
+    )?.setData(guardianZoneCollection(guardianZones))
   }, [
     alerts,
     ecologicalSites,
     fields,
     guardianParticipants,
+    guardianZones,
     insights,
     observations,
     readings,
@@ -815,7 +868,7 @@ export function FieldMap({
       <div
         ref={container}
         className="field-map"
-        aria-label="Map of crop fields, ecological sites, sensors, Guardian participants, field evidence, alerts, Al insights, and TAK contacts"
+        aria-label="Map of crop fields, ecological sites, sensors, Guardian zones and participants, field evidence, alerts, Al insights, and TAK contacts"
       />
       <div className="map-legend" aria-label="Map legend">
         <span><i className="legend-field" /> Field</span>
@@ -824,7 +877,7 @@ export function FieldMap({
         <span><i className="legend-evidence" /> Evidence</span>
         <span><i className="legend-alert" /> Alert</span>
         <span><i className="legend-al" /> Al</span>
-        <span><i className="legend-guardian" /> Guardian</span>
+        <span><i className="legend-guardian" /> Guardian people/zones</span>
         <span><i className="legend-team" /> Team</span>
         <span><i className="legend-tak" /> TAK</span>
       </div>

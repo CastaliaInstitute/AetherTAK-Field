@@ -6,6 +6,7 @@ import type {
   Field,
   GuardianParticipantState,
   GuardianAlert,
+  GuardianZone,
   Property,
   Season,
   SensorReading,
@@ -302,6 +303,31 @@ export const demoGuardianAlerts: GuardianAlert[] = [
   },
 ]
 
+export const demoGuardianZones: GuardianZone[] = [
+  {
+    id: '46c2a063-38d5-4875-8de6-839b85f3df42',
+    propertyId: demoProperties[0].id,
+    name: 'Property operating area',
+    level: 'green',
+    boundary: demoProperties[0].boundary,
+    enterDwellSeconds: 5,
+    exitDwellSeconds: 20,
+    active: true,
+    updatedAt: minutesAgo(10),
+  },
+  {
+    id: 'ce794c50-0b87-4f77-a412-5220fbaebdf4',
+    propertyId: demoProperties[0].id,
+    name: 'Creek caution area',
+    level: 'yellow',
+    boundary: demoEcologicalSites[0].boundary,
+    enterDwellSeconds: 10,
+    exitDwellSeconds: 30,
+    active: true,
+    updatedAt: minutesAgo(10),
+  },
+]
+
 export const demoSnapshot: DashboardSnapshot = {
   properties: demoProperties,
   seasons: demoSeasons,
@@ -313,5 +339,6 @@ export const demoSnapshot: DashboardSnapshot = {
   insights: demoInsights,
   guardianParticipants: demoGuardianParticipants,
   guardianAlerts: demoGuardianAlerts,
+  guardianZones: demoGuardianZones,
   contacts: demoContacts,
 }

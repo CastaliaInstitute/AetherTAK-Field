@@ -9,6 +9,7 @@ import type {
   EcologicalSite,
   Field,
   GuardianParticipantState,
+  GuardianZone,
   Observation,
   SensorReading,
 } from '../domain/models'
@@ -308,6 +309,32 @@ export function guardianParticipantCollection(
         source: participant.location.source,
         accuracyMeters: accuracy,
       })
+    }),
+  }
+}
+
+export function guardianZoneCollection(
+  zones: GuardianZone[],
+): FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: zones.flatMap((zone) => {
+      if (!zone.active) return []
+      try {
+        return [polygonFeature(zone.boundary, {
+          id: zone.id,
+          title: zone.name,
+          eyebrow: `Guardian · ${zone.level} zone`,
+          detail: [
+            `${zone.enterDwellSeconds}s entry dwell`,
+            `${zone.exitDwellSeconds}s exit dwell`,
+          ].join(' · '),
+          level: zone.level,
+          propertyId: zone.propertyId,
+        })]
+      } catch {
+        return []
+      }
     }),
   }
 }

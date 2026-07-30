@@ -6,11 +6,17 @@ import {
   fieldSchema,
   guardianParticipantStateSchema,
   guardianAlertSchema,
+  guardianZoneSchema,
   mediaCaptureSchema,
   sensorReadingSchema,
   takContactSchema,
 } from './models'
-import { demoFields, demoReadings, demoSnapshot } from './seed'
+import {
+  demoFields,
+  demoGuardianZones,
+  demoReadings,
+  demoSnapshot,
+} from './seed'
 
 describe('field data contracts', () => {
   it('validates native depth capture results', () => {
@@ -56,6 +62,24 @@ describe('field data contracts', () => {
       expect(fieldSchema.parse(field)).toEqual(field)
       expect(field.boundary.at(0)).toEqual(field.boundary.at(-1))
     }
+  })
+
+  it('accepts only closed, bounded Guardian geofence projections', () => {
+    expect(guardianZoneSchema.parse(demoGuardianZones[0])).toEqual(
+      demoGuardianZones[0],
+    )
+    expect(() =>
+      guardianZoneSchema.parse({
+        ...demoGuardianZones[0],
+        boundary: demoGuardianZones[0].boundary.slice(0, -1),
+      }),
+    ).toThrow('closed')
+    expect(() =>
+      guardianZoneSchema.parse({
+        ...demoGuardianZones[0],
+        heartRate: 80,
+      }),
+    ).toThrow()
   })
 
   it('validates ChirpStack-normalized readings', () => {

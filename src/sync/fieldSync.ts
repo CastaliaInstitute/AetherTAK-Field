@@ -11,6 +11,7 @@ import {
   fieldSchema,
   guardianParticipantStateSchema,
   guardianAlertSchema,
+  guardianZoneSchema,
   mediaCaptureSchema,
   observationSchema,
   propertySchema,
@@ -45,6 +46,7 @@ const syncedEntityTypes = [
   'al_insight',
   'guardian_participant',
   'guardian_alert',
+  'guardian_zone',
 ] as const
 
 const serverEntitySchema = z.object({
@@ -349,6 +351,9 @@ async function deleteRemoteEntity(change: ServerChange) {
     case 'guardian_alert':
       await db.guardianAlerts.delete(change.entityId)
       break
+    case 'guardian_zone':
+      await db.guardianZones.delete(change.entityId)
+      break
   }
 }
 
@@ -451,6 +456,9 @@ async function putRemoteEntity(
     case 'guardian_alert':
       await db.guardianAlerts.put(guardianAlertSchema.parse(payload))
       break
+    case 'guardian_zone':
+      await db.guardianZones.put(guardianZoneSchema.parse(payload))
+      break
   }
 }
 
@@ -492,6 +500,7 @@ async function applyRemoteChange(
       db.insights,
       db.guardianParticipants,
       db.guardianAlerts,
+      db.guardianZones,
       db.syncMetadata,
     ],
     async () => {
@@ -616,6 +625,7 @@ export async function resolveFieldConflict(
       db.insights,
       db.guardianParticipants,
       db.guardianAlerts,
+      db.guardianZones,
     ],
     async () => {
       if (current.deleted) {

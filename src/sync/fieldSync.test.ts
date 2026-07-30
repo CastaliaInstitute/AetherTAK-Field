@@ -656,6 +656,49 @@ describe('Aether Field durable synchronization', () => {
     expect(await db.syncControl.get('field')).toBeUndefined()
   })
 
+  it('persists strict server-managed Guardian zone projections', async () => {
+    const zone = {
+      ...demoSnapshot.guardianZones[0],
+      name: 'Updated property operating area',
+      updatedAt: '2026-07-30T07:13:30.000Z',
+    }
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [{
+            cursor: 14,
+            entityType: 'guardian_zone',
+            entityId: zone.id,
+            revision: 2,
+            operation: 'update',
+            payload: zone,
+            serverUpdatedAt: '2026-07-30T07:13:31.000Z',
+            author: 'Guardian Rule Engine',
+          }],
+          nextCursor: 14,
+          hasMore: false,
+        },
+      })),
+    }
+
+    expect(await pullFieldChanges(transport)).toMatchObject({
+      applied: 1,
+      cursor: 14,
+    })
+    expect(await db.guardianZones.get(zone.id)).toMatchObject({
+      name: 'Updated property operating area',
+      level: 'green',
+      active: true,
+    })
+    expect(
+      (await db.syncMetadata.get(`guardian_zone:${zone.id}`))?.revision,
+    ).toBe(2)
+  })
+
   it('persists strict Guardian alert lifecycle projections', async () => {
     const alert = {
       ...demoSnapshot.guardianAlerts[0],

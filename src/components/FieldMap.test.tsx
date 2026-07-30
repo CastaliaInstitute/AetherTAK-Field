@@ -145,6 +145,7 @@ describe('FieldMap operational layers', () => {
       alerts: demoSnapshot.alerts,
       insights: demoSnapshot.insights,
       guardianParticipants: demoSnapshot.guardianParticipants,
+      guardianZones: demoSnapshot.guardianZones,
       contacts: demoSnapshot.contacts,
       activity: [],
       draft: null,
@@ -164,6 +165,7 @@ describe('FieldMap operational layers', () => {
       'al-insights',
       'guardian-participants',
       'guardian-uncertainty',
+      'guardian-zones',
     ]))
     expect([...instance.layers.keys()]).toEqual(expect.arrayContaining([
       'field-label',
@@ -174,6 +176,8 @@ describe('FieldMap operational layers', () => {
       'al-insights',
       'guardian-participants',
       'guardian-uncertainty',
+      'guardian-zone-fill',
+      'guardian-zone-outline',
     ]))
 
     const updatedReadings = [{
@@ -187,6 +191,7 @@ describe('FieldMap operational layers', () => {
     expect(
       instance.sources.get('guardian-participants')?.setData,
     ).toHaveBeenCalled()
+    expect(instance.sources.get('guardian-zones')?.setData).toHaveBeenCalled()
     expect(
       instance.sources.get('monitoring-alerts')?.setData,
     ).toHaveBeenCalled()

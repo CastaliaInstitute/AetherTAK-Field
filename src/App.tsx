@@ -161,6 +161,7 @@ export default function App() {
     insights,
     guardianParticipants,
     guardianAlerts,
+    guardianZones,
     guardianActions,
     offlineMapRegions,
   } = dashboard
@@ -759,7 +760,8 @@ export default function App() {
             observations={observations}
             alerts={alerts}
             insights={liveInsights}
-            guardianParticipants={guardianParticipants}
+        guardianParticipants={guardianParticipants}
+        guardianZones={guardianZones}
             contacts={contacts}
             activity={takActivity}
             draft={mapDraft}

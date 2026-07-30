@@ -42,6 +42,9 @@ describe('offline field repository', () => {
     expect(dashboard.fields.some((field) => field.cropIcon === '🥬')).toBe(true)
     expect(dashboard.ecologicalSites[0].siteType).toBe('riparian')
     expect(dashboard.insights.every((insight) => insight.readOnly)).toBe(true)
+    expect(dashboard.guardianZones.map((zone) => zone.level)).toEqual(
+      expect.arrayContaining(['green', 'yellow']),
+    )
     expect(dashboard.media[0].localUri).toBe('file:///private/field-photo.jpg')
   })
 

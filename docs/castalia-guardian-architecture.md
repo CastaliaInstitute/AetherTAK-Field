@@ -341,6 +341,15 @@ source-specific defaults. Undeclared fields—including biometric values—fail
 validation without advancing the durable change cursor. Mobile mutation of
 participant state is intentionally unavailable.
 
+The property safety overlay also persists strict, publisher-managed
+`guardian_zone` projections. Each zone is tied to a property and carries a
+closed, bounded polygon, green/yellow/red level, active state, and explicit
+entry/exit dwell settings. Active zones render beneath participant uncertainty
+on the field map and remain available offline. Undeclared fields, open
+boundaries, invalid coordinates, and excessive geometry fail validation on
+both the Field API and mobile client without advancing the durable cursor.
+Mobile clients cannot author or alter authoritative safety zones.
+
 The mobile safety workflow persists strict `guardian_alert` projections and a
 separate local action outbox. Check-in, acknowledgement, and resolution use a
 stable UUID as `Idempotency-Key`; retries reuse that key. Swift and Kotlin map
