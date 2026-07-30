@@ -20,6 +20,7 @@ import {
 import type { FieldDashboard } from '../data/useDashboard'
 import { saveLocalEntity } from '../data/fieldRepository'
 import { currentCoordinate } from '../platform/capture'
+import { ObservationDetail } from './ObservationDetail'
 
 type EditableKind = 'property' | 'season' | 'field' | 'ecological_site'
 type Editor = { kind: EditableKind; id?: string } | null
@@ -63,6 +64,8 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [location, setLocation] = useState<Coordinate | null>(null)
+  const [selectedObservationId, setSelectedObservationId] =
+    useState<string | null>(null)
 
   const property = editor?.kind === 'property' && editor.id
     ? data.properties.find((item) => item.id === editor.id)
@@ -75,6 +78,9 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
     : undefined
   const site = editor?.kind === 'ecological_site' && editor.id
     ? data.ecologicalSites.find((item) => item.id === editor.id)
+    : undefined
+  const selectedObservation = selectedObservationId
+    ? data.observations.find((item) => item.id === selectedObservationId)
     : undefined
 
   function open(kind: EditableKind, id?: string) {
@@ -378,15 +384,30 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
           <p className="records-muted">Captured observations will appear here offline.</p>
         )}
         {data.observations.map((observation) => (
-          <article className="observation-row" key={observation.id}>
+          <button
+            className="observation-row"
+            key={observation.id}
+            type="button"
+            onClick={() => setSelectedObservationId(observation.id)}
+          >
             <div>
               <strong>{observation.title}</strong>
               <p>{observation.category} · {observation.mediaIds.length} media · {observation.syncState}</p>
             </div>
             <span>{new Date(observation.observedAt).toLocaleDateString()}</span>
-          </article>
+          </button>
         ))}
       </section>
+
+      {selectedObservation && (
+        <ObservationDetail
+          observation={selectedObservation}
+          media={data.media}
+          fields={data.fields}
+          ecologicalSites={data.ecologicalSites}
+          onClose={() => setSelectedObservationId(null)}
+        />
+      )}
 
       {editor && (
         <div className="record-editor-backdrop" role="presentation">

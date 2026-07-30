@@ -3,6 +3,7 @@ import type {
   Alert,
   EcologicalSite,
   Field,
+  MediaCapture,
   OfflineMapRegion,
   Observation,
   Property,
@@ -139,6 +140,7 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
 }
 
 export type FieldDashboardData = Omit<DashboardSnapshot, 'contacts'> & {
+  media: MediaCapture[]
   offlineMapRegions: OfflineMapRegion[]
 }
 
@@ -150,6 +152,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     ecologicalSites,
     readings,
     observations,
+    media,
     alerts,
     insights,
     offlineMapRegions,
@@ -160,6 +163,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     db.ecologicalSites.toArray(),
     db.readings.orderBy('recordedAt').reverse().toArray(),
     db.observations.orderBy('observedAt').reverse().toArray(),
+    db.media.orderBy('capturedAt').reverse().toArray(),
     db.alerts.orderBy('createdAt').reverse().toArray(),
     db.insights.orderBy('generatedAt').reverse().toArray(),
     db.offlineMapRegions.orderBy('updatedAt').reverse().toArray(),
@@ -172,6 +176,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     ecologicalSites,
     readings,
     observations,
+    media,
     alerts,
     insights: insights.filter(
       (insight) => new Date(insight.expiresAt).getTime() > Date.now(),

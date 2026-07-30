@@ -15,6 +15,7 @@ const emptyDashboard: FieldDashboard = {
   ecologicalSites: [],
   readings: [],
   observations: [],
+  media: [],
   alerts: [],
   insights: [],
   offlineMapRegions: [],

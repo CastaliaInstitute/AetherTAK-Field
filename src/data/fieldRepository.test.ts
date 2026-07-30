@@ -21,6 +21,20 @@ describe('offline field repository', () => {
   })
 
   it('hydrates the full agriculture and ecology dashboard', async () => {
+    await db.media.add({
+      id: '5a52acec-f6ac-4050-8c0f-c47456485726',
+      observationId: null,
+      kind: 'photo',
+      localUri: 'file:///private/field-photo.jpg',
+      previewUri: null,
+      mimeType: 'image/jpeg',
+      coordinate: demoSnapshot.properties[0].center,
+      capturedAt: new Date().toISOString(),
+      deviceModel: null,
+      sha256: null,
+      depthMetadata: null,
+      syncState: 'queued',
+    })
     const dashboard = await loadDashboard()
 
     expect(dashboard.properties).toHaveLength(1)
@@ -28,6 +42,7 @@ describe('offline field repository', () => {
     expect(dashboard.fields.some((field) => field.cropIcon === '🥬')).toBe(true)
     expect(dashboard.ecologicalSites[0].siteType).toBe('riparian')
     expect(dashboard.insights.every((insight) => insight.readOnly)).toBe(true)
+    expect(dashboard.media[0].localUri).toBe('file:///private/field-photo.jpg')
   })
 
   it('atomically saves a local edit and queues synchronization', async () => {
