@@ -31,6 +31,13 @@ platform. It requires:
   mission packages and matching TAK Server log references, from every requested
   AetherTAK Field platform.
 
+All readiness reports, physical sessions, result timestamps, interoperability
+sessions, and server-log intervals must be no more than 30 days old and no more
+than five minutes ahead of the verification clock. Result and server-log times
+must fall inside their recorded session. A Device readiness report must be
+generated after the matching physical-device session completes, so a stale
+pre-exercise snapshot cannot authorize distribution.
+
 The private bundle is decoded only into the Actions runner's temporary
 directory and deleted after authorization. The workflow retains only a
 non-sensitive digest attestation as an artifact. Each platform job downloads

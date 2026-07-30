@@ -201,10 +201,12 @@ export function updateInteroperabilityLog(
   session: InteroperabilitySession,
   update: InteroperabilitySession['serverLogInterval'],
 ): InteroperabilitySession {
+  const now = new Date().toISOString()
   return interoperabilitySessionSchema.parse({
     ...session,
     serverLogInterval: update,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
+    completedAt: completionTime(session.results, now),
   })
 }
 

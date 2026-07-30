@@ -55,6 +55,9 @@ const requiredReadinessChecks = [
   'media-integrity',
 ]
 
+const maximumEvidenceAgeMs = 30 * 24 * 60 * 60 * 1_000
+const allowedClockSkewMs = 5 * 60 * 1_000
+
 function fail(message) {
   throw new Error(message)
 }
@@ -80,6 +83,31 @@ function timestamp(value, label) {
   const parsed = Date.parse(string(value, label))
   requireValue(Number.isFinite(parsed), `${label} is not a valid timestamp.`)
   return parsed
+}
+
+function verificationClock(now) {
+  requireValue(
+    now instanceof Date && Number.isFinite(now.getTime()),
+    'Verification time is invalid.',
+  )
+  return {
+    oldest: now.getTime() - maximumEvidenceAgeMs,
+    latest: now.getTime() + allowedClockSkewMs,
+  }
+}
+
+function evidenceTimestamp(value, label, clock) {
+  const parsed = timestamp(value, label)
+  requireValue(parsed >= clock.oldest, `${label} is older than 30 days.`)
+  requireValue(
+    parsed <= clock.latest,
+    `${label} is more than 5 minutes in the future.`,
+  )
+  return parsed
+}
+
+function orderedInterval(startsAt, endsAt, label) {
+  requireValue(startsAt <= endsAt, `${label} ends before it starts.`)
 }
 
 function array(value, label) {
@@ -196,9 +224,14 @@ function uniqueResults(results, ids, key, label) {
   return map
 }
 
-function validateReadiness(reportValue, expected) {
+function validateReadiness(reportValue, expected, clock) {
   const report = object(reportValue, 'Device readiness report')
   requireValue(report.schemaVersion === 1, 'Unsupported readiness schema.')
+  const generatedAt = evidenceTimestamp(
+    report.generatedAt,
+    'Readiness generation time',
+    clock,
+  )
   exactBuild(object(report.app, 'Readiness app'), expected, 'Readiness report')
   const device = object(report.device, 'Readiness device')
   requireValue(
@@ -233,25 +266,39 @@ function validateReadiness(reportValue, expected) {
     report,
     device,
     depth,
+    generatedAt,
     digest: documentDigest(report),
   }
 }
 
 function matchingReadiness(session, readiness) {
-  return readiness.find(({ report, device }) =>
+  const completedAt = timestamp(
+    session.completedAt,
+    'Device validation completion',
+  )
+  return readiness.find(({ report, device, generatedAt }) =>
     device.platform === session.device.platform &&
     device.model === session.device.model &&
     device.operatingSystem === session.device.operatingSystem &&
     device.osVersion === session.device.osVersion &&
     report.app.version === session.release.appVersion &&
     String(report.app.build) === String(session.release.build) &&
-    report.app.sourceRevision === session.release.sourceRevision,
+    report.app.sourceRevision === session.release.sourceRevision &&
+    generatedAt >= completedAt,
   )
 }
 
-function completePhysicalResult(result, label) {
+function completePhysicalResult(result, label, interval, clock) {
   requireValue(result.status !== 'pending', `${label} is still pending.`)
-  timestamp(result.testedAt, `${label} test timestamp`)
+  const testedAt = evidenceTimestamp(
+    result.testedAt,
+    `${label} test timestamp`,
+    clock,
+  )
+  requireValue(
+    testedAt >= interval.startsAt && testedAt <= interval.completedAt,
+    `${label} test timestamp is outside its session interval.`,
+  )
   if (result.status === 'not_applicable') {
     requireValue(
       typeof result.notes === 'string' && result.notes.trim().length > 0,
@@ -270,10 +317,35 @@ function completePhysicalResult(result, label) {
   )
 }
 
-function validatePhysicalSession(sessionValue, expected, readiness) {
+function validatePhysicalSession(sessionValue, expected, readiness, clock) {
   const session = object(sessionValue, 'Device validation session')
   requireValue(session.schemaVersion === 1, 'Unsupported device validation schema.')
-  timestamp(session.completedAt, 'Device validation completion')
+  const interval = {
+    startsAt: evidenceTimestamp(
+      session.startedAt,
+      'Device validation start',
+      clock,
+    ),
+    completedAt: evidenceTimestamp(
+      session.completedAt,
+      'Device validation completion',
+      clock,
+    ),
+  }
+  orderedInterval(
+    interval.startsAt,
+    interval.completedAt,
+    'Device validation session',
+  )
+  const updatedAt = evidenceTimestamp(
+    session.updatedAt,
+    'Device validation update',
+    clock,
+  )
+  requireValue(
+    updatedAt >= interval.completedAt,
+    'Device validation update predates completion.',
+  )
   exactBuild(
     object(session.release, 'Device validation release'),
     expected,
@@ -292,12 +364,17 @@ function validatePhysicalSession(sessionValue, expected, readiness) {
     `Device validation ${session.id}`,
   )
   for (const [id, result] of results) {
-    completePhysicalResult(result, `${device.model} ${id}`)
+    completePhysicalResult(
+      result,
+      `${device.model} ${id}`,
+      interval,
+      clock,
+    )
   }
   const readinessMatch = matchingReadiness(session, readiness)
   requireValue(
     readinessMatch,
-    `No matching Device readiness report for ${device.platform} ${device.model}.`,
+    `No post-validation Device readiness report for ${device.platform} ${device.model}.`,
   )
   const supportedDepth = readinessMatch.depth.supported === true
   for (const id of physicalChecks) {
@@ -359,10 +436,33 @@ function validatePhysicalSession(sessionValue, expected, readiness) {
   }
 }
 
-function validateInteroperabilitySession(sessionValue, expected) {
+function validateInteroperabilitySession(sessionValue, expected, clock) {
   const session = object(sessionValue, 'Interoperability session')
   requireValue(session.schemaVersion === 1, 'Unsupported interoperability schema.')
-  timestamp(session.completedAt, 'Interoperability completion')
+  const sessionStartsAt = evidenceTimestamp(
+    session.startedAt,
+    'Interoperability start',
+    clock,
+  )
+  const sessionCompletedAt = evidenceTimestamp(
+    session.completedAt,
+    'Interoperability completion',
+    clock,
+  )
+  orderedInterval(
+    sessionStartsAt,
+    sessionCompletedAt,
+    'Interoperability session',
+  )
+  const updatedAt = evidenceTimestamp(
+    session.updatedAt,
+    'Interoperability update',
+    clock,
+  )
+  requireValue(
+    updatedAt >= sessionCompletedAt,
+    'Interoperability update predates completion.',
+  )
   exactBuild(object(session.field, 'Interoperability field build'), expected, 'Interoperability session')
   requireValue(
     session.peer?.client === 'iTAK' || session.peer?.client === 'ATAK',
@@ -391,9 +491,21 @@ function validateInteroperabilitySession(sessionValue, expected) {
     'Interoperability session does not identify the Field platform.',
   )
   const interval = object(session.serverLogInterval, 'Server log interval')
-  const startsAt = timestamp(interval.startsAt, 'Server log start')
-  const endsAt = timestamp(interval.endsAt, 'Server log end')
-  requireValue(startsAt <= endsAt, 'Server log interval ends before it starts.')
+  const startsAt = evidenceTimestamp(
+    interval.startsAt,
+    'Server log start',
+    clock,
+  )
+  const endsAt = evidenceTimestamp(
+    interval.endsAt,
+    'Server log end',
+    clock,
+  )
+  orderedInterval(startsAt, endsAt, 'Server log interval')
+  requireValue(
+    startsAt >= sessionStartsAt && endsAt <= sessionCompletedAt,
+    'Server log interval is outside its interoperability session.',
+  )
   string(interval.reference, 'Controlled server log reference')
   const expectedPairs = new Set(
     interoperabilityCapabilities.flatMap((capability) => [
@@ -409,7 +521,15 @@ function validateInteroperabilitySession(sessionValue, expected) {
     requireValue(!actualPairs.has(pair), `Duplicate interoperability result ${pair}.`)
     actualPairs.add(pair)
     requireValue(result.status === 'pass', `Interoperability result ${pair} did not pass.`)
-    timestamp(result.testedAt, `${pair} timestamp`)
+    const testedAt = evidenceTimestamp(
+      result.testedAt,
+      `${pair} timestamp`,
+      clock,
+    )
+    requireValue(
+      testedAt >= sessionStartsAt && testedAt <= sessionCompletedAt,
+      `${pair} timestamp is outside its interoperability session.`,
+    )
     string(result.evidenceReference, `${pair} evidence reference`)
   }
   requireValue(
@@ -430,6 +550,7 @@ function requiredPlatforms(value) {
 }
 
 export function verifyReleaseEvidence(bundleValue, expected, now = new Date()) {
+  const clock = verificationClock(now)
   const bundle = object(bundleValue, 'Release evidence bundle')
   requireValue(bundle.schemaVersion === 1, 'Unsupported release evidence bundle schema.')
   requireValue(bundle.versionName === expected.versionName, 'Evidence bundle version mismatch.')
@@ -437,15 +558,15 @@ export function verifyReleaseEvidence(bundleValue, expected, now = new Date()) {
   requireValue(bundle.sourceRevision === expected.sourceRevision, 'Evidence bundle revision mismatch.')
   const platforms = requiredPlatforms(expected.platform)
   const readiness = array(bundle.readinessReports, 'Readiness reports').map(
-    (report) => validateReadiness(report, expected),
+    (report) => validateReadiness(report, expected, clock),
   )
   const physical = array(bundle.physicalSessions, 'Device validation sessions').map(
-    (session) => validatePhysicalSession(session, expected, readiness),
+    (session) => validatePhysicalSession(session, expected, readiness, clock),
   )
   const interoperability = array(
     bundle.interoperabilitySessions,
     'Interoperability sessions',
-  ).map((session) => validateInteroperabilitySession(session, expected))
+  ).map((session) => validateInteroperabilitySession(session, expected, clock))
 
   for (const platform of platforms) {
     requireValue(
@@ -490,6 +611,13 @@ export function verifyReleaseEvidence(bundleValue, expected, now = new Date()) {
       serverVersion: expected.serverVersion,
     },
     evidenceBundleSha256: documentDigest(bundle),
+    evidencePolicy: {
+      maximumAgeDays: 30,
+      allowedClockSkewSeconds: 300,
+      readinessMustFollowPhysicalValidation: true,
+      resultTimesMustFallWithinSessions: true,
+      serverLogTimesMustFallWithinInteroperabilitySessions: true,
+    },
     coverage: {
       physicalPlatforms: [...new Set(
         physical.map((entry) => entry.device.platform),

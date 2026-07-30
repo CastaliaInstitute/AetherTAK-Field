@@ -83,3 +83,8 @@ the controlled evidence location; enter only their references in the app. The
 JSON deliberately excludes server addresses, coordinates, message content, and
 binary evidence. Exported metadata does not replace the referenced behavioral
 evidence.
+
+Complete and verify the session within 30 days. The beta gate allows at most
+five minutes of clock skew, requires every result timestamp and the TAK Server
+log interval to fall inside the recorded session, and rejects a log interval
+that predates the session or extends beyond its completion.

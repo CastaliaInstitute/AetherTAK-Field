@@ -208,7 +208,7 @@ function interoperability(peer, fieldPlatform, id) {
     recipientCallsign: `${peer} One`,
     serverLogInterval: {
       startsAt: now,
-      endsAt: '2026-07-30T12:15:00.000Z',
+      endsAt: now,
       reference: `logs/${id}`,
     },
     results: interoperabilityCapabilities.flatMap((capability) =>
@@ -343,6 +343,13 @@ test('builds and verifies a complete private multi-device evidence bundle', () =
     manifest.coverage.interoperabilityPlatforms,
     ['android', 'ios'],
   )
+  assert.deepEqual(manifest.evidencePolicy, {
+    maximumAgeDays: 30,
+    allowedClockSkewSeconds: 300,
+    readinessMustFollowPhysicalValidation: true,
+    resultTimesMustFallWithinSessions: true,
+    serverLogTimesMustFallWithinInteroperabilitySessions: true,
+  })
   assert.match(manifest.evidenceBundleSha256, /^[0-9a-f]{64}$/)
   assert.equal(JSON.stringify(manifest).includes('evidence/'), false)
   assert.equal(JSON.stringify(manifest).includes('Field One'), false)
@@ -462,6 +469,74 @@ test('requires a passing authenticated field service health check', () => {
   assert.throws(
     () => verifyReleaseEvidence(failed, expected()),
     /field-api-health did not pass/,
+  )
+})
+
+test('rejects future-dated, stale, and out-of-session evidence', () => {
+  const future = validBundle()
+  future.physicalSessions[0].completedAt = '2026-07-30T12:06:00.000Z'
+  future.physicalSessions[0].updatedAt = '2026-07-30T12:06:00.000Z'
+  assert.throws(
+    () => verifyReleaseEvidence(future, expected(), new Date(now)),
+    /more than 5 minutes in the future/,
+  )
+
+  const stale = validBundle()
+  stale.interoperabilitySessions[0].startedAt = '2026-06-29T12:00:00.000Z'
+  assert.throws(
+    () => verifyReleaseEvidence(stale, expected(), new Date(now)),
+    /older than 30 days/,
+  )
+
+  const outside = validBundle()
+  outside.physicalSessions[0].results[0].testedAt =
+    '2026-07-30T11:59:59.000Z'
+  assert.throws(
+    () => verifyReleaseEvidence(outside, expected(), new Date(now)),
+    /outside its session interval/,
+  )
+
+  const outsideInteroperability = validBundle()
+  outsideInteroperability.interoperabilitySessions[0].results[0].testedAt =
+    '2026-07-30T12:00:01.000Z'
+  assert.throws(
+    () =>
+      verifyReleaseEvidence(
+        outsideInteroperability,
+        expected(),
+        new Date('2026-07-30T12:01:00.000Z'),
+      ),
+    /outside its interoperability session/,
+  )
+})
+
+test('requires readiness after physical exercises and bounded server logs', () => {
+  const earlyReadiness = validBundle()
+  earlyReadiness.physicalSessions[0].startedAt =
+    '2026-07-30T11:59:00.000Z'
+  earlyReadiness.physicalSessions[0].completedAt =
+    '2026-07-30T12:01:00.000Z'
+  earlyReadiness.physicalSessions[0].updatedAt =
+    '2026-07-30T12:01:00.000Z'
+  earlyReadiness.physicalSessions[0].results.forEach((result) => {
+    result.testedAt = '2026-07-30T12:00:30.000Z'
+  })
+  assert.throws(
+    () =>
+      verifyReleaseEvidence(
+        earlyReadiness,
+        expected(),
+        new Date('2026-07-30T12:02:00.000Z'),
+      ),
+    /No post-validation Device readiness report/,
+  )
+
+  const unboundedLog = validBundle()
+  unboundedLog.interoperabilitySessions[0].serverLogInterval.startsAt =
+    '2026-07-30T11:59:59.000Z'
+  assert.throws(
+    () => verifyReleaseEvidence(unboundedLog, expected(), new Date(now)),
+    /outside its interoperability session/,
   )
 })
 

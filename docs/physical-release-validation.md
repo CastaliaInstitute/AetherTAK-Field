@@ -18,12 +18,19 @@ Run this gate on every physical device class intended for the beta.
    the app.
 6. Export the completed JSON beside that evidence set before deleting or
    replacing the local session.
+7. Run and export **Device readiness after the session is complete**. The beta
+   verifier rejects a readiness snapshot generated before the matching
+   physical exercises.
 
 The session captures the installed app version/build and source revision plus
 the device model, OS, platform, and physical-versus-virtual state. A result is
 not complete until it has a non-pending status and controlled evidence
 reference. `Not applicable` requires a justification, normally including the
 companion-device session that covers the capability.
+
+Complete and verify a candidate within 30 days. Keep device clocks synchronized:
+the distribution gate permits at most five minutes of clock skew and rejects
+result timestamps outside the parent session.
 
 ## Required exercises
 

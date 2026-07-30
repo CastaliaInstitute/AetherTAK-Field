@@ -116,12 +116,15 @@ describe('physical interoperability evidence', () => {
         },
       )
     }
+    const completedBeforeLog = session.completedAt
     session = updateInteroperabilityLog(session, {
       startsAt: '2026-07-30T10:00:00.000Z',
       endsAt: '2026-07-30T10:15:00.000Z',
       reference: 'takserver/logs/session-42.txt',
     })
     expect(session.completedAt).not.toBeNull()
+    expect(session.completedAt! >= completedBeforeLog!).toBe(true)
+    expect(session.updatedAt).toBe(session.completedAt)
     expect(session.serverLogInterval.reference).toBe(
       'takserver/logs/session-42.txt',
     )
