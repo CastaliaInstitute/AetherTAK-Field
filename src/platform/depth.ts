@@ -4,6 +4,10 @@ import type {
   DepthCapability,
   DepthScanResult,
 } from '../domain/models'
+import {
+  depthCapabilitySchema,
+  depthScanResultSchema,
+} from '../domain/models'
 
 interface AetherDepthScannerPlugin {
   getCapability(): Promise<DepthCapability>
@@ -30,7 +34,7 @@ export const depthScanner = {
   async capability(): Promise<DepthCapability> {
     if (!Capacitor.isNativePlatform()) return unsupported
     try {
-      return await nativeDepth.getCapability()
+      return depthCapabilitySchema.parse(await nativeDepth.getCapability())
     } catch {
       return unsupported
     }
@@ -43,6 +47,12 @@ export const depthScanner = {
     if (!Capacitor.isNativePlatform()) {
       throw new Error(unsupported.reason ?? 'Depth scanning is unavailable.')
     }
-    return nativeDepth.startScan({ coordinate, mode })
+    return depthScanResultSchema.parse(
+      await nativeDepth.startScan({ coordinate, mode }),
+    )
+  },
+
+  async cancel(): Promise<void> {
+    if (Capacitor.isNativePlatform()) await nativeDepth.cancelScan()
   },
 }

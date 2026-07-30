@@ -214,32 +214,55 @@ export interface TakContact {
   staleAt: string
 }
 
-export interface DepthCapability {
-  supported: boolean
-  provider: 'arkit-lidar' | 'arcore-depth' | 'none'
-  supportsPointCloud: boolean
-  supportsMesh: boolean
-  supportsConfidence: boolean
-  reason: string | null
-}
+export const depthCapabilitySchema = z
+  .object({
+    supported: z.boolean(),
+    provider: z.enum(['arkit-lidar', 'arcore-depth', 'none']),
+    supportsPointCloud: z.boolean(),
+    supportsMesh: z.boolean(),
+    supportsConfidence: z.boolean(),
+    reason: z.string().nullable(),
+  })
+  .superRefine((capability, context) => {
+    if (capability.supported && capability.provider === 'none') {
+      context.addIssue({
+        code: 'custom',
+        message: 'A supported depth capability must name its provider.',
+        path: ['provider'],
+      })
+    }
+    if (!capability.supported && capability.provider !== 'none') {
+      context.addIssue({
+        code: 'custom',
+        message: 'An unsupported depth capability must use provider "none".',
+        path: ['provider'],
+      })
+    }
+  })
 
-export interface DepthScanResult {
-  id: string
-  provider: Exclude<DepthCapability['provider'], 'none'>
-  capturedAt: string
-  coordinate: Coordinate
-  previewUri: string
-  depthUri: string
-  confidenceUri: string | null
-  pointCloudUri: string | null
-  modelUri: string | null
-  measurements: Array<{
-    label: string
-    value: number
-    unit: 'm' | 'm2' | 'm3'
-    uncertainty: number | null
-  }>
-}
+export type DepthCapability = z.infer<typeof depthCapabilitySchema>
+
+export const depthMeasurementSchema = z.object({
+  label: z.string().min(1),
+  value: z.number().finite().nonnegative(),
+  unit: z.enum(['m', 'm2', 'm3']),
+  uncertainty: z.number().finite().nonnegative().nullable(),
+})
+
+export const depthScanResultSchema = z.object({
+  id: z.string().uuid(),
+  provider: z.enum(['arkit-lidar', 'arcore-depth']),
+  capturedAt: z.string().datetime(),
+  coordinate: coordinateSchema,
+  previewUri: z.string().min(1),
+  depthUri: z.string().min(1),
+  confidenceUri: z.string().min(1).nullable(),
+  pointCloudUri: z.string().min(1).nullable(),
+  modelUri: z.string().min(1).nullable(),
+  measurements: z.array(depthMeasurementSchema),
+})
+
+export type DepthScanResult = z.infer<typeof depthScanResultSchema>
 
 export interface DashboardSnapshot {
   properties: Property[]
