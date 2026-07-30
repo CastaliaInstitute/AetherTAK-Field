@@ -5,7 +5,7 @@ import type { TakOperation } from './operations'
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '',
-  parseAttributeValue: true,
+  parseAttributeValue: false,
   trimValues: false,
 })
 
@@ -72,8 +72,6 @@ function coordinateLinks(points: Coordinate[]) {
 }
 
 export function operationToCot(operation: TakOperation): string {
-  const staleSeconds = operation.staleSeconds ?? 300
-
   switch (operation.kind) {
     case 'position': {
       const { identity, coordinate } = operation
@@ -82,7 +80,7 @@ export function operationToCot(operation: TakOperation): string {
         operation.uid,
         'a-f-G-U-C',
         operation.createdAt,
-        staleSeconds,
+        operation.staleSeconds ?? 300,
         coordinate,
         contactDetail(
           identity.callsign,
@@ -95,16 +93,16 @@ export function operationToCot(operation: TakOperation): string {
     case 'chat': {
       const sender = operation.sender
       const detail = [
-        `<__chat parent="RootContactGroup" groupOwner="false" ${attribute('chatroom', operation.conversationName)} ${attribute('id', operation.conversationId)} ${attribute('senderCallsign', sender.callsign)}>`,
+        `<__chat parent="RootContactGroup" groupOwner="false" ${attribute('chatroom', operation.conversationName)} ${attribute('id', operation.conversationId)} ${attribute('messageId', operation.uid)} ${attribute('senderCallsign', sender.callsign)}>`,
         `<chatgrp ${attribute('uid0', sender.uid)} ${attribute('uid1', operation.recipientUid)} ${attribute('id', operation.conversationId)}/></__chat>`,
         `<link ${attribute('uid', sender.uid)} type="a-f-G-U-C" relation="p-p"/>`,
-        `<remarks ${attribute('source', sender.uid)} ${attribute('to', operation.recipientUid)} ${attribute('time', iso(operation.createdAt))}>${escapeXml(operation.message)}</remarks>`,
+        `<remarks ${attribute('source', `BAO.F.ATAK.${sender.uid}`)} ${attribute('to', operation.recipientUid)} ${attribute('time', iso(operation.createdAt))}>${escapeXml(operation.message)}</remarks>`,
       ].join('')
       return event(
         operation.uid,
         'b-t-f',
         operation.createdAt,
-        staleSeconds,
+        operation.staleSeconds ?? 86_400,
         {
           latitude: 0,
           longitude: 0,
@@ -126,7 +124,7 @@ export function operationToCot(operation: TakOperation): string {
         operation.uid,
         operation.cotType ?? 'a-u-G',
         operation.createdAt,
-        staleSeconds,
+        operation.staleSeconds ?? 300,
         operation.coordinate,
         detail,
       )
@@ -137,15 +135,14 @@ export function operationToCot(operation: TakOperation): string {
       }
       const detail = [
         `<contact ${attribute('callsign', operation.title)}/>`,
-        `<color ${attribute('argb', operation.colorArgb)}/>`,
-        `<route method="Driving" direction="Infil" routetype="Primary" order="Ascending"/>`,
+        `<link_attr ${attribute('color', operation.colorArgb)} stroke="4" type="Vehicle" method="Driving" direction="Infil" routetype="Primary" order="Ascending" planningmethod="Infil" prefix="CP"/>`,
         coordinateLinks(operation.points),
       ].join('')
       return event(
         operation.uid,
         'b-m-r',
         operation.createdAt,
-        staleSeconds,
+        operation.staleSeconds ?? 300,
         operation.points[0],
         detail,
       )
@@ -163,28 +160,32 @@ export function operationToCot(operation: TakOperation): string {
       const detail = [
         `<contact ${attribute('callsign', operation.title)}/>`,
         `<strokeColor ${attribute('value', operation.colorArgb)}/>`,
-        `<shape><polyline ${attribute('closed', operation.closed)}>${vertices}</polyline></shape>`,
+        `<shape><polyline ${attribute('closed', operation.closed)} ${attribute('color', operation.colorArgb)} fillColor="0">${vertices}</polyline></shape>`,
       ].join('')
       return event(
         operation.uid,
         'u-d-f',
         operation.createdAt,
-        staleSeconds,
+        operation.staleSeconds ?? 300,
         operation.points[0],
         detail,
       )
     }
     case 'emergency': {
       const { identity, coordinate } = operation
-      const detail = [
-        contactDetail(identity.callsign, identity.team, identity.role),
-        `<emergency ${attribute('type', operation.emergencyType)}>${escapeXml(identity.callsign)}</emergency>`,
-      ].join('')
+      const cancel = operation.emergencyType === 'Cancel'
+      const detail = cancel
+        ? `<emergency cancel="true">${escapeXml(identity.callsign)}</emergency>`
+        : [
+            `<link ${attribute('uid', identity.uid)} type="a-f-G-U-C" relation="p-p"/>`,
+            `<contact ${attribute('callsign', `${identity.callsign}-Alert`)}/>`,
+            `<emergency ${attribute('type', operation.emergencyType)}>${escapeXml(identity.callsign)}</emergency>`,
+          ].join('')
       return event(
         operation.uid,
-        operation.emergencyType === 'Cancel' ? 'b-a-o-can' : 'b-a-o-tbl',
+        cancel ? 'b-a-o-can' : 'b-a-o-tbl',
         operation.createdAt,
-        staleSeconds,
+        operation.staleSeconds ?? (cancel ? 60 : 600),
         coordinate,
         detail,
       )
@@ -255,13 +256,17 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
   const contact = record(detail.contact)
   const chat = record(detail.__chat)
   const emergency = record(detail.emergency)
+  const track = record(detail.track)
   const coordinate: Coordinate = {
     latitude: numeric(pointValue.lat, 0),
     longitude: numeric(pointValue.lon, 0),
     altitudeMeters: numeric(pointValue.hae, 0),
     horizontalAccuracyMeters: numeric(pointValue.ce, 9999999),
     verticalAccuracyMeters: numeric(pointValue.le, 9999999),
-    headingDegrees: null,
+    headingDegrees:
+      track.course === undefined
+        ? null
+        : numeric(track.course, 0),
   }
   const kind = operationKind(value.type)
   let points: Coordinate[] = [coordinate]
@@ -316,10 +321,14 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
         ? contact.callsign
         : typeof chat.senderCallsign === 'string'
           ? chat.senderCallsign
-          : null,
+          : text(emergency),
     remarks: text(detail.remarks),
     emergencyType:
-      typeof emergency.type === 'string' ? emergency.type : null,
+      emergency.cancel === 'true'
+        ? 'Cancel'
+        : typeof emergency.type === 'string'
+          ? emergency.type
+          : null,
     raw: xml,
   }
 }
