@@ -79,7 +79,7 @@ export async function persistMissionPackage(
   const storagePath = `mission-packages/outbound/${crypto.randomUUID()}-${fileName}`
   const result = await Filesystem.writeFile({
     path: storagePath,
-    directory: Directory.Data,
+    directory: Directory.LibraryNoCloud,
     data: bytesToBase64(buffer),
     recursive: true,
   })
@@ -92,10 +92,17 @@ export async function persistMissionPackage(
 }
 
 export async function removePersistedMissionPackage(storagePath: string) {
-  await Filesystem.deleteFile({
-    path: storagePath,
-    directory: Directory.Data,
-  })
+  try {
+    await Filesystem.deleteFile({
+      path: storagePath,
+      directory: Directory.LibraryNoCloud,
+    })
+  } catch {
+    await Filesystem.deleteFile({
+      path: storagePath,
+      directory: Directory.Data,
+    })
+  }
 }
 
 export async function downloadMissionPackage(

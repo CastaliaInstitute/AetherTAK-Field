@@ -340,7 +340,15 @@ private enum AetherDepthExporter {
         )
         let scans = support.appendingPathComponent("DepthScans", isDirectory: true)
         let directory = scans.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)
-        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try manager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [
+                .protectionKey:
+                    FileProtectionType
+                    .completeUntilFirstUserAuthentication
+            ]
+        )
         var resource = URLResourceValues()
         resource.isExcludedFromBackup = true
         var mutableDirectory = directory

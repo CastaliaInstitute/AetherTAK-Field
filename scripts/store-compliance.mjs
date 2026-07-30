@@ -47,7 +47,13 @@ export async function verifyStoreCompliance(rootDirectory) {
     privacyManifest,
     xcodeProject,
     androidManifest,
+    androidExtractionRules,
+    androidFilePaths,
     androidVariables,
+    iosAppDelegate,
+    iosMediaPlugin,
+    observationCapture,
+    missionPackages,
     practicesSource,
     appleAnswers,
     playAnswers,
@@ -56,7 +62,13 @@ export async function verifyStoreCompliance(rootDirectory) {
     read("ios/App/App/PrivacyInfo.xcprivacy"),
     read("ios/App/App.xcodeproj/project.pbxproj"),
     read("android/app/src/main/AndroidManifest.xml"),
+    read("android/app/src/main/res/xml/data_extraction_rules.xml"),
+    read("android/app/src/main/res/xml/file_paths.xml"),
     read("android/variables.gradle"),
+    read("ios/App/App/AppDelegate.swift"),
+    read("ios/App/App/AetherMediaIntegrityPlugin.swift"),
+    read("src/media/observationCapture.ts"),
+    read("src/tak/missionPackage.ts"),
     read("store/privacy-practices.json"),
     read("store/app-store-privacy.md"),
     read("store/google-play-data-safety.md"),
@@ -82,7 +94,62 @@ export async function verifyStoreCompliance(rootDirectory) {
       throw new Error(`Android manifest contains forbidden broad permission ${permission}`);
     }
   }
+  mustInclude(androidManifest, 'android:allowBackup="false"', "Android manifest");
+  mustInclude(androidManifest, 'android:fullBackupContent="false"', "Android manifest");
+  mustInclude(
+    androidManifest,
+    'android:dataExtractionRules="@xml/data_extraction_rules"',
+    "Android manifest",
+  );
+  for (const section of ["cloud-backup", "device-transfer"]) {
+    mustInclude(androidExtractionRules, `<${section}>`, "Android extraction rules");
+  }
+  for (const domain of [
+    "root",
+    "file",
+    "database",
+    "sharedpref",
+    "external",
+    "device_root",
+    "device_file",
+    "device_database",
+    "device_sharedpref",
+  ]) {
+    mustInclude(
+      androidExtractionRules,
+      `domain="${domain}" path="."`,
+      "Android extraction rules",
+    );
+  }
+  if (androidFilePaths.includes("<external-path")) {
+    throw new Error("Android FileProvider must not expose shared external storage");
+  }
+  for (const scopedPath of ["<files-path", "<cache-path", "<external-files-path"]) {
+    mustInclude(androidFilePaths, scopedPath, "Android FileProvider paths");
+  }
   mustInclude(androidVariables, "targetSdkVersion = 36", "Android SDK configuration");
+  mustInclude(iosAppDelegate, "isExcludedFromBackup = true", "iOS app storage policy");
+  mustInclude(
+    iosAppDelegate,
+    "completeUntilFirstUserAuthentication",
+    "iOS app storage policy",
+  );
+  mustInclude(iosMediaPlugin, "isExcludedFromBackup = true", "iOS media policy");
+  mustInclude(
+    iosMediaPlugin,
+    "completeUntilFirstUserAuthentication",
+    "iOS media policy",
+  );
+  mustInclude(
+    observationCapture,
+    "Directory.LibraryNoCloud",
+    "Observation media persistence",
+  );
+  mustInclude(
+    missionPackages,
+    "Directory.LibraryNoCloud",
+    "Mission-package persistence",
+  );
 
   const practices = JSON.parse(practicesSource);
   if (practices.tracking !== false || practices.advertising !== false) {

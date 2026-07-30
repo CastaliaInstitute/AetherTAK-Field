@@ -101,12 +101,15 @@ export async function persistCapturedMedia(
 
   const written = await Filesystem.writeFile({
     path,
-    directory: Directory.Data,
+    directory: Directory.LibraryNoCloud,
     data,
     recursive: true,
   })
   const cleanup = async () => {
-    await Filesystem.deleteFile({ path, directory: Directory.Data })
+    await Filesystem.deleteFile({
+      path,
+      directory: Directory.LibraryNoCloud,
+    })
   }
   try {
     let digest: string

@@ -291,6 +291,12 @@ final class TakFieldApiClient {
                                 .completeUntilFirstUserAuthentication
                         ]
                     )
+                    var mediaDirectoryValues = URLResourceValues()
+                    mediaDirectoryValues.isExcludedFromBackup = true
+                    var protectedMediaDirectory = directory
+                    try protectedMediaDirectory.setResourceValues(
+                        mediaDirectoryValues
+                    )
                     let staged = directory.appendingPathComponent(
                         ".\(mediaId)-\(UUID().uuidString).part"
                     )
@@ -538,6 +544,12 @@ final class TakFieldApiClient {
                                 FileProtectionType
                                 .completeUntilFirstUserAuthentication
                         ]
+                    )
+                    var packageDirectoryValues = URLResourceValues()
+                    packageDirectoryValues.isExcludedFromBackup = true
+                    var protectedPackageDirectory = directory
+                    try protectedPackageDirectory.setResourceValues(
+                        packageDirectoryValues
                     )
                     let staged = directory.appendingPathComponent(
                         ".\(fileName)-\(UUID().uuidString).part"

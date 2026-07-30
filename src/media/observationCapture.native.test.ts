@@ -15,7 +15,7 @@ vi.mock('@capacitor/core', () => ({
 }))
 
 vi.mock('@capacitor/filesystem', () => ({
-  Directory: { Data: 'DATA' },
+  Directory: { LibraryNoCloud: 'LIBRARY_NO_CLOUD' },
   Filesystem: {
     deleteFile,
     readFile,
@@ -152,7 +152,7 @@ describe('native media persistence', () => {
     ).rejects.toThrow(/empty/)
     expect(deleteFile).toHaveBeenCalledWith({
       path: `observations/${observationId}/${mediaId}.jpg`,
-      directory: 'DATA',
+      directory: 'LIBRARY_NO_CLOUD',
     })
   })
 })

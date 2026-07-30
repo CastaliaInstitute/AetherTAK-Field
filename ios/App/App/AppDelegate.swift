@@ -7,8 +7,52 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        protectLocalOperationalData()
         return true
+    }
+
+    private func protectLocalOperationalData() {
+        let manager = FileManager.default
+        guard
+            let library = manager.urls(
+                for: .libraryDirectory,
+                in: .userDomainMask
+            ).first,
+            let documents = manager.urls(
+                for: .documentDirectory,
+                in: .userDomainMask
+            ).first
+        else {
+            return
+        }
+        let directories = [
+            library.appendingPathComponent("WebKit", isDirectory: true),
+            library.appendingPathComponent("NoCloud", isDirectory: true),
+            documents.appendingPathComponent("observations", isDirectory: true),
+            documents.appendingPathComponent("mission-packages", isDirectory: true)
+        ]
+        for directory in directories {
+            do {
+                try manager.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true,
+                    attributes: [
+                        .protectionKey:
+                            FileProtectionType
+                            .completeUntilFirstUserAuthentication
+                    ]
+                )
+                var values = URLResourceValues()
+                values.isExcludedFromBackup = true
+                var protectedDirectory = directory
+                try protectedDirectory.setResourceValues(values)
+            } catch {
+                NSLog(
+                    "AetherTAK could not protect local operational data: %@",
+                    error.localizedDescription
+                )
+            }
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

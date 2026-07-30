@@ -1,20 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const writeFile = vi.hoisted(() => vi.fn())
+const { writeFile, deleteFile } = vi.hoisted(() => ({
+  writeFile: vi.fn(),
+  deleteFile: vi.fn(),
+}))
 
 vi.mock('@capacitor/filesystem', () => ({
-  Directory: { Data: 'DATA' },
+  Directory: {
+    Data: 'DATA',
+    LibraryNoCloud: 'LIBRARY_NO_CLOUD',
+  },
   Filesystem: {
     writeFile,
-    deleteFile: vi.fn(),
+    deleteFile,
   },
 }))
 
-import { persistMissionPackage } from './missionPackage'
+import {
+  persistMissionPackage,
+  removePersistedMissionPackage,
+} from './missionPackage'
 
 describe('mission-package private persistence', () => {
   beforeEach(() => {
     writeFile.mockReset()
+    deleteFile.mockReset()
     writeFile.mockResolvedValue({
       uri: 'file:///private/mission-package.zip',
     })
@@ -35,11 +45,28 @@ describe('mission-package private persistence', () => {
     })
     expect(writeFile).toHaveBeenCalledWith(
       expect.objectContaining({
-        directory: 'DATA',
+        directory: 'LIBRARY_NO_CLOUD',
         recursive: true,
         data: expect.any(String),
       }),
     )
+  })
+
+  it('falls back to the legacy data directory when removing old packages', async () => {
+    deleteFile
+      .mockRejectedValueOnce(new Error('No current package'))
+      .mockResolvedValueOnce(undefined)
+
+    await removePersistedMissionPackage('mission-packages/outbound/old.zip')
+
+    expect(deleteFile).toHaveBeenNthCalledWith(1, {
+      path: 'mission-packages/outbound/old.zip',
+      directory: 'LIBRARY_NO_CLOUD',
+    })
+    expect(deleteFile).toHaveBeenNthCalledWith(2, {
+      path: 'mission-packages/outbound/old.zip',
+      directory: 'DATA',
+    })
   })
 
   it('rejects extension spoofing and oversized packages before persistence', async () => {

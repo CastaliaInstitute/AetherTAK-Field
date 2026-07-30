@@ -45,6 +45,18 @@ public class AetherMediaIntegrityPlugin: CAPPlugin, CAPBridgedPlugin {
         worker.async {
             do {
                 let result = try inspectMediaFile(at: resolved)
+                try FileManager.default.setAttributes(
+                    [
+                        .protectionKey:
+                            FileProtectionType
+                            .completeUntilFirstUserAuthentication
+                    ],
+                    ofItemAtPath: resolved.path
+                )
+                var values = URLResourceValues()
+                values.isExcludedFromBackup = true
+                var protectedFile = resolved
+                try protectedFile.setResourceValues(values)
                 call.resolve([
                     "sha256": result.sha256,
                     "sizeBytes": result.sizeBytes

@@ -14,7 +14,7 @@ vi.mock('@capacitor/core', () => ({
 }))
 
 vi.mock('@capacitor/filesystem', () => ({
-  Directory: { Data: 'DATA' },
+  Directory: { LibraryNoCloud: 'LIBRARY_NO_CLOUD' },
   Filesystem: {
     deleteFile,
     readFile: vi.fn(),
