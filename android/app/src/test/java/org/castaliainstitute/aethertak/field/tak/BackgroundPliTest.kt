@@ -19,6 +19,9 @@ class BackgroundPliTest {
                 horizontalAccuracyMeters = 4.5,
                 headingDegrees = 87.0,
                 speedMetersPerSecond = 1.2,
+                verticalAccuracyMeters = 7.25,
+                batteryPercent = 73,
+                appVersion = "2.4.1",
                 createdAt = Instant.parse("2026-07-30T12:00:00Z"),
             ),
         )
@@ -27,6 +30,9 @@ class BackgroundPliTest {
         assertTrue(xml.contains("type=\"a-f-G-U-C\" how=\"m-g\""))
         assertTrue(xml.contains("stale=\"2026-07-30T12:00:45Z\""))
         assertTrue(xml.contains("<point lat=\"39.7392\" lon=\"-104.9903\""))
+        assertTrue(xml.contains("ce=\"4.5\" le=\"7.25\""))
+        assertTrue(xml.contains("<status battery=\"73\"/>"))
+        assertTrue(xml.contains("platform=\"Android\" os=\"mobile\" version=\"2.4.1\""))
         assertTrue(xml.contains("<track course=\"87.0\" speed=\"1.2\"/>"))
         assertTrue(xml.endsWith("</event>"))
     }
@@ -44,6 +50,9 @@ class BackgroundPliTest {
                 horizontalAccuracyMeters = null,
                 headingDegrees = null,
                 speedMetersPerSecond = null,
+                verticalAccuracyMeters = null,
+                batteryPercent = null,
+                appVersion = "2<&",
                 createdAt = Instant.EPOCH,
             ),
         )
@@ -51,6 +60,8 @@ class BackgroundPliTest {
         assertTrue(xml.contains("uid=\"AETHER-&lt;&amp;&quot;\""))
         assertTrue(xml.contains("callsign=\"Al &amp; Field &lt;One&gt;\""))
         assertTrue(xml.contains("name=\"&quot;Green&quot;\""))
+        assertTrue(xml.contains("version=\"2&lt;&amp;\""))
         assertFalse(xml.contains("Al & Field"))
+        assertFalse(xml.contains("<status battery="))
     }
 }

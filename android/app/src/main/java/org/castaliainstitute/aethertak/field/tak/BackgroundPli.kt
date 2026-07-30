@@ -13,6 +13,9 @@ data class BackgroundPli(
     val horizontalAccuracyMeters: Double?,
     val headingDegrees: Double?,
     val speedMetersPerSecond: Double?,
+    val verticalAccuracyMeters: Double?,
+    val batteryPercent: Int?,
+    val appVersion: String,
     val createdAt: Instant,
 )
 
@@ -20,12 +23,14 @@ fun backgroundPliToCot(pli: BackgroundPli): String {
     val stale = pli.createdAt.plus(45, ChronoUnit.SECONDS)
     return buildString {
         append("""<event version="2.0" uid="${xml(pli.uid)}" type="a-f-G-U-C" how="m-g" time="${pli.createdAt}" start="${pli.createdAt}" stale="$stale">""")
-        append("""<point lat="${pli.latitude}" lon="${pli.longitude}" hae="${pli.altitudeMeters ?: 0.0}" ce="${pli.horizontalAccuracyMeters ?: 9_999_999.0}" le="9999999"/>""")
+        append("""<point lat="${pli.latitude}" lon="${pli.longitude}" hae="${pli.altitudeMeters ?: 0.0}" ce="${pli.horizontalAccuracyMeters ?: 9_999_999.0}" le="${pli.verticalAccuracyMeters ?: 9_999_999.0}"/>""")
         append("<detail>")
         append("""<contact callsign="${xml(pli.callsign)}" endpoint="*:-1:stcp"/>""")
         append("""<__group name="${xml(pli.team)}" role="Team Member"/>""")
-        append("""<status battery="100"/>""")
-        append("""<takv device="AetherTAK Field" platform="Android" os="mobile" version="0.1.0"/>""")
+        pli.batteryPercent?.let {
+            append("""<status battery="${it.coerceIn(0, 100)}"/>""")
+        }
+        append("""<takv device="AetherTAK Field" platform="Android" os="mobile" version="${xml(pli.appVersion)}"/>""")
         append("""<track course="${pli.headingDegrees ?: 0.0}" speed="${pli.speedMetersPerSecond ?: 0.0}"/>""")
         append("</detail></event>")
     }

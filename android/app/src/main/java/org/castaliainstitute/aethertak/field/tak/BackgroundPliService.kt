@@ -12,6 +12,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import android.os.BatteryManager
 import android.os.Bundle
 import android.os.IBinder
 import androidx.core.app.ActivityCompat
@@ -196,6 +197,18 @@ class BackgroundPliService : Service(), LocationListener {
                 speedMetersPerSecond = location.takeIf(Location::hasSpeed)
                     ?.speed
                     ?.toDouble(),
+                verticalAccuracyMeters = if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    location.hasVerticalAccuracy()
+                ) {
+                    location.verticalAccuracyMeters.toDouble()
+                } else {
+                    null
+                },
+                batteryPercent = batteryPercent(),
+                appVersion = packageManager
+                    .getPackageInfo(packageName, 0)
+                    .versionName ?: "unknown",
                 createdAt = Instant.ofEpochMilli(now),
             ),
         )
@@ -217,6 +230,12 @@ class BackgroundPliService : Service(), LocationListener {
                 this,
                 Manifest.permission.ACCESS_COARSE_LOCATION,
             ) == PackageManager.PERMISSION_GRANTED
+
+    private fun batteryPercent(): Int? {
+        val value = getSystemService(BatteryManager::class.java)
+            .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        return value.takeIf { it in 0..100 }
+    }
 
     companion object {
         const val ACTION_START = "org.castaliainstitute.aethertak.field.START_BACKGROUND_PLI"

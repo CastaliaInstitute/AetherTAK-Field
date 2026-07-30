@@ -82,6 +82,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx cap sync ios
+      - name: Test iOS background PLI encoder
+        run: |
+          swiftc \
+            ios/App/App/BackgroundPli.swift \
+            ios/App/Tests/BackgroundPli/main.swift \
+            -o "$RUNNER_TEMP/background-pli-tests"
+          "$RUNNER_TEMP/background-pli-tests"
       - run: >-
           xcodebuild
           -project ios/App/App.xcodeproj

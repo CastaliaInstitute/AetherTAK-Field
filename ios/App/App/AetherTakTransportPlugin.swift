@@ -1,6 +1,7 @@
 import Capacitor
 import CoreLocation
 import Foundation
+import UIKit
 
 @objc(AetherTakTransportPlugin)
 public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelegate {
@@ -514,7 +515,33 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
             }
             return
         }
-        let xml = backgroundPli(profile: profile, location: location)
+        let xml = backgroundPliToCot(
+            BackgroundPli(
+                uid: "AETHER-\(profile.id)",
+                callsign: profile.callsign,
+                team: profile.team,
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                altitudeMeters: location.verticalAccuracy >= 0
+                    ? location.altitude
+                    : nil,
+                horizontalAccuracyMeters: location.horizontalAccuracy >= 0
+                    ? location.horizontalAccuracy
+                    : nil,
+                verticalAccuracyMeters: location.verticalAccuracy >= 0
+                    ? location.verticalAccuracy
+                    : nil,
+                headingDegrees: location.course >= 0 ? location.course : nil,
+                speedMetersPerSecond: location.speed >= 0
+                    ? location.speed
+                    : nil,
+                batteryPercent: batteryPercent(),
+                appVersion: Bundle.main.object(
+                    forInfoDictionaryKey: "CFBundleShortVersionString"
+                ) as? String ?? "unknown",
+                createdAt: Date()
+            )
+        )
         transport.send(xml: xml) { [weak self] result in
             if case .failure(let error) = result {
                 self?.lastError = error.localizedDescription
@@ -522,43 +549,11 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         }
     }
 
-    private func backgroundPli(
-        profile: TakProfile,
-        location: CLLocation
-    ) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let createdAt = Date()
-        let staleAt = createdAt.addingTimeInterval(45)
-        let altitude = location.verticalAccuracy >= 0 ? location.altitude : 0
-        let horizontalAccuracy = location.horizontalAccuracy >= 0
-            ? location.horizontalAccuracy
-            : 9_999_999
-        let verticalAccuracy = location.verticalAccuracy >= 0
-            ? location.verticalAccuracy
-            : 9_999_999
-        let course = location.course >= 0 ? location.course : 0
-        let speed = location.speed >= 0 ? location.speed : 0
-        return [
-            "<event version=\"2.0\" uid=\"AETHER-\(xml(profile.id))\" type=\"a-f-G-U-C\" how=\"m-g\" time=\"\(formatter.string(from: createdAt))\" start=\"\(formatter.string(from: createdAt))\" stale=\"\(formatter.string(from: staleAt))\">",
-            "<point lat=\"\(location.coordinate.latitude)\" lon=\"\(location.coordinate.longitude)\" hae=\"\(altitude)\" ce=\"\(horizontalAccuracy)\" le=\"\(verticalAccuracy)\"/>",
-            "<detail>",
-            "<contact callsign=\"\(xml(profile.callsign))\" endpoint=\"*:-1:stcp\"/>",
-            "<__group name=\"\(xml(profile.team))\" role=\"Team Member\"/>",
-            "<status battery=\"100\"/>",
-            "<takv device=\"AetherTAK Field\" platform=\"iOS\" os=\"mobile\" version=\"0.1.0\"/>",
-            "<track course=\"\(course)\" speed=\"\(speed)\"/>",
-            "</detail></event>"
-        ].joined()
-    }
-
-    private func xml(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
-            .replacingOccurrences(of: "'", with: "&apos;")
+    private func batteryPercent() -> Int? {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let level = UIDevice.current.batteryLevel
+        guard level >= 0 else { return nil }
+        return min(100, max(0, Int((level * 100).rounded())))
     }
 
     private func profileObject(_ profile: TakProfile) -> [String: Any] {

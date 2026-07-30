@@ -148,8 +148,11 @@ new profile, roll staged items back on failure, and retire the previous identity
 only after activation succeeds. Disconnect preserves enrollment; explicit
 removal destroys it. CI compiles Android on Ubuntu and iOS on a macOS runner.
 Both plugins also provide explicit native background PLI sessions using a
-15-second publish throttle and 45-second stale window. Android PLI encoding has
-native unit coverage; platform suspension, battery-management, permission
+15-second publish throttle and 45-second stale window. Their production
+encoders have native unit coverage and publish the installed app version,
+reported horizontal/vertical accuracy, and the current battery percentage when
+the operating system makes it available; they omit unknown battery state rather
+than fabricating a value. Platform suspension, battery-management, permission
 revocation, and notification/indicator behavior still require physical-device
 evidence.
 
