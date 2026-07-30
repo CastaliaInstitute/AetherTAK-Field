@@ -119,6 +119,7 @@ export default function App() {
     fields,
     ecologicalSites,
     readings,
+    observations,
     alerts,
     insights,
     offlineMapRegions,
@@ -520,7 +521,11 @@ export default function App() {
 
           <FieldMap
             fields={fields}
+            ecologicalSites={ecologicalSites}
             readings={latestSensorReadings}
+            observations={observations}
+            alerts={alerts}
+            insights={insights}
             contacts={contacts}
             activity={takActivity}
             draft={mapDraft}

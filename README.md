@@ -6,7 +6,9 @@ client and inside Capacitor shells for iOS and Android.
 
 ## Current foundation
 
-- MapLibre field map with crop polygons, LoRaWAN sensor points, and TAK contacts.
+- MapLibre operational map with crop and ecological polygons, labeled LoRaWAN
+  sensor values, offline evidence, anchored alerts, read-only Al insights, safe
+  tap details, and TAK contacts.
 - Property/season crop records and ecological site status.
 - Persisted property, season, crop-field, ecological-site, observation, alert,
   and read-only Al insight records.
