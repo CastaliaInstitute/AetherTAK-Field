@@ -78,6 +78,10 @@ function report() {
       lastConnectedAt: '2026-07-30T12:04:00.000Z',
       error: null,
     },
+    fieldApi: {
+      state: 'healthy',
+      httpStatus: 200,
+    },
     backgroundTracking: {
       supported: true,
       enabled: false,

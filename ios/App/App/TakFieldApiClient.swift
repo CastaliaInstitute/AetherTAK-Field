@@ -29,6 +29,24 @@ final class TakFieldApiClient {
         self.identityStore = identityStore
     }
 
+    func health(
+        profile: TakProfile,
+        port: Int,
+        completion: @escaping (Result<FieldApiResponse, Error>) -> Void
+    ) {
+        do {
+            try perform(
+                profile: profile,
+                port: port,
+                method: "GET",
+                path: "/healthz",
+                completion: completion
+            )
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
     func mutate(
         profile: TakProfile,
         port: Int,

@@ -59,6 +59,7 @@ const readinessCheckIds = [
   'physical-device',
   'tak-enrollment',
   'tak-connection',
+  'field-api-health',
   'background-tracking',
   'depth-capability',
   'field-sync',
@@ -440,6 +441,27 @@ test('rejects readiness from a simulator or with a required attention check', ()
   assert.throws(
     () => verifyReleaseEvidence(queueBundle, expected()),
     /field-sync did not pass/,
+  )
+})
+
+test('requires a passing authenticated field service health check', () => {
+  const missing = validBundle()
+  missing.readinessReports[0].checks =
+    missing.readinessReports[0].checks.filter(
+      (check) => check.id !== 'field-api-health',
+    )
+  assert.throws(
+    () => verifyReleaseEvidence(missing, expected()),
+    /field-api-health did not pass/,
+  )
+
+  const failed = validBundle()
+  failed.readinessReports[0].checks.find(
+    (check) => check.id === 'field-api-health',
+  ).status = 'fail'
+  assert.throws(
+    () => verifyReleaseEvidence(failed, expected()),
+    /field-api-health did not pass/,
   )
 })
 

@@ -56,6 +56,9 @@ interface AetherTakTransportPlugin {
   }): Promise<BackgroundTrackingStatus>
   getContacts(): Promise<{ contacts: TakContact[] }>
   sendCot(options: { xml: string }): Promise<{ accepted: boolean }>
+  fieldHealth(options: {
+    port: number
+  }): Promise<NativeFieldResponse>
   fieldMutation(options: {
     port: number
     mutation: Record<string, unknown>
@@ -308,6 +311,11 @@ export const takTransport = {
 }
 
 export const fieldApiTransport = {
+  async health(): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldHealth({ port: fieldPort() })
+  },
+
   async mutate(
     mutation: Record<string, unknown>,
   ): Promise<NativeFieldResponse> {

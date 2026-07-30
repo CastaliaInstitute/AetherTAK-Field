@@ -68,8 +68,9 @@ client and inside Capacitor shells for iOS and Android.
   synchronized ChirpStack source-reading provenance, explicit missing-evidence
   warnings, and no field, alert, or TAK command authority.
 - Versioned, privacy-safe physical-device readiness reports with native
-  app/build, hardware, TAK, depth, sync, offline-map, and media-integrity
-  evidence export through the platform share sheet.
+  app/build, hardware, TAK, certificate-authenticated Aether Field API health,
+  depth, sync, offline-map, and media-integrity evidence export through the
+  platform share sheet.
 - Durable per-device release-validation sessions for enrollment renewal,
   offline recovery, camera/video integrity, depth accuracy and artifacts,
   platform fallback, screen-lock tracking, permission loss, airplane mode, and

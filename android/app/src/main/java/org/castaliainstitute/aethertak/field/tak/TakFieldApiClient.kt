@@ -21,6 +21,17 @@ class TakFieldApiClient(
     private val transport: TakTlsTransport,
 ) {
     private val maximumMissionPackageBytes = 25L * 1024L * 1024L
+
+    fun health(
+        profile: TakProfile,
+        port: Int,
+    ): FieldApiResponse = request(
+        profile = profile,
+        port = port,
+        method = "GET",
+        path = "/healthz",
+    )
+
     fun mutate(
         profile: TakProfile,
         port: Int,

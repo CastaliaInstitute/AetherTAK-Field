@@ -47,6 +47,7 @@ const requiredReadinessChecks = [
   'physical-device',
   'tak-enrollment',
   'tak-connection',
+  'field-api-health',
   'background-tracking',
   'field-sync',
   'tak-outbox',

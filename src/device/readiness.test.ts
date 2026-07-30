@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Share } from '@capacitor/share'
 import {
   buildDeviceReadinessReport,
+  probeFieldApi,
   serializeDeviceReadiness,
   shareDeviceReadiness,
   type DatabaseMetrics,
@@ -93,6 +94,10 @@ function healthySnapshot() {
       lastConnectedAt: '2026-07-30T12:04:00.000Z',
       error: null,
     },
+    fieldApi: {
+      state: 'healthy' as const,
+      httpStatus: 200,
+    },
     backgroundTracking: {
       supported: true,
       enabled: true,
@@ -175,6 +180,41 @@ describe('device readiness evidence', () => {
       status: 'attention',
       detail: '3 of 4 evidence artifacts have SHA-256 metadata.',
     }))
+  })
+
+  it('fails closed when the authenticated field service is unavailable', () => {
+    const report = buildDeviceReadinessReport({
+      ...healthySnapshot(),
+      fieldApi: {
+        state: 'unavailable',
+        httpStatus: 503,
+      },
+    })
+
+    expect(report.overall).toBe('fail')
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      id: 'field-api-health',
+      status: 'fail',
+      detail:
+        'The certificate-authenticated field service returned HTTP 503.',
+    }))
+  })
+
+  it('sanitizes authenticated health failures and skips network access offline', async () => {
+    const rejected = vi.fn().mockRejectedValue(
+      new Error('private-server.example.test certificate rejected'),
+    )
+    await expect(probeFieldApi(true, true, rejected)).resolves.toEqual({
+      state: 'unavailable',
+      httpStatus: null,
+    })
+
+    const offline = vi.fn()
+    await expect(probeFieldApi(true, false, offline)).resolves.toEqual({
+      state: 'offline',
+      httpStatus: null,
+    })
+    expect(offline).not.toHaveBeenCalled()
   })
 
   it('omits personal device names, profile IDs, errors, and record contents', () => {

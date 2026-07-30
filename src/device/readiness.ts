@@ -7,8 +7,10 @@ import { db } from '../data/database'
 import type { DepthCapability } from '../domain/models'
 import { depthScanner } from '../platform/depth'
 import {
+  fieldApiTransport,
   takTransport,
   type BackgroundTrackingStatus,
+  type NativeFieldResponse,
   type TakStatus,
 } from '../platform/tak'
 
@@ -131,6 +133,7 @@ interface ReadinessSnapshot {
   storage: { usage?: number; quota?: number }
   contactCount: number
   tak: TakStatus
+  fieldApi: FieldApiProbe
   backgroundTracking: BackgroundTrackingStatus
   depth: DepthCapability
   database: DatabaseMetrics
@@ -145,9 +148,15 @@ interface ReadinessServices {
   deviceInfo: () => Promise<DeviceInfo>
   storageEstimate: () => Promise<{ usage?: number; quota?: number }>
   takStatus: () => Promise<TakStatus>
+  fieldApiHealth: () => Promise<NativeFieldResponse>
   backgroundTracking: () => Promise<BackgroundTrackingStatus>
   depthCapability: () => Promise<DepthCapability>
   databaseMetrics: () => Promise<DatabaseMetrics>
+}
+
+export interface FieldApiProbe {
+  state: 'healthy' | 'offline' | 'unavailable' | 'not_native'
+  httpStatus: number | null
 }
 
 const fallbackAppInfo: AppInfo = {
@@ -259,9 +268,31 @@ const defaultServices: ReadinessServices = {
     }
   },
   takStatus: () => takTransport.status(),
+  fieldApiHealth: () => fieldApiTransport.health(),
   backgroundTracking: () => takTransport.backgroundTrackingStatus(),
   depthCapability: () => depthScanner.capability(),
   databaseMetrics: collectDatabaseMetrics,
+}
+
+export async function probeFieldApi(
+  native: boolean,
+  online: boolean,
+  health: () => Promise<NativeFieldResponse>,
+): Promise<FieldApiProbe> {
+  if (!native) return { state: 'not_native', httpStatus: null }
+  if (!online) return { state: 'offline', httpStatus: null }
+  try {
+    const response = await health()
+    return {
+      state:
+        response.status === 200 && response.body.status === 'ok'
+          ? 'healthy'
+          : 'unavailable',
+      httpStatus: response.status,
+    }
+  } catch {
+    return { state: 'unavailable', httpStatus: null }
+  }
 }
 
 function queueCheck(
@@ -335,6 +366,26 @@ export function buildDeviceReadinessReport(
       detail: snapshot.tak.state === 'connected'
         ? `Connected${snapshot.tak.lastConnectedAt ? ` at ${snapshot.tak.lastConnectedAt}` : ''}.`
         : `Current state: ${snapshot.tak.state}.`,
+    },
+    {
+      id: 'field-api-health',
+      label: 'Aether Field API',
+      status:
+        snapshot.fieldApi.state === 'healthy'
+          ? 'pass'
+          : snapshot.fieldApi.state === 'offline'
+            ? 'attention'
+            : 'fail',
+      detail:
+        snapshot.fieldApi.state === 'healthy'
+          ? 'Certificate-authenticated health check passed.'
+          : snapshot.fieldApi.state === 'offline'
+            ? 'Health check deferred because the device is offline.'
+            : snapshot.fieldApi.state === 'not_native'
+              ? 'Authenticated field synchronization requires the iOS or Android application.'
+              : snapshot.fieldApi.httpStatus === null
+                ? 'The certificate-authenticated field service could not be reached.'
+                : `The certificate-authenticated field service returned HTTP ${snapshot.fieldApi.httpStatus}.`,
     },
     {
       id: 'background-tracking',
@@ -456,11 +507,14 @@ export async function collectDeviceReadiness(
   overrides: Partial<ReadinessServices> = {},
 ) {
   const services = { ...defaultServices, ...overrides }
+  const native = services.isNative()
+  const online = services.isOnline()
   const [
     app,
     device,
     storage,
     tak,
+    fieldApi,
     backgroundTracking,
     depth,
     database,
@@ -469,6 +523,7 @@ export async function collectDeviceReadiness(
     services.deviceInfo(),
     services.storageEstimate(),
     services.takStatus(),
+    probeFieldApi(native, online, services.fieldApiHealth),
     services.backgroundTracking(),
     services.depthCapability(),
     services.databaseMetrics(),
@@ -476,13 +531,14 @@ export async function collectDeviceReadiness(
   return buildDeviceReadinessReport({
     generatedAt: services.now().toISOString(),
     sourceRevision: services.sourceRevision(),
-    native: services.isNative(),
-    online: services.isOnline(),
+    native,
+    online,
     app,
     device,
     storage,
     contactCount,
     tak,
+    fieldApi,
     backgroundTracking,
     depth,
     database,

@@ -23,6 +23,8 @@ Methods exposed to the shared layer:
   system-visible team PLI updates while the web view is suspended.
 - `getContacts()`
 - `sendCot({ xml })`
+- `fieldHealth({ port })`: perform a certificate-authenticated readiness probe
+  without reading or mutating field records.
 - `fieldMutation({ port, mutation })`
 - `fieldChanges({ port, cursor, limit })`
 - `fieldUpload({ port, mediaId, uri, contentType, ... })`

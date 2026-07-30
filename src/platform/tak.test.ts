@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const native = vi.hoisted(() => ({
+  fieldHealth: vi.fn(),
   getContacts: vi.fn(),
 }))
 
@@ -11,7 +12,7 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => native,
 }))
 
-import { takTransport } from './tak'
+import { fieldApiTransport, takTransport } from './tak'
 
 const validContact = {
   uid: 'peer-1',
@@ -30,6 +31,7 @@ const validContact = {
 
 describe('native TAK boundary', () => {
   beforeEach(() => {
+    native.fieldHealth.mockReset()
     native.getContacts.mockReset()
   })
 
@@ -51,5 +53,18 @@ describe('native TAK boundary', () => {
     })
 
     await expect(takTransport.contacts()).resolves.toEqual([validContact])
+  })
+
+  it('performs a certificate-backed field service health check on the configured port', async () => {
+    native.fieldHealth.mockResolvedValue({
+      status: 200,
+      body: { status: 'ok', time: '2026-07-30T12:00:00.000Z' },
+    })
+
+    await expect(fieldApiTransport.health()).resolves.toMatchObject({
+      status: 200,
+      body: { status: 'ok' },
+    })
+    expect(native.fieldHealth).toHaveBeenCalledWith({ port: 9443 })
   })
 })

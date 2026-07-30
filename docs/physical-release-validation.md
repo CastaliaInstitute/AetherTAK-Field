@@ -29,7 +29,7 @@ companion-device session that covers the capability.
 
 | Gate | Required observation |
 | --- | --- |
-| Certificate enrollment | Fresh package imports, expected callsign/team appear, and mTLS TAK connection succeeds. |
+| Certificate enrollment | Fresh package imports, expected callsign/team appear, the mTLS TAK connection succeeds, and Device readiness reports a passing certificate-authenticated Aether Field API health check. |
 | Certificate renewal | Replacement succeeds, the new identity connects, and the retired identity is removed. |
 | Offline capture and relaunch | Field records and evidence survive termination and relaunch without connectivity. |
 | Ordered reconnect synchronization | Sequential offline edits converge in order after connectivity returns. |
