@@ -61,7 +61,6 @@ const readyRegion: OfflineMapRegion = {
   id: '35760720-e9cc-489f-9190-c5c8b4ddf659',
   name: property.name,
   tileSourceId: source.id,
-  tileUrlTemplate: source.urlTemplate,
   bounds: {
     west: -104.991,
     south: 39.739,
@@ -162,7 +161,10 @@ describe('OfflineMapManager', () => {
     )
 
     await waitFor(() => {
-      expect(reconcileOfflineMapRegions).toHaveBeenCalledWith([readyRegion])
+      expect(reconcileOfflineMapRegions).toHaveBeenCalledWith(
+        [readyRegion],
+        source,
+      )
       expect(onNotice).toHaveBeenCalledWith(
         expect.stringContaining('1 offline map tile was evicted'),
       )
@@ -242,5 +244,38 @@ describe('OfflineMapManager', () => {
       expect(screen.getByRole('button', { name: `Resume ${partial.name}` }))
         .toBeEnabled()
     })
+  })
+
+  it('does not resume a region against a different configured source', async () => {
+    const legacySourceRegion = {
+      ...readyRegion,
+      tileSourceId: 'retired-field-basemap',
+      status: 'partial' as const,
+      downloadedTiles: 0,
+    }
+
+    render(
+      <OfflineMapManager
+        properties={[property]}
+        regions={[legacySourceRegion]}
+        source={source}
+        onNotice={vi.fn()}
+        estimateStorage={async () => ({})}
+      />,
+    )
+
+    expect(await screen.findByText('partial · source unavailable')).toBeVisible()
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', {
+          name: `Resume ${legacySourceRegion.name}`,
+        }),
+      ).toBeDisabled()
+    })
+    expect(
+      screen.getByRole('button', {
+        name: `Delete ${legacySourceRegion.name}`,
+      }),
+    ).toBeEnabled()
   })
 })

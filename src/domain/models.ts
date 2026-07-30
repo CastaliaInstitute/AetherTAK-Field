@@ -210,11 +210,12 @@ export const alInsightSchema = z.object({
 
 export type AlInsight = z.infer<typeof alInsightSchema>
 
+export const tileSourceIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
 export const offlineMapRegionSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
-  tileSourceId: z.string().min(1),
-  tileUrlTemplate: z.string().min(1),
+  tileSourceId: z.string().regex(tileSourceIdPattern),
   bounds: z.object({
     west: z.number().min(-180).max(180),
     south: z.number().min(-85.051129).max(85.051129),

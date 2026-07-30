@@ -4,8 +4,9 @@ import { db } from '../data/database'
 import {
   createOfflineMapRegion,
   deleteOfflineMapRegion,
-  downloadOfflineMapRegion,
+  downloadOfflineMapRegion as downloadRegion,
   mapCacheName,
+  offlineTileCacheKey,
   offlineMapStorageReserveBytes,
   planRegionTiles,
   reconcileOfflineMapRegions,
@@ -17,6 +18,16 @@ const bounds = {
   south: 39.7383,
   east: -104.9882,
   north: 39.743,
+}
+
+const tileUrlTemplate =
+  'https://maps.example.test/{z}/{x}/{y}.png?token=do-not-persist'
+
+function downloadOfflineMapRegion(
+  region: Parameters<typeof downloadRegion>[0],
+  options: Omit<Parameters<typeof downloadRegion>[1], 'tileUrlTemplate'> = {},
+) {
+  return downloadRegion(region, { tileUrlTemplate, ...options })
 }
 
 class MemoryCache {
@@ -80,7 +91,6 @@ describe('offline map regions', () => {
     const region = createOfflineMapRegion({
       name: 'Aether Urban Farm',
       tileSourceId: 'authorized-field-basemap',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 15,
@@ -88,6 +98,7 @@ describe('offline map regions', () => {
 
     expect(region.tileCount).toBe(planRegionTiles(bounds, 12, 15).length)
     expect(region.status).toBe('planned')
+    expect(region).not.toHaveProperty('tileUrlTemplate')
   })
 
   it('expands templates and rejects unsafe geometry ranges', () => {
@@ -102,13 +113,24 @@ describe('offline map regions', () => {
       planRegionTiles({ ...bounds, west: 170, east: -170 }, 1, 2),
     ).toThrow('antimeridian')
     expect(() => planRegionTiles(bounds, 18, 17)).toThrow('zoom range')
+    expect(() =>
+      createOfflineMapRegion({
+        name: 'Credential-shaped source',
+        tileSourceId: 'https://maps.test/?token=secret',
+        bounds,
+        minZoom: 12,
+        maxZoom: 13,
+      }),
+    ).toThrow()
+    expect(() =>
+      offlineTileCacheKey('token=secret', { z: 1, x: 1, y: 1 }),
+    ).toThrow('opaque identifier')
   })
 
   it('persists a partial region and resumes without refetching cached tiles', async () => {
     const region = createOfflineMapRegion({
       name: 'Interrupted field',
       tileSourceId: 'authorized-field-basemap',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 17,
@@ -134,6 +156,16 @@ describe('offline map regions', () => {
       status: 'partial',
       downloadedTiles: 3,
     })
+    const cache = await cacheStorage.open(mapCacheName(region.tileSourceId))
+    const cachedRequests = await cache.keys()
+    expect(cachedRequests).toHaveLength(3)
+    for (const request of cachedRequests) {
+      expect(request.url).toMatch(
+        /^https:\/\/offline-map\.aethertak\.invalid\//,
+      )
+      expect(request.url).not.toContain('do-not-persist')
+      expect(request.url).not.toContain('maps.example.test')
+    }
 
     const fetchAfterInterruption = requests
     const resumed = await downloadOfflineMapRegion(partial)
@@ -147,7 +179,6 @@ describe('offline map regions', () => {
     const region = createOfflineMapRegion({
       name: 'Unavailable source',
       tileSourceId: 'unavailable-source',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 17,
@@ -171,7 +202,6 @@ describe('offline map regions', () => {
     const region = createOfflineMapRegion({
       name: 'Storage constrained field',
       tileSourceId: 'authorized-field-basemap',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 13,
@@ -201,7 +231,6 @@ describe('offline map regions', () => {
     const region = createOfflineMapRegion({
       name: 'Growing cache',
       tileSourceId: 'authorized-field-basemap',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 14,
@@ -240,7 +269,6 @@ describe('offline map regions', () => {
     const region = createOfflineMapRegion({
       name: 'Full cache',
       tileSourceId: 'authorized-field-basemap',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 14,
@@ -275,7 +303,6 @@ describe('offline map regions', () => {
     const region = createOfflineMapRegion({
       name: 'Evicted field',
       tileSourceId: 'authorized-field-basemap',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 14,
@@ -293,7 +320,7 @@ describe('offline map regions', () => {
       region.bounds,
       region.minZoom,
       region.maxZoom,
-    ).map((coordinate) => tileUrl(region.tileUrlTemplate, coordinate))
+    ).map((coordinate) => offlineTileCacheKey(region.tileSourceId, coordinate))
 
     await cache.delete(urls[0])
     const partial = await reconcileOfflineMapRegions([ready])
@@ -326,7 +353,6 @@ describe('offline map regions', () => {
       ...createOfflineMapRegion({
         name: 'Recovered field',
         tileSourceId: 'authorized-field-basemap',
-        tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
         bounds,
         minZoom: 12,
         maxZoom: 14,
@@ -340,7 +366,7 @@ describe('offline map regions', () => {
       region.bounds,
       region.minZoom,
       region.maxZoom,
-    ).map((coordinate) => tileUrl(region.tileUrlTemplate, coordinate))
+    ).map((coordinate) => offlineTileCacheKey(region.tileSourceId, coordinate))
     for (const url of urls.slice(0, 3)) {
       await cache.put(url, new Response('tile', { status: 200 }))
     }
@@ -357,11 +383,53 @@ describe('offline map regions', () => {
     })
   })
 
+  it('rekeys legacy tiles and scrubs credential-bearing manifests', async () => {
+    const region = createOfflineMapRegion({
+      name: 'Legacy credential cache',
+      tileSourceId: 'authorized-field-basemap',
+      bounds,
+      minZoom: 12,
+      maxZoom: 13,
+    })
+    const legacyRegion = {
+      ...region,
+      tileUrlTemplate,
+      status: 'partial' as const,
+      downloadedTiles: 1,
+    }
+    await db.offlineMapRegions.put(legacyRegion)
+    const coordinate = planRegionTiles(
+      region.bounds,
+      region.minZoom,
+      region.maxZoom,
+    )[0]
+    const legacyKey = tileUrl(tileUrlTemplate, coordinate)
+    const safeKey = offlineTileCacheKey(region.tileSourceId, coordinate)
+    const cache = await cacheStorage.open(mapCacheName(region.tileSourceId))
+    await cache.put(legacyKey, new Response('legacy tile', { status: 200 }))
+
+    const result = await reconcileOfflineMapRegions(
+      [legacyRegion],
+      { id: region.tileSourceId, urlTemplate: tileUrlTemplate },
+    )
+
+    expect(result.changedRegions).toBe(1)
+    expect(result.regions[0]).toMatchObject({
+      downloadedTiles: 1,
+      status: 'partial',
+    })
+    expect(result.regions[0]).not.toHaveProperty('tileUrlTemplate')
+    expect(await cache.match(safeKey)).toBeDefined()
+    expect(await cache.match(legacyKey)).toBeUndefined()
+    const persisted = await db.offlineMapRegions.get(region.id)
+    expect(persisted).not.toHaveProperty('tileUrlTemplate')
+    expect(JSON.stringify(persisted)).not.toContain('do-not-persist')
+  })
+
   it('leaves an untouched planned region planned when its cache is empty', async () => {
     const region = createOfflineMapRegion({
       name: 'Planned field',
       tileSourceId: 'authorized-field-basemap',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 13,
@@ -381,7 +449,6 @@ describe('offline map regions', () => {
       ...createOfflineMapRegion({
         name: 'Migrated field',
         tileSourceId: 'authorized-field-basemap',
-        tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
         bounds,
         minZoom: 12,
         maxZoom: 13,
@@ -403,7 +470,6 @@ describe('offline map regions', () => {
     const first = createOfflineMapRegion({
       name: 'North field',
       tileSourceId: 'shared-source',
-      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
       bounds,
       minZoom: 12,
       maxZoom: 13,
@@ -412,7 +478,6 @@ describe('offline map regions', () => {
       ...createOfflineMapRegion({
         name: 'South field',
         tileSourceId: 'shared-source',
-        tileUrlTemplate: first.tileUrlTemplate,
         bounds,
         minZoom: 12,
         maxZoom: 13,
@@ -425,7 +490,7 @@ describe('offline map regions', () => {
       first.bounds,
       first.minZoom,
       first.maxZoom,
-    ).map((coordinate) => tileUrl(first.tileUrlTemplate, coordinate))
+    ).map((coordinate) => offlineTileCacheKey(first.tileSourceId, coordinate))
     for (const url of urls) {
       await cache.put(url, new Response('tile', { status: 200 }))
     }

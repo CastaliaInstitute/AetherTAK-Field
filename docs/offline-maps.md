@@ -6,6 +6,21 @@ Mercator slippy-map coordinates, records exact tile counts before download,
 limits unexpectedly large jobs, supports cancellation, and records partial
 downloads for recovery.
 
+Region manifests persist only a bounded opaque tile-source ID containing
+letters, numbers, dots, underscores, or hyphens, plus bounds, zooms, and
+progress. They do not persist the source URL template. Cache Storage keys use
+the credential-free synthetic form
+`https://offline-map.aethertak.invalid/{source}/{z}/{x}/{y}` rather than the
+network request URL. On upgrade, reconciliation copies any legacy cached
+response to its synthetic key, deletes the old URL-bearing key, and replaces
+the manifest without its legacy template before reporting inventory.
+
+`VITE_MAP_TILE_URL` is compiled into the application and is therefore not a
+secret store. Do not place a long-lived bearer credential in it. Prefer a
+property-network or Tailscale-restricted source. If a provider requires a
+client-visible token, it must be least-privilege, origin/application scoped,
+revocable, and authorized for offline use.
+
 Downloads preserve a 100 MiB storage reserve whenever the platform provides a
 quota estimate. The downloader checks again as uncached tiles are added, stops
 on the first browser/WebView quota-exhaustion error, records the region as
@@ -33,6 +48,10 @@ Each configured source requires:
 - Attribution and licensing information.
 - Explicit zoom and geographic bounds.
 - A documented tile-count ceiling appropriate to the device.
+
+Changing the underlying dataset or provider requires a new source identifier.
+Regions belonging to an identifier not configured in the current build remain
+deletable, but cannot be resumed against a different source URL.
 
 Copy `.env.example` to a local environment file and provide the licensed source
 configuration. Setting `VITE_MAP_TILE_ALLOW_OFFLINE=true` enables the region

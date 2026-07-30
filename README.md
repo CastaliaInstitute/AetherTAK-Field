@@ -20,6 +20,9 @@ client and inside Capacitor shells for iOS and Android.
   MapLibre raster protocol for authorized tile sources, with a 100 MiB
   free-space reserve, recoverable quota-exhaustion handling, and startup/resume
   reconciliation when the OS evicts cached tiles.
+- Credential-free offline-map manifests and synthetic cache keys; upgrades
+  rekey legacy cached responses before scrubbing previously persisted network
+  URL templates.
 - Installable web manifest and content-versioned offline application shell with
   generated 192/512/maskable icons, network-first navigation fallback, and
   cache rotation that preserves independently managed offline map regions.

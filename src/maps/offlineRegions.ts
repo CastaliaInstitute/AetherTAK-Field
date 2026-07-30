@@ -1,5 +1,6 @@
 import {
   offlineMapRegionSchema,
+  tileSourceIdPattern,
   type OfflineMapRegion,
 } from '../domain/models'
 import { db } from '../data/database'
@@ -10,8 +11,23 @@ export interface TileCoordinate {
   y: number
 }
 
+function validatedTileSourceId(tileSourceId: string) {
+  if (!tileSourceIdPattern.test(tileSourceId)) {
+    throw new Error('Map source ID must be an opaque identifier.')
+  }
+  return tileSourceId
+}
+
+// Preserve the historical cache-name mapping so an invalid legacy source can
+// still be located and deleted. New manifests reject such identifiers.
 export const mapCacheName = (tileSourceId: string) =>
   `aethertak-map-${tileSourceId}`
+
+export const offlineTileCacheKey = (
+  tileSourceId: string,
+  coordinate: TileCoordinate,
+) =>
+  `https://offline-map.aethertak.invalid/${encodeURIComponent(validatedTileSourceId(tileSourceId))}/${coordinate.z}/${coordinate.x}/${coordinate.y}`
 
 export const offlineMapStorageReserveBytes = 100 * 1024 * 1024
 
@@ -169,16 +185,62 @@ export interface OfflineMapReconciliation {
   evictedTiles: number
 }
 
-function normalizedCacheKey(url: string) {
-  try {
-    return new Request(url).url
-  } catch {
-    return url
+interface LegacyOfflineMapRegion extends OfflineMapRegion {
+  tileUrlTemplate?: string
+}
+
+interface TileSourceTemplate {
+  id: string
+  urlTemplate: string
+}
+
+function legacyTileUrlTemplate(region: OfflineMapRegion) {
+  const value = (region as LegacyOfflineMapRegion).tileUrlTemplate
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function scrubLegacyTileUrlTemplate(region: OfflineMapRegion) {
+  const {
+    tileUrlTemplate: _legacyTileUrlTemplate,
+    ...scrubbed
+  } = region as LegacyOfflineMapRegion
+  return offlineMapRegionSchema.parse(scrubbed)
+}
+
+async function migrateLegacyRegionCache(
+  cache: Cache,
+  region: OfflineMapRegion,
+  source: TileSourceTemplate | null,
+) {
+  const template =
+    legacyTileUrlTemplate(region) ??
+    (source?.id === region.tileSourceId ? source.urlTemplate : null)
+  if (!template) return 0
+
+  let migrated = 0
+  for (const coordinate of planRegionTiles(
+    region.bounds,
+    region.minZoom,
+    region.maxZoom,
+  )) {
+    const cacheKey = offlineTileCacheKey(region.tileSourceId, coordinate)
+    if (await cache.match(cacheKey)) continue
+    const legacyKey = tileUrl(template, coordinate)
+    const response = await cache.match(legacyKey)
+    if (!response) continue
+    await cache.put(cacheKey, response)
+    if (!(await cache.delete(legacyKey))) {
+      await cache.delete(cacheKey)
+      throw new Error('Legacy offline map cache key could not be removed.')
+    }
+    migrated += 1
   }
+  return migrated
 }
 
 export async function reconcileOfflineMapRegions(
   regions: OfflineMapRegion[],
+  source: TileSourceTemplate | null = null,
 ): Promise<OfflineMapReconciliation> {
   if (regions.length === 0) {
     return { regions: [], changedRegions: 0, evictedTiles: 0 }
@@ -194,6 +256,11 @@ export async function reconcileOfflineMapRegions(
     regions.map((region) => region.tileSourceId),
   )) {
     const cache = await caches.open(mapCacheName(sourceId))
+    for (const region of regions.filter(
+      (candidate) => candidate.tileSourceId === sourceId,
+    )) {
+      await migrateLegacyRegionCache(cache, region, source)
+    }
     const keys = await cache.keys()
     cachedUrlsBySource.set(
       sourceId,
@@ -211,7 +278,7 @@ export async function reconcileOfflineMapRegions(
       region.minZoom,
       region.maxZoom,
     ).map((coordinate) =>
-      normalizedCacheKey(tileUrl(region.tileUrlTemplate, coordinate)))
+      offlineTileCacheKey(region.tileSourceId, coordinate))
     const downloadedTiles = expectedUrls.reduce(
       (count, url) => count + (cachedUrls?.has(url) ? 1 : 0),
       0,
@@ -226,16 +293,18 @@ export async function reconcileOfflineMapRegions(
           : region.status === 'planned'
             ? 'planned'
             : 'failed'
+    const hasLegacyTemplate = legacyTileUrlTemplate(region) !== null
     if (
       region.downloadedTiles === downloadedTiles &&
       region.tileCount === tileCount &&
-      region.status === status
+      region.status === status &&
+      !hasLegacyTemplate
     ) {
       return region
     }
     changedRegions += 1
     const updated = offlineMapRegionSchema.parse({
-      ...region,
+      ...scrubLegacyTileUrlTemplate(region),
       tileCount,
       downloadedTiles,
       status,
@@ -254,13 +323,14 @@ export async function reconcileOfflineMapRegions(
 export async function downloadOfflineMapRegion(
   region: OfflineMapRegion,
   options: {
+    tileUrlTemplate: string
     signal?: AbortSignal
     maxTiles?: number
     onProgress?: (progress: RegionDownloadProgress) => void
     minimumFreeBytes?: number
     storageCheckInterval?: number
     storageEstimate?: () => Promise<StorageEstimateLike | null>
-  } = {},
+  },
 ) {
   if (!('caches' in globalThis)) {
     throw new Error('Cache Storage is unavailable on this platform.')
@@ -299,9 +369,10 @@ export async function downloadOfflineMapRegion(
 
   for (const coordinate of tiles) {
     if (options.signal?.aborted) break
-    const url = tileUrl(region.tileUrlTemplate, coordinate)
+    const url = tileUrl(options.tileUrlTemplate, coordinate)
+    const cacheKey = offlineTileCacheKey(region.tileSourceId, coordinate)
     try {
-      const existing = await cache.match(url)
+      const existing = await cache.match(cacheKey)
       if (!existing) {
         if (uncachedSinceStorageCheck >= storageCheckInterval) {
           const available = availableStorageBytes(await estimateStorage())
@@ -317,7 +388,7 @@ export async function downloadOfflineMapRegion(
         if (!response.ok) {
           throw new Error(`Tile request returned HTTP ${response.status}.`)
         }
-        await cache.put(url, response)
+        await cache.put(cacheKey, response)
         uncachedSinceStorageCheck += 1
       }
       completed += 1
@@ -368,6 +439,11 @@ export async function downloadOfflineMapRegion(
 
 export async function deleteOfflineMapRegion(region: OfflineMapRegion) {
   if ('caches' in globalThis) {
+    if (!tileSourceIdPattern.test(region.tileSourceId)) {
+      await caches.delete(mapCacheName(region.tileSourceId))
+      await db.offlineMapRegions.delete(region.id)
+      return
+    }
     const cache = await caches.open(mapCacheName(region.tileSourceId))
     const otherRegions = await db.offlineMapRegions
       .where('tileSourceId')
@@ -377,7 +453,7 @@ export async function deleteOfflineMapRegion(region: OfflineMapRegion) {
     const retainedUrls = new Set(
       otherRegions.flatMap((item) =>
         planRegionTiles(item.bounds, item.minZoom, item.maxZoom).map(
-          (coordinate) => tileUrl(item.tileUrlTemplate, coordinate),
+          (coordinate) => offlineTileCacheKey(item.tileSourceId, coordinate),
         ),
       ),
     )
@@ -386,8 +462,8 @@ export async function deleteOfflineMapRegion(region: OfflineMapRegion) {
       region.minZoom,
       region.maxZoom,
     )) {
-      const url = tileUrl(region.tileUrlTemplate, coordinate)
-      if (!retainedUrls.has(url)) await cache.delete(url)
+      const cacheKey = offlineTileCacheKey(region.tileSourceId, coordinate)
+      if (!retainedUrls.has(cacheKey)) await cache.delete(cacheKey)
     }
   }
   await db.offlineMapRegions.delete(region.id)

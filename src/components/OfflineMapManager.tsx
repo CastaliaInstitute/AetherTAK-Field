@@ -65,7 +65,6 @@ function inventoryFingerprint(regions: OfflineMapRegion[]) {
       .map((region) => ({
         id: region.id,
         tileSourceId: region.tileSourceId,
-        tileUrlTemplate: region.tileUrlTemplate,
         bounds: region.bounds,
         minZoom: region.minZoom,
         maxZoom: region.maxZoom,
@@ -137,7 +136,7 @@ export function OfflineMapManager({
     inventoryRunning.current = true
     setInventoryBusy(true)
     try {
-      const result = await reconcileOfflineMapRegions(regions)
+      const result = await reconcileOfflineMapRegions(regions, source)
       if (result.changedRegions === 0) return
       onNotice(
         result.evictedTiles > 0
@@ -148,7 +147,7 @@ export function OfflineMapManager({
       inventoryRunning.current = false
       setInventoryBusy(false)
     }
-  }, [activeId, onNotice, regions])
+  }, [activeId, onNotice, regions, source])
 
   useEffect(() => {
     let disposed = false
@@ -200,6 +199,12 @@ export function OfflineMapManager({
   }, [activeId, onNotice, reconcileInventory])
 
   async function download(region: OfflineMapRegion) {
+    if (region.tileSourceId !== source.id) {
+      onNotice(
+        `${region.name} belongs to map source ${region.tileSourceId}, which is not configured in this build.`,
+      )
+      return
+    }
     const abort = new AbortController()
     controller.current = abort
     setActiveId(region.id)
@@ -211,6 +216,7 @@ export function OfflineMapManager({
     })
     try {
       const downloaded = await downloadOfflineMapRegion(region, {
+        tileUrlTemplate: source.urlTemplate,
         signal: abort.signal,
         maxTiles: 5_000,
         onProgress: setProgress,
@@ -239,7 +245,6 @@ export function OfflineMapManager({
     const region = createOfflineMapRegion({
       name: property.name,
       tileSourceId: source.id,
-      tileUrlTemplate: source.urlTemplate,
       bounds: propertyBounds(property),
       minZoom,
       maxZoom,
@@ -393,7 +398,12 @@ export function OfflineMapManager({
                 z{region.minZoom}–{region.maxZoom} · {region.downloadedTiles}/
                 {region.tileCount} tiles
               </span>
-              <small className={region.status}>{region.status}</small>
+              <small className={region.status}>
+                {region.status}
+                {region.tileSourceId === source.id
+                  ? ''
+                  : ' · source unavailable'}
+              </small>
             </div>
             <div className="offline-region-actions">
               {region.status !== 'ready' && activeId !== region.id && (
@@ -402,7 +412,8 @@ export function OfflineMapManager({
                   disabled={
                     activeId !== null ||
                     inventoryPending ||
-                    storageTooLow
+                    storageTooLow ||
+                    region.tileSourceId !== source.id
                   }
                   aria-label={`Resume ${region.name}`}
                   onClick={() => void download(region)}
