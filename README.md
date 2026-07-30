@@ -30,6 +30,8 @@ client and inside Capacitor shells for iOS and Android.
 - Live native contacts, foreground PLI publishing, addressed GeoChat,
   tap-to-compose markers/routes/areas, rendered TAK geometry, and explicitly
   confirmed emergency signaling with cancellation.
+- Opt-in native background PLI with a visible iOS location indicator or Android
+  location foreground-service notification and an in-app stop control.
 - Read-only Al field insight surface.
 
 The browser provides a safe preview. Certificate enrollment, CoT transport, and

@@ -36,6 +36,7 @@ current iTAK, and current ATAK for each row:
 | Capability | Field → iTAK | iTAK → Field | Field → ATAK | ATAK → Field |
 | --- | --- | --- | --- | --- |
 | PLI and contact lifecycle | Pending | Pending | Pending | Pending |
+| Background PLI with screen locked | Pending | Pending | Pending | Pending |
 | Direct GeoChat | Pending | Pending | Pending | Pending |
 | Marker | Pending | Pending | Pending | Pending |
 | Route | Pending | Pending | Pending | Pending |

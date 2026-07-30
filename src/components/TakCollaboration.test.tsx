@@ -4,7 +4,11 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TakMapComposer, TakTeamPanel } from './TakCollaboration'
+import {
+  TakMapComposer,
+  TakTeamPanel,
+  TakTrackingControl,
+} from './TakCollaboration'
 
 const contact = {
   uid: 'field-two',
@@ -24,6 +28,45 @@ const contact = {
 afterEach(cleanup)
 
 describe('TAK collaboration controls', () => {
+  it('requires a connection to start background sharing and allows an active session to stop', async () => {
+    const user = userEvent.setup()
+    const onToggle = vi.fn(async () => undefined)
+    const view = render(
+      <TakTrackingControl
+        status={{
+          supported: true,
+          enabled: false,
+          detail: 'Background team position is off.',
+        }}
+        busy={false}
+        connected={false}
+        onToggle={onToggle}
+      />,
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Share in background' }),
+    ).toBeDisabled()
+    view.rerender(
+      <TakTrackingControl
+        status={{
+          supported: true,
+          enabled: true,
+          detail: 'Team position is live.',
+        }}
+        busy={false}
+        connected={false}
+        onToggle={onToggle}
+      />,
+    )
+    const stop = screen.getByRole('button', {
+      name: 'Stop background sharing',
+    })
+    expect(stop).toBeEnabled()
+    await user.click(stop)
+    expect(onToggle).toHaveBeenCalledOnce()
+  })
+
   it('requires valid map geometry and a name before sending', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn(async () => undefined)

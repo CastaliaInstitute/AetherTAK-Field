@@ -23,6 +23,12 @@ export interface TakStatus {
   error: string | null
 }
 
+export interface BackgroundTrackingStatus {
+  supported: boolean
+  enabled: boolean
+  detail: string
+}
+
 export interface CotMessage {
   uid: string
   type: string
@@ -40,6 +46,10 @@ interface AetherTakTransportPlugin {
   disconnect(): Promise<void>
   removeEnrollment(): Promise<void>
   getStatus(): Promise<TakStatus>
+  getBackgroundTrackingStatus(): Promise<BackgroundTrackingStatus>
+  setBackgroundTracking(options: {
+    enabled: boolean
+  }): Promise<BackgroundTrackingStatus>
   getContacts(): Promise<{ contacts: TakContact[] }>
   sendCot(options: { xml: string }): Promise<{ accepted: boolean }>
   fieldMutation(options: {
@@ -91,6 +101,12 @@ const browserStatus: TakStatus = {
   },
   lastConnectedAt: null,
   error: 'Native TAK transport is available in the iOS and Android builds.',
+}
+
+const browserBackgroundTracking: BackgroundTrackingStatus = {
+  supported: false,
+  enabled: false,
+  detail: 'Background team tracking requires the iOS or Android application.',
 }
 
 const configuredFieldPort = Number(
@@ -149,6 +165,18 @@ export const takTransport = {
       )
     }
     await nativeTak.removeEnrollment()
+  },
+
+  async backgroundTrackingStatus(): Promise<BackgroundTrackingStatus> {
+    if (!Capacitor.isNativePlatform()) return browserBackgroundTracking
+    return nativeTak.getBackgroundTrackingStatus()
+  },
+
+  async setBackgroundTracking(
+    enabled: boolean,
+  ): Promise<BackgroundTrackingStatus> {
+    if (!Capacitor.isNativePlatform()) return browserBackgroundTracking
+    return nativeTak.setBackgroundTracking({ enabled })
   },
 
   async sendXml(xml: string): Promise<boolean> {

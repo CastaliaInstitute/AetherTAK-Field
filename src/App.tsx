@@ -17,6 +17,7 @@ import { FieldRecords } from './components/FieldRecords'
 import { OfflineMapManager } from './components/OfflineMapManager'
 import {
   TakMapComposer,
+  TakTrackingControl,
   TakTeamPanel,
 } from './components/TakCollaboration'
 import { demoSnapshot } from './domain/seed'
@@ -39,6 +40,7 @@ import {
 import { depthScanner } from './platform/depth'
 import {
   takTransport,
+  type BackgroundTrackingStatus,
   type TakServerProfile,
 } from './platform/tak'
 import {
@@ -80,6 +82,12 @@ const initialDepth: DepthCapability = {
   reason: 'Checking device…',
 }
 
+const initialBackgroundTracking: BackgroundTrackingStatus = {
+  supported: false,
+  enabled: false,
+  detail: 'Checking native tracking capability…',
+}
+
 function relativeTime(value: string) {
   const minutes = Math.max(
     0,
@@ -99,6 +107,9 @@ export default function App() {
   const [takActivity, setTakActivity] = useState<TakActivity[]>([])
   const [mapDraft, setMapDraft] = useState<MapDraft | null>(null)
   const [depth, setDepth] = useState<DepthCapability>(initialDepth)
+  const [backgroundTracking, setBackgroundTracking] =
+    useState<BackgroundTrackingStatus>(initialBackgroundTracking)
+  const [trackingBusy, setTrackingBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const enrollmentInput = useRef<HTMLInputElement>(null)
   const {
@@ -122,7 +133,22 @@ export default function App() {
       setProfile(status.profile)
     })
     void depthScanner.capability().then(setDepth)
+    void takTransport.backgroundTrackingStatus().then(setBackgroundTracking)
     void recentTakActivity().then(setTakActivity)
+  }, [])
+
+  useEffect(() => {
+    if (!takTransport.isNative()) return
+    let disposed = false
+    const refresh = async () => {
+      const status = await takTransport.backgroundTrackingStatus()
+      if (!disposed) setBackgroundTracking(status)
+    }
+    const timer = window.setInterval(() => void refresh(), 5_000)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -188,7 +214,11 @@ export default function App() {
   }), [profile])
 
   useEffect(() => {
-    if (connection !== 'connected' || !takTransport.isNative()) return
+    if (
+      connection !== 'connected' ||
+      !takTransport.isNative() ||
+      backgroundTracking.enabled
+    ) return
     let disposed = false
     let publishing = false
     let lastPublishedAt = 0
@@ -230,7 +260,7 @@ export default function App() {
       disposed = true
       if (stop) void stop()
     }
-  }, [connection, identity])
+  }, [backgroundTracking.enabled, connection, identity])
 
   async function refreshTakActivity() {
     setTakActivity(await recentTakActivity())
@@ -391,6 +421,11 @@ export default function App() {
       setConnection('not_enrolled')
       setProfile(null)
       setContacts([])
+      setBackgroundTracking({
+        supported: true,
+        enabled: false,
+        detail: 'Background team position is off.',
+      })
       setNotice('TAK enrollment and device credentials were removed.')
     } catch (error) {
       setNotice(
@@ -398,6 +433,30 @@ export default function App() {
           ? error.message
           : 'TAK enrollment removal failed.',
       )
+    }
+  }
+
+  async function toggleBackgroundTracking() {
+    setTrackingBusy(true)
+    try {
+      const next = await takTransport.setBackgroundTracking(
+        !backgroundTracking.enabled,
+      )
+      setBackgroundTracking(next)
+      setNotice(
+        next.enabled
+          ? 'Background team location is active. Use the system indicator or this control to stop sharing.'
+          : 'Background team location stopped.',
+      )
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : 'Background team tracking could not be changed.',
+      )
+      setBackgroundTracking(await takTransport.backgroundTrackingStatus())
+    } finally {
+      setTrackingBusy(false)
     }
   }
 
@@ -580,6 +639,12 @@ export default function App() {
               Remove certificate enrollment
             </button>
           )}
+          <TakTrackingControl
+            status={backgroundTracking}
+            busy={trackingBusy}
+            connected={connection === 'connected'}
+            onToggle={toggleBackgroundTracking}
+          />
           <TakTeamPanel
             callsign={identity.callsign}
             contacts={contacts}

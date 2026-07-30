@@ -1,5 +1,10 @@
 package org.castaliainstitute.aethertak.field.plugins
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -10,6 +15,7 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import org.castaliainstitute.aethertak.field.tak.TakEnrollmentPackage
+import org.castaliainstitute.aethertak.field.tak.BackgroundPliService
 import org.castaliainstitute.aethertak.field.tak.TakFieldApiClient
 import org.castaliainstitute.aethertak.field.tak.TakIdentityStore
 import org.castaliainstitute.aethertak.field.tak.TakProfile
@@ -47,12 +53,13 @@ class AetherTakTransportPlugin : Plugin() {
             call.reject("An enrollment package path is required.", "INVALID_PACKAGE")
             return
         }
+        stopBackgroundTracking()
+        transport.disconnect()
+        contacts.clear()
         worker.execute {
             try {
                 TakEnrollmentPackage.read(context, path).use { material ->
                     val profile = identityStore.import(material)
-                    transport.disconnect()
-                    contacts.clear()
                     state = "disconnected"
                     lastError = null
                     call.resolve(profileObject(profile))
@@ -95,6 +102,7 @@ class AetherTakTransportPlugin : Plugin() {
 
     @PluginMethod
     fun disconnect(call: PluginCall) {
+        stopBackgroundTracking()
         transport.disconnect()
         state = if (identityStore.load() == null) "not_enrolled" else "disconnected"
         call.resolve()
@@ -102,6 +110,7 @@ class AetherTakTransportPlugin : Plugin() {
 
     @PluginMethod
     fun removeEnrollment(call: PluginCall) {
+        stopBackgroundTracking()
         transport.disconnect()
         contacts.clear()
         try {
@@ -121,6 +130,53 @@ class AetherTakTransportPlugin : Plugin() {
 
     @PluginMethod
     fun getStatus(call: PluginCall) = call.resolve(status())
+
+    @PluginMethod
+    fun getBackgroundTrackingStatus(call: PluginCall) {
+        call.resolve(backgroundTrackingStatus())
+    }
+
+    @PluginMethod
+    fun setBackgroundTracking(call: PluginCall) {
+        val enabled = call.getBoolean("enabled") ?: false
+        if (!enabled) {
+            stopBackgroundTracking()
+            call.resolve(backgroundTrackingStatus())
+            return
+        }
+        if (identityStore.load() == null) {
+            call.reject("Import a TAK enrollment package first.", "NOT_ENROLLED")
+            return
+        }
+        if (
+            ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ) != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            call.reject(
+                "Allow location while using AetherTAK Field before enabling background team tracking.",
+                "LOCATION_PERMISSION_REQUIRED",
+            )
+            return
+        }
+        val intent = Intent(context, BackgroundPliService::class.java)
+            .setAction(BackgroundPliService.ACTION_START)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+        call.resolve(JSObject().apply {
+            put("supported", true)
+            put("enabled", true)
+            put("detail", "Android foreground location service is starting.")
+        })
+    }
 
     @PluginMethod
     fun getContacts(call: PluginCall) {
@@ -251,6 +307,24 @@ class AetherTakTransportPlugin : Plugin() {
             )
             put("error", error ?: JSObject.NULL)
         }
+    }
+
+    private fun stopBackgroundTracking() {
+        context.stopService(Intent(context, BackgroundPliService::class.java))
+    }
+
+    private fun backgroundTrackingStatus(): JSObject = JSObject().apply {
+        put("supported", true)
+        put("enabled", BackgroundPliService.running)
+        put(
+            "detail",
+            BackgroundPliService.lastError
+                ?: if (BackgroundPliService.running) {
+                    "Android is sharing team position with a visible foreground service."
+                } else {
+                    "Background team position is off."
+                },
+        )
     }
 
     private fun profileObject(profile: TakProfile): JSObject = JSObject().apply {

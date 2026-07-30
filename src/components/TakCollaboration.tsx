@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
+  LocateFixed,
   MapPin,
   MessageCircle,
   Pentagon,
@@ -10,6 +11,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import type { BackgroundTrackingStatus } from '../platform/tak'
 import type { TakContact } from '../domain/models'
 import type { TakActivity } from '../tak/activity'
 import type {
@@ -20,6 +22,49 @@ import type {
 export interface TakMapDraft {
   kind: 'marker' | 'route' | 'shape'
   pointCount: number
+}
+
+interface TakTrackingControlProps {
+  status: BackgroundTrackingStatus
+  busy: boolean
+  connected: boolean
+  onToggle: () => Promise<void>
+}
+
+export function TakTrackingControl({
+  status,
+  busy,
+  connected,
+  onToggle,
+}: TakTrackingControlProps) {
+  if (!status.supported) return null
+  return (
+    <section className="tak-tracking-control" aria-label="Background team tracking">
+      <div>
+        <LocateFixed size={19} />
+        <div>
+          <strong>Background team location</strong>
+          <span>
+            Shares a stale-bounded TAK position every 15 seconds while moving.
+            Your phone shows a system indicator whenever this is active.
+          </span>
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-pressed={status.enabled}
+        disabled={busy || (!connected && !status.enabled)}
+        onClick={() => void onToggle()}
+      >
+        {busy
+          ? 'Updating…'
+          : status.enabled
+            ? 'Stop background sharing'
+            : 'Share in background'}
+      </button>
+      <small>{status.detail}</small>
+    </section>
+  )
 }
 
 interface TakMapComposerProps {

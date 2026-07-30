@@ -17,6 +17,9 @@ Methods exposed to the shared layer:
   trust anchor from Keychain/Android KeyStore, and clear non-secret profile
   metadata.
 - `getStatus()`
+- `getBackgroundTrackingStatus()`
+- `setBackgroundTracking({ enabled })`: explicitly start or stop native,
+  system-visible team PLI updates while the web view is suspended.
 - `getContacts()`
 - `sendCot({ xml })`
 - `fieldMutation({ port, mutation })`
@@ -29,6 +32,15 @@ shapes, and emergency events. Field API calls reuse the same issued identity and
 pinned CA; downloaded artifacts are committed to app-private storage only after
 content length, type, and SHA-256 validation. It must never return private key
 bytes, passwords, or raw PKCS#12 content over the Capacitor bridge.
+
+Background team tracking is opt-in and stops on disconnect, enrollment
+replacement, or credential removal. Android uses a location-typed foreground
+service with a persistent notification and Stop action; it relies on foreground
+location permission and does not request `ACCESS_BACKGROUND_LOCATION`. iOS uses
+Core Location with the `location` background mode and displays the system
+background-location indicator. The shared foreground watcher is disabled while
+the native publisher is active so the same identity does not emit duplicate
+PLI.
 
 ## AetherDepthScanner
 
@@ -79,6 +91,11 @@ stage replacement credentials under unique labels, synchronously activate the
 new profile, roll staged items back on failure, and retire the previous identity
 only after activation succeeds. Disconnect preserves enrollment; explicit
 removal destroys it. CI compiles Android on Ubuntu and iOS on a macOS runner.
+Both plugins also provide explicit native background PLI sessions using a
+15-second publish throttle and 45-second stale window. Android PLI encoding has
+native unit coverage; platform suspension, battery-management, permission
+revocation, and notification/indicator behavior still require physical-device
+evidence.
 
 ARKit LiDAR and ARCore Depth capture/export are implemented with capability
 fallbacks. Physical-device accuracy, end-to-end sync, iTAK/ATAK

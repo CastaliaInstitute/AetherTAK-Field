@@ -1,8 +1,9 @@
 import Capacitor
+import CoreLocation
 import Foundation
 
 @objc(AetherTakTransportPlugin)
-public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
+public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationManagerDelegate {
     public let identifier = "AetherTakTransportPlugin"
     public let jsName = "AetherTakTransport"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -11,6 +12,8 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "disconnect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeEnrollment", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getBackgroundTrackingStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setBackgroundTracking", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getContacts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendCot", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldMutation", returnType: CAPPluginReturnPromise),
@@ -30,6 +33,11 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
     private var fieldApi: TakFieldApiClient!
     private var state = "not_enrolled"
     private var lastError: String?
+    private var locationManager: CLLocationManager?
+    private var pendingTrackingCall: CAPPluginCall?
+    private var backgroundTrackingEnabled = false
+    private var backgroundReconnecting = false
+    private var lastBackgroundPublishAt = Date.distantPast
 
     public override func load() {
         identityStore = TakIdentityStore()
@@ -57,6 +65,11 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
             )
             return
         }
+        stopBackgroundTracking()
+        transport.disconnect()
+        contactLock.lock()
+        contacts.removeAll()
+        contactLock.unlock()
         worker.async { [weak self] in
             guard let self else { return }
             do {
@@ -68,10 +81,6 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
                 let material = try TakEnrollmentPackage.read(url: url)
                 let profile = try self.identityStore.importMaterial(material)
-                self.transport.disconnect()
-                self.contactLock.lock()
-                self.contacts.removeAll()
-                self.contactLock.unlock()
                 self.state = "disconnected"
                 self.lastError = nil
                 call.resolve(self.profileObject(profile))
@@ -111,6 +120,7 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func disconnect(_ call: CAPPluginCall) {
+        stopBackgroundTracking()
         transport.disconnect()
         state = identityStore.loadProfile() == nil
             ? "not_enrolled"
@@ -119,6 +129,7 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func removeEnrollment(_ call: CAPPluginCall) {
+        stopBackgroundTracking()
         transport.disconnect()
         contactLock.lock()
         contacts.removeAll()
@@ -132,6 +143,57 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getStatus(_ call: CAPPluginCall) {
         call.resolve(status())
+    }
+
+    @objc func getBackgroundTrackingStatus(_ call: CAPPluginCall) {
+        call.resolve(backgroundTrackingStatus())
+    }
+
+    @objc func setBackgroundTracking(_ call: CAPPluginCall) {
+        let enabled = call.getBool("enabled") ?? false
+        guard enabled else {
+            stopBackgroundTracking()
+            call.resolve(backgroundTrackingStatus())
+            return
+        }
+        guard identityStore.loadProfile() != nil else {
+            call.reject("Import a TAK enrollment package first.", "NOT_ENROLLED")
+            return
+        }
+        guard transport.isConnected else {
+            call.reject(
+                "Connect to AetherTAK before enabling background team tracking.",
+                "NOT_CONNECTED"
+            )
+            return
+        }
+        DispatchQueue.main.async {
+            let manager = self.locationManager ?? CLLocationManager()
+            self.locationManager = manager
+            manager.delegate = self
+            switch manager.authorizationStatus {
+            case .authorizedAlways, .authorizedWhenInUse:
+                self.startBackgroundTracking(manager)
+                call.resolve(self.backgroundTrackingStatus())
+            case .notDetermined:
+                self.pendingTrackingCall?.reject(
+                    "A newer background tracking request replaced this one.",
+                    "REQUEST_REPLACED"
+                )
+                self.pendingTrackingCall = call
+                manager.requestWhenInUseAuthorization()
+            case .denied, .restricted:
+                call.reject(
+                    "Allow location access in Settings before enabling background team tracking.",
+                    "LOCATION_PERMISSION_REQUIRED"
+                )
+            @unknown default:
+                call.reject(
+                    "The current location authorization state is unsupported.",
+                    "LOCATION_PERMISSION_REQUIRED"
+                )
+            }
+        }
     }
 
     @objc func getContacts(_ call: CAPPluginCall) {
@@ -291,6 +353,162 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
             "lastConnectedAt": connectedValue,
             "error": errorValue
         ]
+    }
+
+    public func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard let call = pendingTrackingCall else { return }
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            pendingTrackingCall = nil
+            startBackgroundTracking(manager)
+            call.resolve(backgroundTrackingStatus())
+        case .denied, .restricted:
+            pendingTrackingCall = nil
+            call.reject(
+                "Location access was not granted.",
+                "LOCATION_PERMISSION_REQUIRED"
+            )
+        default:
+            break
+        }
+    }
+
+    public func locationManager(
+        _ manager: CLLocationManager,
+        didUpdateLocations locations: [CLLocation]
+    ) {
+        guard
+            backgroundTrackingEnabled,
+            let location = locations.last,
+            location.horizontalAccuracy >= 0,
+            abs(location.timestamp.timeIntervalSinceNow) <= 30,
+            Date().timeIntervalSince(lastBackgroundPublishAt) >= 15
+        else {
+            return
+        }
+        lastBackgroundPublishAt = Date()
+        publishBackgroundLocation(location)
+    }
+
+    public func locationManager(
+        _ manager: CLLocationManager,
+        didFailWithError error: Error
+    ) {
+        lastError = error.localizedDescription
+        notifyListeners("statusChanged", data: status())
+    }
+
+    private func startBackgroundTracking(_ manager: CLLocationManager) {
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 5
+        manager.activityType = .otherNavigation
+        manager.pausesLocationUpdatesAutomatically = true
+        manager.allowsBackgroundLocationUpdates = true
+        manager.showsBackgroundLocationIndicator = true
+        backgroundTrackingEnabled = true
+        lastBackgroundPublishAt = .distantPast
+        manager.startUpdatingLocation()
+    }
+
+    private func stopBackgroundTracking() {
+        let stop = {
+            self.locationManager?.stopUpdatingLocation()
+            self.locationManager?.allowsBackgroundLocationUpdates = false
+            self.locationManager?.delegate = nil
+            self.locationManager = nil
+            self.backgroundTrackingEnabled = false
+            self.backgroundReconnecting = false
+            self.pendingTrackingCall?.reject(
+                "Background tracking was stopped.",
+                "TRACKING_STOPPED"
+            )
+            self.pendingTrackingCall = nil
+        }
+        if Thread.isMainThread {
+            stop()
+        } else {
+            DispatchQueue.main.sync(execute: stop)
+        }
+    }
+
+    private func backgroundTrackingStatus() -> [String: Any] {
+        [
+            "supported": true,
+            "enabled": backgroundTrackingEnabled,
+            "detail": backgroundTrackingEnabled
+                ? "iOS is sharing team position with the visible background location indicator."
+                : "Background team position is off."
+        ]
+    }
+
+    private func publishBackgroundLocation(_ location: CLLocation) {
+        guard let profile = identityStore.loadProfile() else {
+            stopBackgroundTracking()
+            return
+        }
+        guard transport.isConnected else {
+            guard !backgroundReconnecting else { return }
+            backgroundReconnecting = true
+            transport.connect(profile: profile) { [weak self] result in
+                guard let self else { return }
+                self.backgroundReconnecting = false
+                switch result {
+                case .success:
+                    self.state = "connected"
+                    self.publishBackgroundLocation(location)
+                case .failure(let error):
+                    self.state = "disconnected"
+                    self.lastError = error.localizedDescription
+                }
+                self.notifyListeners("statusChanged", data: self.status())
+            }
+            return
+        }
+        let xml = backgroundPli(profile: profile, location: location)
+        transport.send(xml: xml) { [weak self] result in
+            if case .failure(let error) = result {
+                self?.lastError = error.localizedDescription
+            }
+        }
+    }
+
+    private func backgroundPli(
+        profile: TakProfile,
+        location: CLLocation
+    ) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let createdAt = Date()
+        let staleAt = createdAt.addingTimeInterval(45)
+        let altitude = location.verticalAccuracy >= 0 ? location.altitude : 0
+        let horizontalAccuracy = location.horizontalAccuracy >= 0
+            ? location.horizontalAccuracy
+            : 9_999_999
+        let verticalAccuracy = location.verticalAccuracy >= 0
+            ? location.verticalAccuracy
+            : 9_999_999
+        let course = location.course >= 0 ? location.course : 0
+        let speed = location.speed >= 0 ? location.speed : 0
+        return [
+            "<event version=\"2.0\" uid=\"AETHER-\(xml(profile.id))\" type=\"a-f-G-U-C\" how=\"m-g\" time=\"\(formatter.string(from: createdAt))\" start=\"\(formatter.string(from: createdAt))\" stale=\"\(formatter.string(from: staleAt))\">",
+            "<point lat=\"\(location.coordinate.latitude)\" lon=\"\(location.coordinate.longitude)\" hae=\"\(altitude)\" ce=\"\(horizontalAccuracy)\" le=\"\(verticalAccuracy)\"/>",
+            "<detail>",
+            "<contact callsign=\"\(xml(profile.callsign))\" endpoint=\"*:-1:stcp\"/>",
+            "<__group name=\"\(xml(profile.team))\" role=\"Team Member\"/>",
+            "<status battery=\"100\"/>",
+            "<takv device=\"AetherTAK Field\" platform=\"iOS\" os=\"mobile\" version=\"0.1.0\"/>",
+            "<track course=\"\(course)\" speed=\"\(speed)\"/>",
+            "</detail></event>"
+        ].joined()
+    }
+
+    private func xml(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
     }
 
     private func profileObject(_ profile: TakProfile) -> [String: Any] {
