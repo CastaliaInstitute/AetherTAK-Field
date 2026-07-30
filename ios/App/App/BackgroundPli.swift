@@ -12,6 +12,8 @@ struct BackgroundPli {
     let headingDegrees: Double?
     let speedMetersPerSecond: Double?
     let batteryPercent: Int?
+    let deviceModel: String
+    let osVersion: String
     let appVersion: String
     let createdAt: Date
 }
@@ -33,7 +35,7 @@ func backgroundPliToCot(_ pli: BackgroundPli) -> String {
         "<contact callsign=\"\(backgroundPliXml(pli.callsign))\" endpoint=\"*:-1:stcp\"/>",
         "<__group name=\"\(backgroundPliXml(pli.team))\" role=\"Team Member\"/>",
         battery,
-        "<takv device=\"AetherTAK Field\" platform=\"iOS\" os=\"mobile\" version=\"\(backgroundPliXml(pli.appVersion))\"/>",
+        "<takv device=\"\(backgroundPliXml(pli.deviceModel))\" platform=\"iOS\" os=\"\(backgroundPliXml(pli.osVersion))\" version=\"\(backgroundPliXml(pli.appVersion))\"/>",
         "<track course=\"\(pli.headingDegrees ?? 0)\" speed=\"\(pli.speedMetersPerSecond ?? 0)\"/>",
         "</detail></event>"
     ].joined()

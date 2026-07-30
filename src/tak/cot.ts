@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import type { Coordinate } from '../domain/models'
-import type { TakOperation } from './operations'
+import type { TakDeviceMetadata, TakOperation } from './operations'
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -52,14 +52,24 @@ function contactDetail(
   callsign: string,
   team: string,
   role: string,
+  device: TakDeviceMetadata | undefined,
   endpoint = '*:-1:stcp',
 ) {
-  return [
+  const detail = [
     `<contact ${attribute('callsign', callsign)} ${attribute('endpoint', endpoint)}/>`,
     `<__group ${attribute('name', team)} ${attribute('role', role)}/>`,
-    '<status battery="100"/>',
-    '<takv device="AetherTAK Field" platform="Capacitor" os="mobile" version="0.1.0"/>',
-  ].join('')
+  ]
+  if (device?.batteryPercent !== null && device?.batteryPercent !== undefined) {
+    detail.push(
+      `<status ${attribute('battery', Math.min(100, Math.max(0, Math.round(device.batteryPercent))))}/>`,
+    )
+  }
+  if (device) {
+    detail.push(
+      `<takv ${attribute('device', device.model)} ${attribute('platform', device.platform)} ${attribute('os', device.osVersion)} ${attribute('version', device.appVersion)}/>`,
+    )
+  }
+  return detail.join('')
 }
 
 function coordinateLinks(points: Coordinate[]) {
@@ -86,6 +96,7 @@ export function operationToCot(operation: TakOperation): string {
           identity.callsign,
           identity.team,
           identity.role,
+          operation.device,
         ) + track,
         'm-g',
       )

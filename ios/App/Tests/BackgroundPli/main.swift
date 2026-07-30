@@ -21,6 +21,8 @@ let xml = backgroundPliToCot(
         headingDegrees: 87,
         speedMetersPerSecond: 1.2,
         batteryPercent: 73,
+        deviceModel: "iPhone",
+        osVersion: "18.5",
         appVersion: "2.4.1",
         createdAt: createdAt
     )
@@ -32,7 +34,7 @@ require(xml.contains("stale=\"1970-01-01T00:00:45.000Z\""), "45-second stale win
 require(xml.contains("<point lat=\"39.7392\" lon=\"-104.9903\""), "coordinates")
 require(xml.contains("ce=\"4.5\" le=\"7.25\""), "accuracy metadata")
 require(xml.contains("<status battery=\"73\"/>"), "real battery value")
-require(xml.contains("platform=\"iOS\" os=\"mobile\" version=\"2.4.1\""), "runtime version")
+require(xml.contains("device=\"iPhone\" platform=\"iOS\" os=\"18.5\" version=\"2.4.1\""), "runtime device metadata")
 require(xml.contains("<track course=\"87.0\" speed=\"1.2\"/>"), "track metadata")
 require(xml.hasSuffix("</event>"), "event terminator")
 
@@ -49,6 +51,8 @@ let escaped = backgroundPliToCot(
         headingDegrees: nil,
         speedMetersPerSecond: nil,
         batteryPercent: nil,
+        deviceModel: "iPhone <Pro>",
+        osVersion: "18<&",
         appVersion: "2<&",
         createdAt: createdAt
     )
@@ -58,6 +62,8 @@ require(escaped.contains("uid=\"AETHER-&lt;&amp;&quot;\""), "escaped UID")
 require(escaped.contains("callsign=\"Al &amp; Field &lt;One&gt;\""), "escaped callsign")
 require(escaped.contains("name=\"&quot;Green&quot;\""), "escaped team")
 require(escaped.contains("version=\"2&lt;&amp;\""), "escaped version")
+require(escaped.contains("device=\"iPhone &lt;Pro&gt;\""), "escaped model")
+require(escaped.contains("os=\"18&lt;&amp;\""), "escaped OS version")
 require(!escaped.contains("<status battery="), "unknown battery omitted")
 
 print("iOS Background PLI encoder tests passed")

@@ -7,6 +7,14 @@ export interface TakIdentity {
   role: 'Team Member' | 'Team Lead' | 'HQ' | 'K9'
 }
 
+export interface TakDeviceMetadata {
+  model: string
+  platform: string
+  osVersion: string
+  appVersion: string
+  batteryPercent: number | null
+}
+
 interface OperationBase {
   uid: string
   createdAt: string
@@ -18,6 +26,7 @@ export interface PositionOperation extends OperationBase {
   identity: TakIdentity
   coordinate: Coordinate
   speedMetersPerSecond?: number
+  device?: TakDeviceMetadata
 }
 
 export interface ChatOperation extends OperationBase {

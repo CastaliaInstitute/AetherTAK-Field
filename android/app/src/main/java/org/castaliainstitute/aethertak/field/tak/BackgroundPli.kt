@@ -15,6 +15,8 @@ data class BackgroundPli(
     val speedMetersPerSecond: Double?,
     val verticalAccuracyMeters: Double?,
     val batteryPercent: Int?,
+    val deviceModel: String,
+    val osVersion: String,
     val appVersion: String,
     val createdAt: Instant,
 )
@@ -30,7 +32,7 @@ fun backgroundPliToCot(pli: BackgroundPli): String {
         pli.batteryPercent?.let {
             append("""<status battery="${it.coerceIn(0, 100)}"/>""")
         }
-        append("""<takv device="AetherTAK Field" platform="Android" os="mobile" version="${xml(pli.appVersion)}"/>""")
+        append("""<takv device="${xml(pli.deviceModel)}" platform="Android" os="${xml(pli.osVersion)}" version="${xml(pli.appVersion)}"/>""")
         append("""<track course="${pli.headingDegrees ?: 0.0}" speed="${pli.speedMetersPerSecond ?: 0.0}"/>""")
         append("</detail></event>")
     }

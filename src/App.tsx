@@ -74,6 +74,7 @@ import type {
   TakOperation,
 } from './tak/operations'
 import { activeRasterSource } from './maps/tileSource'
+import { currentTakDeviceMetadata } from './platform/deviceMetadata'
 import {
   buildSensorChannels,
   selectLatestSensorReadings,
@@ -269,14 +270,19 @@ export default function App() {
       ) return
       publishing = true
       lastPublishedAt = now
-      void queueTakOperation({
-        kind: 'position',
-        uid: identity.uid,
-        identity,
-        coordinate,
-        createdAt: new Date(now).toISOString(),
-        staleSeconds: 45,
-      })
+      void currentTakDeviceMetadata()
+        .catch(() => undefined)
+        .then((device) =>
+          queueTakOperation({
+            kind: 'position',
+            uid: identity.uid,
+            identity,
+            coordinate,
+            device,
+            createdAt: new Date(now).toISOString(),
+            staleSeconds: 45,
+          }),
+        )
         .then(() => flushTakOutbox())
         .then(() => recentTakActivity())
         .then((items) => {

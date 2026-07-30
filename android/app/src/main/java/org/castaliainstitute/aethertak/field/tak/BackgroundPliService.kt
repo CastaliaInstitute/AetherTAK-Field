@@ -206,6 +206,8 @@ class BackgroundPliService : Service(), LocationListener {
                     null
                 },
                 batteryPercent = batteryPercent(),
+                deviceModel = Build.MODEL,
+                osVersion = Build.VERSION.RELEASE,
                 appVersion = packageManager
                     .getPackageInfo(packageName, 0)
                     .versionName ?: "unknown",

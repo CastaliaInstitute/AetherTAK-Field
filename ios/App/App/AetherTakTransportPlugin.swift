@@ -536,6 +536,8 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
                     ? location.speed
                     : nil,
                 batteryPercent: batteryPercent(),
+                deviceModel: UIDevice.current.model,
+                osVersion: UIDevice.current.systemVersion,
                 appVersion: Bundle.main.object(
                     forInfoDictionaryKey: "CFBundleShortVersionString"
                 ) as? String ?? "unknown",

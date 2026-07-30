@@ -28,6 +28,13 @@ describe('TAK Cursor-on-Target codec', () => {
       uid: identity.uid,
       identity,
       coordinate,
+      device: {
+        model: 'iPhone',
+        platform: 'iOS',
+        osVersion: '18.5',
+        appVersion: '2.4.1',
+        batteryPercent: 73,
+      },
       createdAt,
     })
     const parsed = parseCotEvent(xml)
@@ -40,6 +47,25 @@ describe('TAK Cursor-on-Target codec', () => {
       longitude: coordinate.longitude,
     })
     expect(xml).toContain('<__group name="Green" role="Team Member"/>')
+    expect(xml).toContain('<status battery="73"/>')
+    expect(xml).toContain(
+      '<takv device="iPhone" platform="iOS" os="18.5" version="2.4.1"/>',
+    )
+  })
+
+  it('omits unavailable device telemetry instead of fabricating it', () => {
+    const xml = operationToCot({
+      kind: 'position',
+      uid: identity.uid,
+      identity,
+      coordinate,
+      createdAt,
+    })
+
+    expect(xml).not.toContain('<status')
+    expect(xml).not.toContain('<takv')
+    expect(xml).not.toContain('battery="100"')
+    expect(xml).not.toContain('version="0.1.0"')
   })
 
   it('escapes GeoChat content and addresses the recipient', () => {

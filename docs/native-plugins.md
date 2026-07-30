@@ -149,12 +149,12 @@ only after activation succeeds. Disconnect preserves enrollment; explicit
 removal destroys it. CI compiles Android on Ubuntu and iOS on a macOS runner.
 Both plugins also provide explicit native background PLI sessions using a
 15-second publish throttle and 45-second stale window. Their production
-encoders have native unit coverage and publish the installed app version,
-reported horizontal/vertical accuracy, and the current battery percentage when
-the operating system makes it available; they omit unknown battery state rather
-than fabricating a value. Platform suspension, battery-management, permission
-revocation, and notification/indicator behavior still require physical-device
-evidence.
+encoders have native unit coverage. Foreground and background PLI publish the
+installed app version, device model, OS version, reported horizontal/vertical
+accuracy, and the current battery percentage when the operating system makes it
+available; they omit unavailable telemetry rather than fabricating values.
+Platform suspension, battery-management, permission revocation, and
+notification/indicator behavior still require physical-device evidence.
 
 ARKit LiDAR and ARCore Depth capture/export are implemented with capability
 fallbacks. Physical-device accuracy, end-to-end sync, iTAK/ATAK
