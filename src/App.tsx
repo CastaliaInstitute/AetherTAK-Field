@@ -6,7 +6,6 @@ import {
   Download,
   Leaf,
   Map,
-  Radio,
   Users,
   Wifi,
   WifiOff,
@@ -15,6 +14,7 @@ import { CapturePanel } from './components/CapturePanel'
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
 import { OfflineMapManager } from './components/OfflineMapManager'
+import { SensorMonitor } from './components/SensorMonitor'
 import {
   TakMapComposer,
   TakTrackingControl,
@@ -64,6 +64,10 @@ import type {
   TakOperation,
 } from './tak/operations'
 import { activeRasterSource } from './maps/tileSource'
+import {
+  buildSensorChannels,
+  selectLatestSensorReadings,
+} from './domain/sensorMonitoring'
 import { importTakDataPackage } from './tak/enrollmentImport'
 import './App.css'
 
@@ -88,14 +92,6 @@ const initialBackgroundTracking: BackgroundTrackingStatus = {
   detail: 'Checking native tracking capability…',
 }
 
-function relativeTime(value: string) {
-  const minutes = Math.max(
-    0,
-    Math.round((Date.now() - new Date(value).getTime()) / 60_000),
-  )
-  return minutes < 1 ? 'now' : `${minutes}m ago`
-}
-
 export default function App() {
   const [tab, setTab] = useState<Tab>('map')
   const [connection, setConnection] =
@@ -111,6 +107,7 @@ export default function App() {
     useState<BackgroundTrackingStatus>(initialBackgroundTracking)
   const [trackingBusy, setTrackingBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [monitoringNow, setMonitoringNow] = useState(() => new Date())
   const enrollmentInput = useRef<HTMLInputElement>(null)
   const {
     data: dashboard,
@@ -135,6 +132,14 @@ export default function App() {
     void depthScanner.capability().then(setDepth)
     void takTransport.backgroundTrackingStatus().then(setBackgroundTracking)
     void recentTakActivity().then(setTakActivity)
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setMonitoringNow(new Date()),
+      60_000,
+    )
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -205,6 +210,17 @@ export default function App() {
       ? Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length)
       : 0
   }, [fields])
+  const sensorChannels = useMemo(
+    () => buildSensorChannels(readings, monitoringNow),
+    [monitoringNow, readings],
+  )
+  const liveSensorCount = sensorChannels.filter(
+    (channel) => channel.freshness === 'live',
+  ).length
+  const latestSensorReadings = useMemo(
+    () => selectLatestSensorReadings(readings),
+    [readings],
+  )
 
   const identity = useMemo<TakIdentity>(() => ({
     uid: profile ? `AETHER-${profile.id}` : 'AETHER-FIELD-PREVIEW',
@@ -491,7 +507,7 @@ export default function App() {
           )}
           <section className="status-strip" aria-label="Field status">
             <div><strong>{fields.length + ecologicalSites.length}</strong><span>Active sites</span></div>
-            <div><strong>{readings.length}</strong><span>Sensors live</span></div>
+            <div><strong>{liveSensorCount}</strong><span>Sensors live</span></div>
             <div><strong>{averageHealth}%</strong><span>Field health</span></div>
           </section>
 
@@ -504,7 +520,7 @@ export default function App() {
 
           <FieldMap
             fields={fields}
-            readings={readings}
+            readings={latestSensorReadings}
             contacts={contacts}
             activity={takActivity}
             draft={mapDraft}
@@ -550,22 +566,7 @@ export default function App() {
             </div>
           </section>
 
-          <section className="sensor-panel">
-            <div className="sensor-heading">
-              <Radio size={18} />
-              <div><p className="eyebrow">CHIRPSTACK</p><h2>Ground truth</h2></div>
-              <span className="live-dot">Live</span>
-            </div>
-            {readings.map((reading) => (
-              <div className="reading" key={reading.id}>
-                <div>
-                  <strong>{reading.label}</strong>
-                  <span>{relativeTime(reading.recordedAt)} · {reading.quality}</span>
-                </div>
-                <p>{reading.value}<small>{reading.unit}</small></p>
-              </div>
-            ))}
-          </section>
+          <SensorMonitor readings={readings} now={monitoringNow} />
 
           {alerts.map((alert) => (
             <aside className={`alert ${alert.severity}`} key={alert.id}>
