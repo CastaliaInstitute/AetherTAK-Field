@@ -52,7 +52,7 @@ final class TakIdentityStore {
         let id = stableIdentifier(clientCertificate)
         let previous = loadProfile()
         let reusesClient = previous.map {
-            certificateData(identity(label: $0.clientLabel)) ==
+            certificateData(self.identity(label: $0.clientLabel)) ==
                 SecCertificateCopyData(clientCertificate) as Data
         } ?? false
         let reusesCA = previous.map {
