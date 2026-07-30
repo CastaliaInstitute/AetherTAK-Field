@@ -26,6 +26,7 @@ jobs:
       - run: npm run test:run
       - run: npm run lint
       - run: npm run build
+      - run: npm run compliance
       - run: npm audit --omit=dev
 
   android:
@@ -64,6 +65,25 @@ jobs:
           AETHER_ANDROID_KEY_ALIAS: ci-release
           AETHER_ANDROID_KEY_PASSWORD: ci-release-only
         run: ./gradlew test assembleDebug bundleRelease
+      - name: Verify Android artifacts and embedded source revision
+        run: |
+          DEBUG_APK=android/app/build/outputs/apk/debug/app-debug.apk
+          RELEASE_AAB=android/app/build/outputs/bundle/release/app-release.aab
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_AAB"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$DEBUG_APK" | tee "$RUNNER_TEMP/apksigner.txt"
+          grep -Eq 'Verified using v2 scheme.*true' "$RUNNER_TEMP/apksigner.txt"
+          unzip -p "$DEBUG_APK" 'assets/public/assets/*.js' \
+            > "$RUNNER_TEMP/android-debug-web.js"
+          unzip -p "$RELEASE_AAB" 'base/assets/public/assets/*.js' \
+            > "$RUNNER_TEMP/android-release-web.js"
+          grep -aFq "$VITE_AETHER_SOURCE_REVISION" \
+            "$RUNNER_TEMP/android-debug-web.js"
+          grep -aFq "$VITE_AETHER_SOURCE_REVISION" \
+            "$RUNNER_TEMP/android-release-web.js"
+          sha256sum "$DEBUG_APK" "$RELEASE_AAB"
       - uses: actions/upload-artifact@v7
         with:
           name: aethertak-field-android-debug
@@ -71,7 +91,7 @@ jobs:
           if-no-files-found: error
 
   ios:
-    name: iOS simulator build
+    name: iOS debug and release builds
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -103,7 +123,8 @@ jobs:
             ios/App/Tests/MediaIntegrity/main.swift \
             -o "$RUNNER_TEMP/media-integrity-tests"
           "$RUNNER_TEMP/media-integrity-tests"
-      - run: >-
+      - name: Build iOS Debug for the simulator
+        run: >-
           xcodebuild
           -project ios/App/App.xcodeproj
           -scheme App
@@ -112,3 +133,24 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           CODE_SIGNING_ALLOWED=NO
           build
+      - name: Build unsigned iOS Release for the device SDK
+        run: >-
+          xcodebuild
+          -project ios/App/App.xcodeproj
+          -scheme App
+          -configuration Release
+          -sdk iphoneos
+          -destination 'generic/platform=iOS'
+          -derivedDataPath "$RUNNER_TEMP/aethertak-field-release"
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_REQUIRED=NO
+          build
+      - name: Verify iOS Release bundle and embedded source revision
+        run: |
+          APP_BUNDLE="$RUNNER_TEMP/aethertak-field-release/Build/Products/Release-iphoneos/App.app"
+          test -x "$APP_BUNDLE/App"
+          test -f "$APP_BUNDLE/PrivacyInfo.xcprivacy"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_BUNDLE/Info.plist")" = \
+            "org.castaliainstitute.aethertak.field"
+          grep -aR -F -m1 "$VITE_AETHER_SOURCE_REVISION" \
+            "$APP_BUNDLE/public/assets"
