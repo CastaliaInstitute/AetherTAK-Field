@@ -2,11 +2,16 @@ package org.castaliainstitute.aethertak.field.tak
 
 import android.content.Context
 import android.net.Uri
+import android.system.Os
+import java.io.File
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.util.UUID
 import javax.net.ssl.HttpsURLConnection
+import org.json.JSONObject
 
 data class FieldApiResponse(val status: Int, val body: String)
 
@@ -82,6 +87,103 @@ class TakFieldApiClient(
             }
             return response(connection)
         } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun download(
+        profile: TakProfile,
+        port: Int,
+        mediaId: String,
+        expectedSha256: String?,
+        expectedContentType: String?,
+    ): FieldApiResponse {
+        require(mediaId.matches(Regex("[A-Za-z0-9._-]{1,128}"))) {
+            "Invalid media ID."
+        }
+        val connection = connection(
+            profile,
+            port,
+            "/v1/media/${java.net.URLEncoder.encode(mediaId, Charsets.UTF_8)}",
+        ).apply {
+            requestMethod = "GET"
+            setRequestProperty("Accept", "application/octet-stream")
+        }
+        var temporary: File? = null
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) return response(connection)
+            val length = connection.contentLengthLong
+            require(length in 0..(512L * 1024L * 1024L)) {
+                "Downloaded media size is unavailable or exceeds 512 MiB."
+            }
+            val checksum = requireNotNull(
+                connection.getHeaderField("X-Aether-Sha256")
+                    ?.lowercase()
+                    ?.takeIf { it.matches(Regex("[0-9a-f]{64}")) },
+            ) { "The media response has no valid SHA-256 digest." }
+            expectedSha256?.let {
+                require(it.equals(checksum, ignoreCase = true)) {
+                    "The media response digest does not match its field record."
+                }
+            }
+            val contentType = connection.contentType
+                ?.substringBefore(';')
+                ?.trim()
+                ?.lowercase()
+                ?: "application/octet-stream"
+            expectedContentType?.let {
+                require(it.substringBefore(';').trim().equals(contentType, ignoreCase = true)) {
+                    "The media response content type does not match its field record."
+                }
+            }
+
+            val directory = File(context.filesDir, "aether-field-media")
+            check(directory.isDirectory || directory.mkdirs()) {
+                "Cannot create app-private media storage."
+            }
+            temporary = File(directory, ".$mediaId-${UUID.randomUUID()}.part")
+            val digest = MessageDigest.getInstance("SHA-256")
+            var received = 0L
+            FileOutputStream(temporary).use { output ->
+                connection.inputStream.use { input ->
+                    val buffer = ByteArray(1024 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        output.write(buffer, 0, count)
+                        digest.update(buffer, 0, count)
+                        received += count
+                        require(received <= length) {
+                            "The media response exceeded Content-Length."
+                        }
+                    }
+                }
+                output.flush()
+                output.fd.sync()
+            }
+            require(received == length) {
+                "The media response ended before Content-Length bytes arrived."
+            }
+            val actualSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+            require(actualSha256 == checksum) {
+                "The downloaded media SHA-256 does not match the server digest."
+            }
+            val destination = File(directory, "$mediaId${mediaExtension(contentType)}")
+            Os.rename(temporary.absolutePath, destination.absolutePath)
+            temporary = null
+            return FieldApiResponse(
+                status = status,
+                body = JSONObject()
+                    .put("mediaId", mediaId)
+                    .put("localUri", destination.toURI().toString())
+                    .put("sha256", actualSha256)
+                    .put("sizeBytes", received)
+                    .put("contentType", contentType)
+                    .toString(),
+            )
+        } finally {
+            temporary?.delete()
             connection.disconnect()
         }
     }
@@ -171,5 +273,16 @@ class TakFieldApiClient(
             digest.update(buffer, 0, count)
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun mediaExtension(contentType: String): String = when (contentType) {
+        "image/jpeg" -> ".jpg"
+        "video/mp4" -> ".mp4"
+        "model/ply" -> ".ply"
+        "model/obj" -> ".obj"
+        "application/x-aether-depth-f32le" -> ".f32le"
+        "application/x-aether-depth-u16le" -> ".u16le"
+        "application/x-aether-depth-confidence" -> ".u8"
+        else -> ".bin"
     }
 }

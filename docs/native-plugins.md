@@ -15,11 +15,17 @@ Methods exposed to the shared layer:
 - `disconnect()`
 - `getStatus()`
 - `getContacts()`
-- `sendCot({ message })`
+- `sendCot({ xml })`
+- `fieldMutation({ port, mutation })`
+- `fieldChanges({ port, cursor, limit })`
+- `fieldUpload({ port, mediaId, uri, contentType, ... })`
+- `fieldDownload({ port, mediaId, expectedSha256?, expectedContentType? })`
 
-The plugin must support standard CoT position, contacts, chat, markers, routes,
-shapes, emergency events, and attachment mission packages. It must never return
-private key bytes, passwords, or raw PKCS#12 content over the Capacitor bridge.
+The plugin supports standard CoT position, contacts, chat, markers, routes,
+shapes, and emergency events. Field API calls reuse the same issued identity and
+pinned CA; downloaded artifacts are committed to app-private storage only after
+content length, type, and SHA-256 validation. It must never return private key
+bytes, passwords, or raw PKCS#12 content over the Capacitor bridge.
 
 ## AetherDepthScanner
 
@@ -55,14 +61,16 @@ Before beta distribution, verify on physical devices:
 
 ## Implementation status
 
-The shared CoT codec and offline TAK outbox are implemented and unit tested.
+The shared CoT codec, offline TAK outbox, and bidirectional domain/media sync are
+implemented and unit tested.
 The Swift and Kotlin plugins are registered in their native projects. Both TAK
 plugins parse the issued mission package, enforce archive-size and XML safety
 limits, import the client identity into Keychain/Android KeyStore, retain only
 non-secret profile metadata outside secure storage, pin the issued CA, enforce
-TLS 1.2 or newer with server-name verification, stream CoT bidirectionally, and
-extract live contacts. CI compiles Android on Ubuntu and iOS on a macOS runner.
+TLS 1.2 or newer with server-name verification, stream CoT bidirectionally,
+extract live contacts, and stream checksum-verified media into app-private
+storage. CI compiles Android on Ubuntu and iOS on a macOS runner.
 
-ARKit capture, ARCore capture, and physical-device interoperability remain open
-gates. Native enrollment and transport are not considered verified against
-iTAK/ATAK until those device tests pass.
+ARKit LiDAR and ARCore Depth capture/export are implemented with capability
+fallbacks. Physical-device accuracy, end-to-end sync, iTAK/ATAK
+interoperability, signing, and beta distribution remain open gates.

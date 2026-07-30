@@ -14,7 +14,8 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "sendCot", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldMutation", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldChanges", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "fieldUpload", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "fieldUpload", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fieldDownload", returnType: CAPPluginReturnPromise)
     ]
 
     private let worker = DispatchQueue(
@@ -205,6 +206,22 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
                 observationId: call.getString("observationId"),
                 role: call.getString("role"),
                 suppliedSha256: call.getString("sha256")
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    @objc func fieldDownload(_ call: CAPPluginCall) {
+        guard let mediaId = call.getString("mediaId") else {
+            call.reject("mediaId is required.", "INVALID_MEDIA")
+            return
+        }
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.download(
+                profile: profile,
+                port: port,
+                mediaId: mediaId,
+                expectedSha256: call.getString("expectedSha256"),
+                expectedContentType: call.getString("expectedContentType")
             ) { result in self.resolveField(call, result) }
         }
     }

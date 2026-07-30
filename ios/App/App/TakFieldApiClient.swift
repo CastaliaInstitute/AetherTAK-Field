@@ -142,6 +142,208 @@ final class TakFieldApiClient {
         }
     }
 
+    func download(
+        profile: TakProfile,
+        port: Int,
+        mediaId: String,
+        expectedSha256: String?,
+        expectedContentType: String?,
+        completion: @escaping (Result<FieldApiResponse, Error>) -> Void
+    ) {
+        do {
+            guard
+                mediaId.range(
+                    of: #"^[A-Za-z0-9._-]{1,128}$"#,
+                    options: .regularExpression
+                ) != nil
+            else {
+                throw FieldApiError.invalidRequest("Invalid media ID.")
+            }
+            let escapedId = mediaId.addingPercentEncoding(
+                withAllowedCharacters: .urlPathAllowed
+            ) ?? mediaId
+            var request = URLRequest(
+                url: try endpoint(
+                    profile,
+                    port: port,
+                    path: "/v1/media/\(escapedId)"
+                )
+            )
+            request.httpMethod = "GET"
+            request.timeoutInterval = 300
+            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            request.setValue(
+                "application/octet-stream",
+                forHTTPHeaderField: "Accept"
+            )
+            let session = try authenticatedSession(profile)
+            session.downloadTask(with: request) { temporaryURL, response, error in
+                defer { session.finishTasksAndInvalidate() }
+                do {
+                    if let error { throw error }
+                    guard let response = response as? HTTPURLResponse else {
+                        throw FieldApiError.invalidResponse
+                    }
+                    guard let temporaryURL else {
+                        throw FieldApiError.invalidResponse
+                    }
+                    if !(200...299).contains(response.statusCode) {
+                        let data = try Data(contentsOf: temporaryURL)
+                        let body =
+                            (try? JSONSerialization.jsonObject(with: data))
+                            as? [String: Any]
+                            ?? [
+                                "error": [
+                                    "code": "INVALID_RESPONSE",
+                                    "message": "Aether Field API returned HTTP \(response.statusCode)."
+                                ]
+                            ]
+                        completion(
+                            .success(
+                                FieldApiResponse(
+                                    status: response.statusCode,
+                                    body: body
+                                )
+                            )
+                        )
+                        return
+                    }
+
+                    guard
+                        let lengthValue = response.value(
+                            forHTTPHeaderField: "Content-Length"
+                        ),
+                        let expectedLength = Int64(lengthValue),
+                        (0...(512 * 1024 * 1024)).contains(expectedLength)
+                    else {
+                        throw FieldApiError.invalidRequest(
+                            "Downloaded media size is unavailable or exceeds 512 MiB."
+                        )
+                    }
+                    guard
+                        let checksum = response.value(
+                            forHTTPHeaderField: "X-Aether-Sha256"
+                        )?.lowercased(),
+                        checksum.range(
+                            of: #"^[0-9a-f]{64}$"#,
+                            options: .regularExpression
+                        ) != nil
+                    else {
+                        throw FieldApiError.invalidResponse
+                    }
+                    if let expectedSha256 {
+                        guard checksum == expectedSha256.lowercased() else {
+                            throw FieldApiError.invalidRequest(
+                                "The media response digest does not match its field record."
+                            )
+                        }
+                    }
+                    let contentType = (
+                        response.value(forHTTPHeaderField: "Content-Type")
+                            ?? "application/octet-stream"
+                    )
+                    .split(separator: ";", maxSplits: 1)
+                    .first?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased() ?? "application/octet-stream"
+                    if let expectedContentType {
+                        let normalizedExpected = expectedContentType
+                            .split(separator: ";", maxSplits: 1)
+                            .first?
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                            .lowercased()
+                        guard normalizedExpected == contentType else {
+                            throw FieldApiError.invalidRequest(
+                                "The media response content type does not match its field record."
+                            )
+                        }
+                    }
+                    let values = try temporaryURL.resourceValues(
+                        forKeys: [.fileSizeKey]
+                    )
+                    guard Int64(values.fileSize ?? -1) == expectedLength else {
+                        throw FieldApiError.invalidResponse
+                    }
+                    let actualSha256 = try self.sha256(temporaryURL)
+                    guard actualSha256 == checksum else {
+                        throw FieldApiError.invalidRequest(
+                            "The downloaded media SHA-256 does not match the server digest."
+                        )
+                    }
+
+                    let fileManager = FileManager.default
+                    let applicationSupport = try fileManager.url(
+                        for: .applicationSupportDirectory,
+                        in: .userDomainMask,
+                        appropriateFor: nil,
+                        create: true
+                    )
+                    let directory = applicationSupport
+                        .appendingPathComponent("AetherTAK", isDirectory: true)
+                        .appendingPathComponent("FieldMedia", isDirectory: true)
+                    try fileManager.createDirectory(
+                        at: directory,
+                        withIntermediateDirectories: true,
+                        attributes: [
+                            .protectionKey:
+                                FileProtectionType
+                                .completeUntilFirstUserAuthentication
+                        ]
+                    )
+                    let staged = directory.appendingPathComponent(
+                        ".\(mediaId)-\(UUID().uuidString).part"
+                    )
+                    let destination = directory.appendingPathComponent(
+                        "\(mediaId)\(self.mediaExtension(contentType))"
+                    )
+                    try fileManager.copyItem(at: temporaryURL, to: staged)
+                    do {
+                        try fileManager.setAttributes(
+                            [
+                                .protectionKey:
+                                    FileProtectionType
+                                    .completeUntilFirstUserAuthentication
+                            ],
+                            ofItemAtPath: staged.path
+                        )
+                        if fileManager.fileExists(atPath: destination.path) {
+                            _ = try fileManager.replaceItemAt(
+                                destination,
+                                withItemAt: staged
+                            )
+                        } else {
+                            try fileManager.moveItem(
+                                at: staged,
+                                to: destination
+                            )
+                        }
+                    } catch {
+                        try? fileManager.removeItem(at: staged)
+                        throw error
+                    }
+                    completion(
+                        .success(
+                            FieldApiResponse(
+                                status: response.statusCode,
+                                body: [
+                                    "mediaId": mediaId,
+                                    "localUri": destination.absoluteString,
+                                    "sha256": actualSha256,
+                                    "sizeBytes": expectedLength,
+                                    "contentType": contentType
+                                ]
+                            )
+                        )
+                    )
+                } catch {
+                    completion(.failure(error))
+                }
+            }.resume()
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
     private func perform(
         profile: TakProfile,
         port: Int,
@@ -252,6 +454,19 @@ final class TakFieldApiClient {
             digest.update(data: data)
         }
         return digest.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func mediaExtension(_ contentType: String) -> String {
+        switch contentType {
+        case "image/jpeg": return ".jpg"
+        case "video/mp4": return ".mp4"
+        case "model/ply": return ".ply"
+        case "model/obj": return ".obj"
+        case "application/x-aether-depth-f32le": return ".f32le"
+        case "application/x-aether-depth-u16le": return ".u16le"
+        case "application/x-aether-depth-confidence": return ".u8"
+        default: return ".bin"
+        }
     }
 
     private static func complete(

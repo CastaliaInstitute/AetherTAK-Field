@@ -15,7 +15,9 @@ client and inside Capacitor shells for iOS and Android.
   MapLibre raster protocol for authorized tile sources.
 - Durable geotagged photo and video observations using native Camera,
   Geolocation, Filesystem, SHA-256 photo integrity, and an atomic sync outbox.
-- IndexedDB field records and durable mutation outbox for offline sync.
+- Bidirectional field-record and media synchronization with durable revisions,
+  conflict preservation, paginated cursors, mTLS uploads/downloads, checksum
+  verification, and atomic app-private file hydration.
 - Native plugin contracts for certificate-backed TAK transport and
   capability-detected ARKit LiDAR / ARCore Depth.
 - CoT 2.0 encoding and parsing for PLI, GeoChat, markers, routes, shapes, and
@@ -26,12 +28,14 @@ The browser provides a safe preview. Certificate enrollment, CoT transport, and
 depth capture are intentionally native-only so private key material does not
 cross the JavaScript bridge.
 
-The checked-in Swift and Kotlin native bridge classes currently provide real
-device capability detection. Swift and Kotlin TAK bridges now import the issued
+The checked-in Swift and Kotlin native bridge classes provide real device
+capability detection and guided depth capture. Swift and Kotlin TAK bridges import the issued
 data-package format directly, keep PKCS#12 passphrases native-only, store client
 identities in Keychain/Android KeyStore, pin the issued CA, require TLS 1.2 or
 newer, verify the server identity, stream CoT bidirectionally, and maintain live
-contacts. ARKit and ARCore depth-capture sessions remain an implementation gate.
+contacts. Native field API clients reuse that identity for verified streaming
+media transfers. ARKit exports depth, confidence, point clouds, measurements,
+and supported meshes; ARCore exports depth, point clouds, and measurements.
 
 ## Development
 
@@ -73,8 +77,8 @@ npm run cap:sync
 npm run android
 ```
 
-The production native implementations must provide the
-`AetherTakTransport` and `AetherDepthScanner` Capacitor plugins described in
+The native implementations provide the `AetherTakTransport` and
+`AetherDepthScanner` Capacitor plugins described in
 [docs/native-plugins.md](docs/native-plugins.md).
 
 Offline map source requirements and remaining runtime integration gates are in

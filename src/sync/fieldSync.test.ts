@@ -64,6 +64,7 @@ describe('Aether Field durable synchronization', () => {
     })
     const transport = {
       upload: vi.fn(),
+      download: vi.fn(),
       mutate: vi.fn(async () => accepted(queued.id)),
       changes: vi.fn(),
     }
@@ -90,6 +91,7 @@ describe('Aether Field durable synchronization', () => {
     const now = new Date(queued.createdAt)
     const transport = {
       upload: vi.fn(),
+      download: vi.fn(),
       mutate: vi.fn(async () => {
         throw new Error('offline')
       }),
@@ -114,6 +116,7 @@ describe('Aether Field durable synchronization', () => {
     })
     const transport = {
       upload: vi.fn(),
+      download: vi.fn(),
       mutate: vi.fn(async () => ({
         status: 409,
         body: {
@@ -143,6 +146,7 @@ describe('Aether Field durable synchronization', () => {
     const remote = { ...property, name: 'Remote Farm', syncState: 'synced' }
     const transport = {
       upload: vi.fn(),
+      download: vi.fn(),
       mutate: vi.fn(),
       changes: vi.fn(async () => ({
         status: 200,
@@ -187,6 +191,7 @@ describe('Aether Field durable synchronization', () => {
     })
     const transport = {
       upload: vi.fn(),
+      download: vi.fn(),
       mutate: vi.fn(),
       changes: vi.fn(async () => ({
         status: 200,
@@ -215,9 +220,78 @@ describe('Aether Field durable synchronization', () => {
     expect((await db.outbox.get(queued.id))?.conflict?.author).toBe('Field Two')
   })
 
+  it('downloads and verifies remote media before advancing its cursor', async () => {
+    const mediaId = '29271ccb-27e9-41af-b4a6-4c4385a2200c'
+    const checksum = 'a'.repeat(64)
+    const localUri =
+      'file:///private/app/AetherTAK/FieldMedia/29271ccb-27e9-41af-b4a6-4c4385a2200c.jpg'
+    const download = vi.fn(async () => ({
+      status: 200,
+      body: {
+        mediaId,
+        localUri,
+        sha256: checksum,
+        sizeBytes: 2048,
+        contentType: 'image/jpeg',
+      },
+    }))
+    const transport = {
+      upload: vi.fn(),
+      download,
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [
+            {
+              cursor: 9,
+              entityType: 'media',
+              entityId: mediaId,
+              revision: 1,
+              operation: 'create',
+              payload: {
+                id: mediaId,
+                observationId: null,
+                kind: 'photo',
+                mimeType: 'image/jpeg',
+                coordinate: property.center,
+                capturedAt: '2026-07-30T07:05:00.000Z',
+                deviceModel: 'Field Camera',
+                sha256: checksum,
+                depthMetadata: null,
+                syncState: 'synced',
+              },
+              serverUpdatedAt: '2026-07-30T07:05:01.000Z',
+              author: 'Field Two',
+            },
+          ],
+          nextCursor: 9,
+          hasMore: false,
+        },
+      })),
+    }
+
+    expect(await pullFieldChanges(transport)).toMatchObject({
+      applied: 1,
+      cursor: 9,
+    })
+    expect(download).toHaveBeenCalledWith({
+      mediaId,
+      expectedContentType: 'image/jpeg',
+      expectedSha256: checksum,
+    })
+    expect(await db.media.get(mediaId)).toMatchObject({
+      localUri,
+      previewUri: localUri,
+      sha256: checksum,
+      syncState: 'synced',
+    })
+  })
+
   it('applies remote tombstones without resurrecting deleted records', async () => {
     const transport = {
       upload: vi.fn(),
+      download: vi.fn(),
       mutate: vi.fn(),
       changes: vi.fn(async () => ({
         status: 200,

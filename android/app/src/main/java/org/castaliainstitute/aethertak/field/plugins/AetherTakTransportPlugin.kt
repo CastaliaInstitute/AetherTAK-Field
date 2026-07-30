@@ -173,6 +173,19 @@ class AetherTakTransportPlugin : Plugin() {
         }
     }
 
+    @PluginMethod
+    fun fieldDownload(call: PluginCall) {
+        executeFieldRequest(call) { profile, port ->
+            fieldApi.download(
+                profile = profile,
+                port = port,
+                mediaId = requireNotNull(call.getString("mediaId")),
+                expectedSha256 = call.getString("expectedSha256"),
+                expectedContentType = call.getString("expectedContentType"),
+            )
+        }
+    }
+
     private fun executeFieldRequest(
         call: PluginCall,
         action: (TakProfile, Int) -> org.castaliainstitute.aethertak.field.tak.FieldApiResponse,

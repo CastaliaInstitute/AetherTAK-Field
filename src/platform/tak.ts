@@ -55,6 +55,12 @@ interface AetherTakTransportPlugin {
     role?: string
     sha256?: string
   }): Promise<NativeFieldResponse>
+  fieldDownload(options: {
+    port: number
+    mediaId: string
+    expectedSha256?: string
+    expectedContentType?: string
+  }): Promise<NativeFieldResponse>
 }
 
 export interface NativeFieldResponse {
@@ -180,5 +186,14 @@ export const fieldApiTransport = {
   }): Promise<NativeFieldResponse> {
     requireNativeFieldApi()
     return nativeTak.fieldUpload({ port: fieldPort(), ...options })
+  },
+
+  async download(options: {
+    mediaId: string
+    expectedSha256?: string
+    expectedContentType?: string
+  }): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldDownload({ port: fieldPort(), ...options })
   },
 }

@@ -57,6 +57,11 @@ interface FieldSyncTransport {
     role?: string
     sha256?: string
   }): Promise<NativeFieldResponse>
+  download(options: {
+    mediaId: string
+    expectedSha256?: string
+    expectedContentType?: string
+  }): Promise<NativeFieldResponse>
   changes(cursor: number, limit?: number): Promise<NativeFieldResponse>
 }
 
@@ -90,6 +95,14 @@ const changePageSchema = z.object({
   changes: z.array(serverChangeSchema),
   nextCursor: z.number().int().nonnegative(),
   hasMore: z.boolean(),
+})
+
+const downloadedMediaSchema = z.object({
+  mediaId: z.string(),
+  localUri: z.string().min(1),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  sizeBytes: z.number().int().nonnegative(),
+  contentType: z.string().min(1),
 })
 
 type ServerChange = z.infer<typeof serverChangeSchema>
@@ -264,7 +277,39 @@ async function deleteRemoteEntity(change: ServerChange) {
   }
 }
 
-async function putRemoteEntity(change: ServerChange) {
+async function downloadRemoteMedia(
+  change: ServerChange,
+  transport: FieldSyncTransport,
+) {
+  const descriptor = mediaCaptureSchema.parse({
+    ...(typeof change.payload === 'object' && change.payload !== null
+      ? change.payload
+      : {}),
+    localUri: 'aether-field://pending',
+    previewUri: null,
+    syncState: 'synced',
+  })
+  const response = await transport.download({
+    mediaId: change.entityId,
+    expectedContentType: descriptor.mimeType,
+    ...(descriptor.sha256
+      ? { expectedSha256: descriptor.sha256 }
+      : {}),
+  })
+  if (response.status < 200 || response.status >= 300) {
+    throw new FieldSyncHttpError(response)
+  }
+  const downloaded = downloadedMediaSchema.parse(response.body)
+  if (downloaded.mediaId !== change.entityId) {
+    throw new Error('Aether Field API returned the wrong media artifact.')
+  }
+  return downloaded
+}
+
+async function putRemoteEntity(
+  change: ServerChange,
+  downloadedMedia: z.infer<typeof downloadedMediaSchema> | null,
+) {
   const payload =
     typeof change.payload === 'object' && change.payload !== null
       ? change.payload
@@ -294,11 +339,18 @@ async function putRemoteEntity(change: ServerChange) {
       )
       break
     case 'media':
+      if (!downloadedMedia) {
+        throw new Error('Remote media was not downloaded before hydration.')
+      }
       await db.media.put(
         mediaCaptureSchema.parse({
           ...payload,
-          localUri: `aether-field://media/${change.entityId}`,
-          previewUri: null,
+          localUri: downloadedMedia.localUri,
+          previewUri:
+            payload && 'kind' in payload && payload.kind === 'photo'
+              ? downloadedMedia.localUri
+              : null,
+          sha256: downloadedMedia.sha256,
           syncState: 'synced',
         }),
       )
@@ -309,7 +361,10 @@ async function putRemoteEntity(change: ServerChange) {
   }
 }
 
-async function applyRemoteChange(change: ServerChange) {
+async function applyRemoteChange(
+  change: ServerChange,
+  transport: FieldSyncTransport,
+) {
   const metadataKey = `${change.entityType}:${change.entityId}`
   const [metadata, pending] = await Promise.all([
     db.syncMetadata.get(metadataKey),
@@ -324,6 +379,11 @@ async function applyRemoteChange(change: ServerChange) {
     await markConflict(colliding, serverEntity(change))
     return 'conflict' as const
   }
+
+  const downloadedMedia =
+    change.entityType === 'media' && change.operation !== 'delete'
+      ? await downloadRemoteMedia(change, transport)
+      : null
 
   await db.transaction(
     'rw',
@@ -341,7 +401,7 @@ async function applyRemoteChange(change: ServerChange) {
       if (change.operation === 'delete') {
         await deleteRemoteEntity(change)
       } else {
-        await putRemoteEntity(change)
+        await putRemoteEntity(change, downloadedMedia)
       }
       await db.syncMetadata.put({
         key: metadataKey,
@@ -459,7 +519,7 @@ export async function pullFieldChanges(
       throw new Error('Aether Field API change cursor moved backwards.')
     }
     for (const change of page.changes) {
-      const outcome = await applyRemoteChange(change)
+      const outcome = await applyRemoteChange(change, transport)
       if (outcome === 'applied') applied += 1
       if (outcome === 'conflict') conflicts += 1
     }
