@@ -12,6 +12,8 @@ client and inside Capacitor shells for iOS and Android.
 - Property/season crop records and ecological site status.
 - Persisted property, season, crop-field, ecological-site, observation, alert,
   and read-only Al insight records.
+- Shared property, crop-field, and ecological-site boundaries use bounded,
+  range-checked, closed geometry before storage, synchronization, or rendering.
 - ChirpStack v4 uplink normalization with LoRaWAN radio metadata.
 - Publisher-managed ChirpStack readings and read-only Al insights delivered
   through the ordered field change feed and refreshed every 30 seconds while

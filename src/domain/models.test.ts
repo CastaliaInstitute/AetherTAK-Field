@@ -8,6 +8,7 @@ import {
   guardianAlertSchema,
   guardianZoneSchema,
   mediaCaptureSchema,
+  operationalBoundarySchema,
   sensorReadingSchema,
   takContactSchema,
 } from './models'
@@ -117,6 +118,31 @@ describe('field data contracts', () => {
       expect(fieldSchema.parse(field)).toEqual(field)
       expect(field.boundary.at(0)).toEqual(field.boundary.at(-1))
     }
+  })
+
+  it('rejects open, unbounded, and oversized operational map boundaries', () => {
+    expect(
+      operationalBoundarySchema.parse(demoFields[0].boundary),
+    ).toEqual(demoFields[0].boundary)
+    expect(() =>
+      operationalBoundarySchema.parse(demoFields[0].boundary.slice(0, -1)),
+    ).toThrow('closed')
+    expect(() =>
+      operationalBoundarySchema.parse([
+        [-181, 40],
+        [-104.9, 40],
+        [-105, 40.1],
+        [-181, 40],
+      ]),
+    ).toThrow()
+    expect(() =>
+      operationalBoundarySchema.parse(
+        Array.from({ length: 258 }, (_, index) => [
+          -105 + index / 10_000,
+          40,
+        ]),
+      ),
+    ).toThrow()
   })
 
   it('accepts only closed, bounded Guardian geofence projections', () => {

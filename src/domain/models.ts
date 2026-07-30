@@ -18,12 +18,43 @@ export const syncStateSchema = z.enum([
   'conflict',
 ])
 
+const operationalBoundaryPointSchema = z.tuple([
+  z.number().min(-180).max(180),
+  z.number().min(-90).max(90),
+])
+
+export const operationalBoundarySchema = z
+  .array(operationalBoundaryPointSchema)
+  .min(4)
+  .max(257)
+  .superRefine((boundary, context) => {
+    const first = boundary[0]
+    const last = boundary.at(-1)
+    if (!last || first[0] !== last[0] || first[1] !== last[1]) {
+      context.addIssue({
+        code: 'custom',
+        message: 'An operational boundary must be closed.',
+      })
+    }
+    const distinct = new Set(
+      boundary
+        .slice(0, -1)
+        .map(([longitude, latitude]) => `${longitude},${latitude}`),
+    )
+    if (distinct.size < 3) {
+      context.addIssue({
+        code: 'custom',
+        message: 'An operational boundary requires three distinct vertices.',
+      })
+    }
+  })
+
 export const propertySchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   description: z.string(),
   center: coordinateSchema,
-  boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
+  boundary: operationalBoundarySchema,
   timezone: z.string().min(1),
   updatedAt: z.string().datetime(),
   syncState: syncStateSchema,
@@ -56,7 +87,7 @@ export const fieldSchema = z.object({
   seasonLabel: z.string().min(1),
   status: z.enum(['planned', 'growing', 'attention', 'harvested']),
   healthScore: z.number().min(0).max(100).nullable(),
-  boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
+  boundary: operationalBoundarySchema,
   updatedAt: z.string().datetime(),
   syncState: syncStateSchema,
 })
@@ -80,7 +111,7 @@ export const ecologicalSiteSchema = z.object({
   targetCondition: z.string(),
   conditionScore: z.number().min(0).max(100).nullable(),
   center: coordinateSchema,
-  boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
+  boundary: operationalBoundarySchema,
   indicatorSpecies: z.array(z.string()),
   updatedAt: z.string().datetime(),
   syncState: syncStateSchema,

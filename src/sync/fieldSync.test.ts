@@ -26,6 +26,7 @@ const property: Property = {
     [-105, 40],
     [-104.9, 40],
     [-105, 40.1],
+    [-105, 40],
   ],
   timezone: 'America/Denver',
   updatedAt: '2026-07-30T06:00:00.000Z',
