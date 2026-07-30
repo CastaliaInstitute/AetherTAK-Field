@@ -285,6 +285,13 @@ class AetherTakTransportPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun fieldIdentity(call: PluginCall) {
+        executeFieldRequest(call) { profile, port ->
+            fieldApi.identity(profile, port)
+        }
+    }
+
+    @PluginMethod
     fun fieldMutation(call: PluginCall) {
         val mutation = call.getObject("mutation")
         executeFieldRequest(call) { profile, port ->

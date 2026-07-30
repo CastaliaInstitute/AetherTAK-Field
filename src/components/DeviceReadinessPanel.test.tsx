@@ -85,6 +85,14 @@ function report() {
       state: 'healthy',
       httpStatus: 200,
     },
+    fieldAuthorization: {
+      state: 'verified',
+      permissions: {
+        publisher: false,
+        guardianCheckIn: true,
+        guardianSupervisor: true,
+      },
+    },
     backgroundTracking: {
       supported: true,
       enabled: false,

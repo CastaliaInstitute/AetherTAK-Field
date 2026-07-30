@@ -25,6 +25,8 @@ Methods exposed to the shared layer:
 - `sendCot({ xml })`
 - `fieldHealth({ port })`: perform a certificate-authenticated readiness probe
   without reading or mutating field records.
+- `fieldIdentity({ port })`: return only the authenticated certificate common
+  name and effective publisher/Guardian role booleans from the Field API.
 - `fieldMutation({ port, mutation })`
 - `guardianAction({ port, action })`: submit a bounded check-in, alert
   acknowledgement, or reasoned resolution to a fixed Guardian API route with

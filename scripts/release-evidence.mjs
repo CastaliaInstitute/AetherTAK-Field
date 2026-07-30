@@ -48,6 +48,7 @@ const requiredReadinessChecks = [
   'tak-enrollment',
   'tak-connection',
   'field-api-health',
+  'guardian-authorization',
   'background-tracking',
   'field-sync',
   'tak-outbox',

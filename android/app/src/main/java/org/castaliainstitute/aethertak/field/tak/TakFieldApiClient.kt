@@ -33,6 +33,16 @@ class TakFieldApiClient(
         path = "/healthz",
     )
 
+    fun identity(
+        profile: TakProfile,
+        port: Int,
+    ): FieldApiResponse = request(
+        profile = profile,
+        port = port,
+        method = "GET",
+        path = "/v1/identity",
+    )
+
     fun mutate(
         profile: TakProfile,
         port: Int,

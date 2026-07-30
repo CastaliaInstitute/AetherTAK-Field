@@ -18,6 +18,7 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         CAPPluginMethod(name: "getContacts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendCot", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldHealth", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fieldIdentity", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldMutation", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "guardianAction", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldChanges", returnType: CAPPluginReturnPromise),
@@ -243,6 +244,15 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
     @objc func fieldHealth(_ call: CAPPluginCall) {
         withFieldProfile(call) { profile, port in
             self.fieldApi.health(
+                profile: profile,
+                port: port
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    @objc func fieldIdentity(_ call: CAPPluginCall) {
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.identity(
                 profile: profile,
                 port: port
             ) { result in self.resolveField(call, result) }

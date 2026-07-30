@@ -10,6 +10,7 @@ import {
   fieldApiTransport,
   takTransport,
   type BackgroundTrackingStatus,
+  type FieldIdentity,
   type NativeFieldResponse,
   type TakStatus,
 } from '../platform/tak'
@@ -140,6 +141,7 @@ interface ReadinessSnapshot {
   contactCount: number
   tak: TakStatus
   fieldApi: FieldApiProbe
+  fieldAuthorization: FieldAuthorizationProbe
   backgroundTracking: BackgroundTrackingStatus
   depth: DepthCapability
   database: DatabaseMetrics
@@ -155,6 +157,7 @@ interface ReadinessServices {
   storageEstimate: () => Promise<{ usage?: number; quota?: number }>
   takStatus: () => Promise<TakStatus>
   fieldApiHealth: () => Promise<NativeFieldResponse>
+  fieldApiIdentity: () => Promise<FieldIdentity>
   backgroundTracking: () => Promise<BackgroundTrackingStatus>
   depthCapability: () => Promise<DepthCapability>
   databaseMetrics: () => Promise<DatabaseMetrics>
@@ -163,6 +166,11 @@ interface ReadinessServices {
 export interface FieldApiProbe {
   state: 'healthy' | 'offline' | 'unavailable' | 'not_native'
   httpStatus: number | null
+}
+
+export interface FieldAuthorizationProbe {
+  state: 'verified' | 'offline' | 'unavailable' | 'not_native'
+  permissions: FieldIdentity['permissions'] | null
 }
 
 const fallbackAppInfo: AppInfo = {
@@ -288,6 +296,7 @@ const defaultServices: ReadinessServices = {
   },
   takStatus: () => takTransport.status(),
   fieldApiHealth: () => fieldApiTransport.health(),
+  fieldApiIdentity: () => fieldApiTransport.identity(),
   backgroundTracking: () => takTransport.backgroundTrackingStatus(),
   depthCapability: () => depthScanner.capability(),
   databaseMetrics: collectDatabaseMetrics,
@@ -311,6 +320,24 @@ export async function probeFieldApi(
     }
   } catch {
     return { state: 'unavailable', httpStatus: null }
+  }
+}
+
+export async function probeFieldAuthorization(
+  native: boolean,
+  online: boolean,
+  identity: () => Promise<FieldIdentity>,
+): Promise<FieldAuthorizationProbe> {
+  if (!native) return { state: 'not_native', permissions: null }
+  if (!online) return { state: 'offline', permissions: null }
+  try {
+    const verified = await identity()
+    return {
+      state: 'verified',
+      permissions: verified.permissions,
+    }
+  } catch {
+    return { state: 'unavailable', permissions: null }
   }
 }
 
@@ -405,6 +432,30 @@ export function buildDeviceReadinessReport(
               : snapshot.fieldApi.httpStatus === null
                 ? 'The certificate-authenticated field service could not be reached.'
                 : `The certificate-authenticated field service returned HTTP ${snapshot.fieldApi.httpStatus}.`,
+    },
+    {
+      id: 'guardian-authorization',
+      label: 'Guardian certificate role',
+      status:
+        snapshot.fieldAuthorization.state === 'verified'
+          ? snapshot.fieldAuthorization.permissions?.guardianCheckIn
+            ? 'pass'
+            : 'attention'
+          : snapshot.fieldAuthorization.state === 'offline'
+            ? 'attention'
+            : 'fail',
+      detail:
+        snapshot.fieldAuthorization.state === 'verified'
+          ? snapshot.fieldAuthorization.permissions?.guardianSupervisor
+            ? 'Authenticated identity has Guardian supervisor access.'
+            : snapshot.fieldAuthorization.permissions?.guardianCheckIn
+              ? 'Authenticated identity has Guardian check-in access.'
+              : 'Authenticated identity has no Guardian action role.'
+          : snapshot.fieldAuthorization.state === 'offline'
+            ? 'Guardian authorization check deferred because the device is offline.'
+            : snapshot.fieldAuthorization.state === 'not_native'
+              ? 'Guardian certificate roles require the iOS or Android application.'
+              : 'Guardian certificate roles could not be verified.',
     },
     {
       id: 'background-tracking',
@@ -540,6 +591,7 @@ export async function collectDeviceReadiness(
     storage,
     tak,
     fieldApi,
+    fieldAuthorization,
     backgroundTracking,
     depth,
     database,
@@ -549,6 +601,7 @@ export async function collectDeviceReadiness(
     services.storageEstimate(),
     services.takStatus(),
     probeFieldApi(native, online, services.fieldApiHealth),
+    probeFieldAuthorization(native, online, services.fieldApiIdentity),
     services.backgroundTracking(),
     services.depthCapability(),
     services.databaseMetrics(),
@@ -564,6 +617,7 @@ export async function collectDeviceReadiness(
     contactCount,
     tak,
     fieldApi,
+    fieldAuthorization,
     backgroundTracking,
     depth,
     database,

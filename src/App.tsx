@@ -14,6 +14,7 @@ import {
 import { CapturePanel } from './components/CapturePanel'
 import { AlInsightsPanel } from './components/AlInsightsPanel'
 import { DeviceReadinessPanel } from './components/DeviceReadinessPanel'
+import { FieldIdentityPanel } from './components/FieldIdentityPanel'
 import { InteroperabilityEvidencePanel } from './components/InteroperabilityEvidencePanel'
 import { PhysicalReleaseEvidencePanel } from './components/PhysicalReleaseEvidencePanel'
 import { FieldMap } from './components/FieldMap'
@@ -907,6 +908,7 @@ export default function App() {
             connected={connection === 'connected'}
             onToggle={toggleBackgroundTracking}
           />
+          {takTransport.isNative() && profile && <FieldIdentityPanel />}
           <DeviceReadinessPanel contactCount={contacts.length} />
           <PhysicalReleaseEvidencePanel />
           <InteroperabilityEvidencePanel

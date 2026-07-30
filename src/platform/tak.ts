@@ -3,6 +3,7 @@ import {
   registerPlugin,
   type PluginListenerHandle,
 } from '@capacitor/core'
+import { z } from 'zod'
 import {
   takContactSchema,
   type TakConnectionState,
@@ -44,6 +45,22 @@ export interface CotMessage {
   staleSeconds?: number
 }
 
+export const fieldIdentitySchema = z
+  .object({
+    authenticated: z.literal(true),
+    commonName: z.string().min(1).max(128),
+    permissions: z
+      .object({
+        publisher: z.boolean(),
+        guardianCheckIn: z.boolean(),
+        guardianSupervisor: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export type FieldIdentity = z.infer<typeof fieldIdentitySchema>
+
 interface AetherTakTransportPlugin {
   importEnrollmentPackage(options: { path: string }): Promise<TakServerProfile>
   connect(options?: { profileId?: string }): Promise<TakStatus>
@@ -57,6 +74,9 @@ interface AetherTakTransportPlugin {
   getContacts(): Promise<{ contacts: TakContact[] }>
   sendCot(options: { xml: string }): Promise<{ accepted: boolean }>
   fieldHealth(options: {
+    port: number
+  }): Promise<NativeFieldResponse>
+  fieldIdentity(options: {
     port: number
   }): Promise<NativeFieldResponse>
   fieldMutation(options: {
@@ -318,6 +338,17 @@ export const fieldApiTransport = {
   async health(): Promise<NativeFieldResponse> {
     requireNativeFieldApi()
     return nativeTak.fieldHealth({ port: fieldPort() })
+  },
+
+  async identity(): Promise<FieldIdentity> {
+    requireNativeFieldApi()
+    const response = await nativeTak.fieldIdentity({ port: fieldPort() })
+    if (response.status !== 200) {
+      throw new Error(
+        `Aether Field identity verification returned HTTP ${response.status}.`,
+      )
+    }
+    return fieldIdentitySchema.parse(response.body)
   },
 
   async mutate(

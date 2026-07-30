@@ -60,6 +60,7 @@ const readinessCheckIds = [
   'tak-enrollment',
   'tak-connection',
   'field-api-health',
+  'guardian-authorization',
   'background-tracking',
   'depth-capability',
   'field-sync',

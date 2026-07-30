@@ -27,6 +27,8 @@ platform. It requires:
 - a physical unsupported-depth fallback session;
 - clear field/TAK queues, enrollment, connection, background tracking, offline
   maps, and media integrity in the matching readiness reports; and
+- a verified Guardian check-in or supervisor certificate role, recorded
+  without exporting the certificate common name; and
 - complete passing bidirectional sessions with current iTAK and ATAK, including
   mission packages and matching TAK Server log references, from every requested
   AetherTAK Field platform.

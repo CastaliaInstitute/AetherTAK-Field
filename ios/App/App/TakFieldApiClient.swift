@@ -47,6 +47,24 @@ final class TakFieldApiClient {
         }
     }
 
+    func identity(
+        profile: TakProfile,
+        port: Int,
+        completion: @escaping (Result<FieldApiResponse, Error>) -> Void
+    ) {
+        do {
+            try perform(
+                profile: profile,
+                port: port,
+                method: "GET",
+                path: "/v1/identity",
+                completion: completion
+            )
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
     func mutate(
         profile: TakProfile,
         port: Int,

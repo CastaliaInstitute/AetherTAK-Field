@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Share } from '@capacitor/share'
 import {
   buildDeviceReadinessReport,
+  probeFieldAuthorization,
   probeFieldApi,
   serializeDeviceReadiness,
   shareDeviceReadiness,
@@ -103,6 +104,14 @@ function healthySnapshot() {
     fieldApi: {
       state: 'healthy' as const,
       httpStatus: 200,
+    },
+    fieldAuthorization: {
+      state: 'verified' as const,
+      permissions: {
+        publisher: false,
+        guardianCheckIn: true,
+        guardianSupervisor: true,
+      },
     },
     backgroundTracking: {
       supported: true,
@@ -221,6 +230,63 @@ describe('device readiness evidence', () => {
       httpStatus: null,
     })
     expect(offline).not.toHaveBeenCalled()
+  })
+
+  it('records Guardian roles without exporting the certificate common name', async () => {
+    const identity = vi.fn().mockResolvedValue({
+      authenticated: true as const,
+      commonName: 'Private Certificate Identity',
+      permissions: {
+        publisher: false,
+        guardianCheckIn: true,
+        guardianSupervisor: false,
+      },
+    })
+    await expect(
+      probeFieldAuthorization(true, true, identity),
+    ).resolves.toEqual({
+      state: 'verified',
+      permissions: {
+        publisher: false,
+        guardianCheckIn: true,
+        guardianSupervisor: false,
+      },
+    })
+
+    const report = buildDeviceReadinessReport({
+      ...healthySnapshot(),
+      fieldAuthorization: await probeFieldAuthorization(
+        true,
+        true,
+        identity,
+      ),
+    })
+    const serialized = serializeDeviceReadiness(report)
+    expect(serialized).not.toContain('Private Certificate Identity')
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      id: 'guardian-authorization',
+      status: 'pass',
+      detail: 'Authenticated identity has Guardian check-in access.',
+    }))
+  })
+
+  it('requires a verified Guardian role for a fully passing readiness report', () => {
+    const report = buildDeviceReadinessReport({
+      ...healthySnapshot(),
+      fieldAuthorization: {
+        state: 'verified',
+        permissions: {
+          publisher: false,
+          guardianCheckIn: false,
+          guardianSupervisor: false,
+        },
+      },
+    })
+    expect(report.overall).toBe('attention')
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      id: 'guardian-authorization',
+      status: 'attention',
+    }))
   })
 
   it('omits personal device names, profile IDs, errors, and record contents', () => {

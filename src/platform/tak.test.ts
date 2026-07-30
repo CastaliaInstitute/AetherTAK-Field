@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const native = vi.hoisted(() => ({
   fieldHealth: vi.fn(),
+  fieldIdentity: vi.fn(),
   guardianAction: vi.fn(),
   getContacts: vi.fn(),
 }))
@@ -33,6 +34,7 @@ const validContact = {
 describe('native TAK boundary', () => {
   beforeEach(() => {
     native.fieldHealth.mockReset()
+    native.fieldIdentity.mockReset()
     native.guardianAction.mockReset()
     native.getContacts.mockReset()
   })
@@ -68,6 +70,47 @@ describe('native TAK boundary', () => {
       body: { status: 'ok' },
     })
     expect(native.fieldHealth).toHaveBeenCalledWith({ port: 9443 })
+  })
+
+  it('strictly validates the authenticated Field identity and roles', async () => {
+    native.fieldIdentity.mockResolvedValue({
+      status: 200,
+      body: {
+        authenticated: true,
+        commonName: 'Field Supervisor',
+        permissions: {
+          publisher: false,
+          guardianCheckIn: true,
+          guardianSupervisor: true,
+        },
+      },
+    })
+
+    await expect(fieldApiTransport.identity()).resolves.toEqual({
+      authenticated: true,
+      commonName: 'Field Supervisor',
+      permissions: {
+        publisher: false,
+        guardianCheckIn: true,
+        guardianSupervisor: true,
+      },
+    })
+    expect(native.fieldIdentity).toHaveBeenCalledWith({ port: 9443 })
+
+    native.fieldIdentity.mockResolvedValue({
+      status: 200,
+      body: {
+        authenticated: true,
+        commonName: 'Field Supervisor',
+        permissions: {
+          publisher: false,
+          guardianCheckIn: true,
+          guardianSupervisor: true,
+        },
+        certificate: 'must-not-cross-the-bridge',
+      },
+    })
+    await expect(fieldApiTransport.identity()).rejects.toThrow()
   })
 
   it('keeps Guardian actions inside the certificate-backed native boundary', async () => {

@@ -75,6 +75,10 @@ client and inside Capacitor shells for iOS and Android.
   with stable UUID idempotency keys, offline retry/discard controls, fixed
   native API routes, and certificate-authenticated delivery. Alert projections
   remain server-authoritative and distinguish acknowledgement from resolution.
+- An authenticated Field identity probe displays the exact client-certificate
+  common name and effective publisher/Guardian roles without exposing
+  certificate bytes or private-key material; privacy-safe readiness evidence
+  records only whether the required Guardian role was verified.
 - Versioned, privacy-safe physical-device readiness reports with native
   app/build, hardware, TAK, certificate-authenticated Aether Field API health,
   depth, sync, offline-map, and media-integrity evidence export through the
