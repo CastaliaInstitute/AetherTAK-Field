@@ -57,7 +57,6 @@ jobs:
     env:
       AETHER_VERSION_CODE: ${{ inputs.build_number }}
       AETHER_VERSION_NAME: ${{ inputs.version_name }}
-      AETHER_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/aethertak-field-release.jks
       AETHER_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       AETHER_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       AETHER_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -77,6 +76,8 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
+      - name: Configure Android temporary paths
+        run: echo "AETHER_ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/aethertak-field-release.jks" >> "$GITHUB_ENV"
       - name: Require Android distribution secrets
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -124,17 +125,19 @@ jobs:
       APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
       APPLE_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
       APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
-      ARCHIVE_PATH: ${{ runner.temp }}/AetherTAK-Field.xcarchive
-      EXPORT_PATH: ${{ runner.temp }}/AetherTAK-Field-export
-      EXPORT_OPTIONS_PATH: ${{ runner.temp }}/ExportOptions-Beta.plist
-      API_KEY_DIRECTORY: ${{ runner.temp }}/appstoreconnect-private-keys
-      TEMP_KEYCHAIN_PATH: ${{ runner.temp }}/aethertak-field-signing.keychain-db
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
+      - name: Configure Apple temporary paths
+        run: |
+          echo "ARCHIVE_PATH=$RUNNER_TEMP/AetherTAK-Field.xcarchive" >> "$GITHUB_ENV"
+          echo "EXPORT_PATH=$RUNNER_TEMP/AetherTAK-Field-export" >> "$GITHUB_ENV"
+          echo "EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions-Beta.plist" >> "$GITHUB_ENV"
+          echo "API_KEY_DIRECTORY=$RUNNER_TEMP/appstoreconnect-private-keys" >> "$GITHUB_ENV"
+          echo "TEMP_KEYCHAIN_PATH=$RUNNER_TEMP/aethertak-field-signing.keychain-db" >> "$GITHUB_ENV"
       - name: Require Apple distribution secrets
         run: |
           test -n "$APPLE_TEAM_ID"
@@ -208,25 +211,23 @@ jobs:
       - name: Validate with App Store Connect
         env:
           IPA_PATH: ${{ steps.ipa.outputs.path }}
-          API_PRIVATE_KEYS_DIR: ${{ env.API_KEY_DIRECTORY }}
-        run: >-
-          xcrun altool
-          --validate-app
-          --type ios
-          --file "$IPA_PATH"
-          --apiKey "$APP_STORE_CONNECT_KEY_ID"
-          --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+        run: |
+          API_PRIVATE_KEYS_DIR="$API_KEY_DIRECTORY" xcrun altool \
+            --validate-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
       - name: Upload to TestFlight processing
         env:
           IPA_PATH: ${{ steps.ipa.outputs.path }}
-          API_PRIVATE_KEYS_DIR: ${{ env.API_KEY_DIRECTORY }}
-        run: >-
-          xcrun altool
-          --upload-app
-          --type ios
-          --file "$IPA_PATH"
-          --apiKey "$APP_STORE_CONNECT_KEY_ID"
-          --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+        run: |
+          API_PRIVATE_KEYS_DIR="$API_KEY_DIRECTORY" xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
       - name: Remove temporary Apple signing material
         if: always()
         run: |
