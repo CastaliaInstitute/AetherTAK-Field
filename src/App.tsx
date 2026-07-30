@@ -7,12 +7,11 @@ import {
   Leaf,
   Map,
   Radio,
-  ScanLine,
   Users,
-  Video,
   Wifi,
   WifiOff,
 } from 'lucide-react'
+import { CapturePanel } from './components/CapturePanel'
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
 import {
@@ -30,8 +29,12 @@ import type {
 import {
   captureObservationPhoto,
   captureObservationVideo,
+  type ObservationCaptureInput,
 } from './media/observationCapture'
-import { captureDepthObservation } from './media/depthObservation'
+import {
+  captureDepthObservation,
+  type DepthScanMode,
+} from './media/depthObservation'
 import { depthScanner } from './platform/depth'
 import {
   takTransport,
@@ -337,73 +340,33 @@ export default function App() {
     })
   }
 
-  async function takePhoto() {
-    setNotice('Opening camera and acquiring a precise location…')
-    try {
-      const capture = await captureObservationPhoto({
-        fieldId: fields[0]?.id ?? null,
-        siteId: null,
-        category: 'crop',
-        title: 'Field photo',
-        notes: 'Captured in AetherTAK Field.',
-      })
-      setNotice(
-        `Observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
-      )
-    } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : 'Camera capture was cancelled.',
-      )
-    }
+  async function takePhoto(input: ObservationCaptureInput) {
+    const capture = await captureObservationPhoto(input)
+    setNotice(
+      `Observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
+    )
   }
 
-  async function recordVideo() {
-    setNotice('Opening video camera and acquiring a precise location…')
-    try {
-      const capture = await captureObservationVideo({
-        fieldId: fields[0]?.id ?? null,
-        siteId: null,
-        category: 'crop',
-        title: 'Field video',
-        notes: 'Recorded in AetherTAK Field.',
-      })
-      setNotice(
-        `Video observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
-      )
-    } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : 'Video recording was cancelled.',
-      )
-    }
+  async function recordVideo(input: ObservationCaptureInput) {
+    const capture = await captureObservationVideo(input)
+    setNotice(
+      `Video observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
+    )
   }
 
-  async function captureDepth() {
-    const mode = depth.supportsMesh ? 'mesh' : 'point_cloud'
-    setNotice('Acquiring location and starting the native depth scanner…')
-    try {
-      const captured = await captureDepthObservation(
-        {
-          fieldId: fields[0]?.id ?? null,
-          siteId: null,
-          category: 'crop',
-          title: 'Field depth scan',
-          notes: 'Depth evidence captured in AetherTAK Field.',
-        },
-        mode,
-      )
-      const median = captured.scan.measurements.find(
-        (measurement) => measurement.label === 'Median range',
-      )
-      setNotice(
-        `${captured.media.length} depth artifacts queued offline${
-          median ? ` · median range ${median.value.toFixed(2)} m` : ''
-        }.`,
-      )
-    } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : 'Depth capture was cancelled.',
-      )
-    }
+  async function captureDepth(
+    input: ObservationCaptureInput,
+    mode: DepthScanMode,
+  ) {
+    const captured = await captureDepthObservation(input, mode)
+    const median = captured.scan.measurements.find(
+      (measurement) => measurement.label === 'Median range',
+    )
+    setNotice(
+      `${captured.media.length} depth artifacts queued offline${
+        median ? ` · median range ${median.value.toFixed(2)} m` : ''
+      }.`,
+    )
   }
 
   async function cachePropertyMap() {
@@ -605,28 +568,14 @@ export default function App() {
       )}
 
       {tab === 'capture' && (
-        <section className="placeholder-page capture-page">
-          <Camera size={30} />
-          <p className="eyebrow">OFFLINE-FIRST EVIDENCE</p>
-          <h2>Capture an observation</h2>
-          <p>Photos retain coordinates, accuracy, time, field metadata, and sync state.</p>
-          <button className="primary-action" type="button" onClick={() => void takePhoto()}>
-            <Camera size={19} /> Take geotagged photo
-          </button>
-          <button className="secondary-action" type="button" onClick={() => void recordVideo()}>
-            <Video size={19} /> Record geotagged video
-          </button>
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={!depth.supported}
-            onClick={() => void captureDepth()}
-          >
-            <ScanLine size={19} />
-            {depth.supported ? `Start ${depth.provider} scan` : 'Depth unavailable on this device'}
-          </button>
-          {depth.reason && <small className="capability-note">{depth.reason}</small>}
-        </section>
+        <CapturePanel
+          fields={fields}
+          ecologicalSites={ecologicalSites}
+          depth={depth}
+          onPhoto={takePhoto}
+          onVideo={recordVideo}
+          onDepth={captureDepth}
+        />
       )}
 
       {tab === 'team' && (

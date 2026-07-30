@@ -13,8 +13,9 @@ client and inside Capacitor shells for iOS and Android.
 - ChirpStack v4 uplink normalization with LoRaWAN radio metadata.
 - Offline map-region planning, Cache Storage downloads, and a cache-first
   MapLibre raster protocol for authorized tile sources.
-- Durable geotagged photo and video observations using native Camera,
-  Geolocation, Filesystem, SHA-256 photo integrity, and an atomic sync outbox.
+- Structured field/ecology observation capture with category, title, notes,
+  geotagged native photo/video, selectable depth output, app-private media,
+  SHA-256 photo integrity, and an atomic sync outbox.
 - Bidirectional field-record and media synchronization with durable revisions,
   conflict preservation, paginated cursors, mTLS uploads/downloads, checksum
   verification, and atomic app-private file hydration.
