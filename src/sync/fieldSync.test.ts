@@ -187,7 +187,7 @@ describe('Aether Field durable synchronization', () => {
       payload: media,
     })
     const upload = vi.fn(async () => ({ status: 201, body: {} }))
-    const mutate = vi.fn(async () => ({
+    const mutate = vi.fn(async (_mutation: Record<string, unknown>) => ({
       status: 200,
       body: {
         accepted: true,
@@ -222,6 +222,71 @@ describe('Aether Field durable synchronization', () => {
         sha256: media.sha256,
       }),
     }))
+  })
+
+  it('sends privacy-bounded camera evidence without device-local paths', async () => {
+    const cameraMedia: MediaCapture = {
+      ...media,
+      id: 'cd89c88b-85d5-47a1-8d79-bd1081d172b7',
+      observationId: '87e11f1d-5fca-4dd5-b17c-5d8923beac50',
+      kind: 'video',
+      localUri: 'file:///private/observations/capture.mp4',
+      previewUri: 'file:///private/observations/capture-preview.jpg',
+      mimeType: 'video/mp4',
+      depthMetadata: null,
+      cameraCaptureEvidence: {
+        captureRequestedAt: '2026-07-30T05:59:50.000Z',
+        captureCompletedAt: '2026-07-30T06:00:00.000Z',
+        locationObservedAt: '2026-07-30T05:59:51.000Z',
+        metadataCreatedAt: '2026-07-30T05:59:52.000Z',
+        sizeBytes: 12_345_678,
+        durationSeconds: 7.25,
+        widthPixels: 1920,
+        heightPixels: 1080,
+        format: 'mp4',
+      },
+    }
+    await db.media.add(cameraMedia)
+    const queued = await queueMutation({
+      entityType: 'media',
+      entityId: cameraMedia.id,
+      operation: 'create',
+      payload: cameraMedia,
+    })
+    const mutate = vi.fn(async (_mutation: Record<string, unknown>) => ({
+      status: 200,
+      body: {
+        accepted: true,
+        mutationId: queued.id,
+        entityType: 'media',
+        entityId: cameraMedia.id,
+        revision: 1,
+        cursor: 1,
+        serverUpdatedAt: '2026-07-30T06:45:00.000Z',
+        idempotentReplay: false,
+      },
+    }))
+    const transport = {
+      upload: vi.fn(async () => ({ status: 201, body: {} })),
+      download: vi.fn(),
+      mutate,
+      changes: vi.fn(),
+    }
+
+    expect(await flushFieldOutbox(100, transport)).toMatchObject({
+      sent: 1,
+      failed: 0,
+    })
+    const portable = (
+      mutate.mock.calls[0][0] as { payload: Record<string, unknown> }
+    ).payload
+    expect(portable.cameraCaptureEvidence).toEqual(
+      cameraMedia.cameraCaptureEvidence,
+    )
+    expect(portable).not.toHaveProperty('localUri')
+    expect(portable).not.toHaveProperty('previewUri')
+    expect(portable).not.toHaveProperty('syncState')
+    expect(JSON.stringify(portable)).not.toContain('file:///private/')
   })
 
   it('refuses to upload evidence without precomputed integrity metadata', async () => {
