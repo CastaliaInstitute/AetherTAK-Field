@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "product": "AetherTAK Field",
+  "tracking": false,
+  "advertising": false,
+  "purpose": "app-functionality",
+  "encryptedInTransit": true,
+  "dataTypes": [
+    {
+      "id": "location",
+      "apple": ["Precise Location", "Coarse Location"],
+      "googlePlay": ["Approximate location", "Precise location"],
+      "use": "Team position, geotagged observations, photos, video, and sensor records"
+    },
+    {
+      "id": "user-identity",
+      "apple": ["User ID"],
+      "googlePlay": ["User IDs"],
+      "use": "TAK callsign and UID used for authenticated mission collaboration"
+    },
+    {
+      "id": "messages",
+      "apple": ["Emails or Text Messages"],
+      "googlePlay": ["Other in-app messages"],
+      "use": "TAK GeoChat messages"
+    },
+    {
+      "id": "media",
+      "apple": ["Photos or Videos", "Audio Data"],
+      "googlePlay": ["Photos", "Videos", "Voice or sound recordings"],
+      "use": "User-initiated geotagged field capture"
+    },
+    {
+      "id": "field-content",
+      "apple": ["Other User Content"],
+      "googlePlay": ["Files and docs", "Other user-generated content"],
+      "use": "Observations, notes, crop records, sensor readings, and mission packages"
+    },
+    {
+      "id": "environment-scanning",
+      "apple": ["Environment Scanning"],
+      "googlePlay": ["Other user-generated content"],
+      "use": "User-initiated LiDAR or AR depth captures"
+    }
+  ]
+}

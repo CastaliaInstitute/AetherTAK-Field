@@ -1,12 +1,20 @@
 import type {
   DashboardSnapshot,
+  Alert,
   EcologicalSite,
   Field,
+  MediaCapture,
+  OfflineMapRegion,
   Observation,
   Property,
   Season,
 } from '../domain/models'
-import { db, queueMutation } from './database'
+import {
+  db,
+  queueMutation,
+  type GuardianActionOutbox,
+  type OutboxItem,
+} from './database'
 
 export async function seedDatabase(snapshot: DashboardSnapshot) {
   await db.transaction(
@@ -20,6 +28,9 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
       db.observations,
       db.alerts,
       db.insights,
+      db.guardianParticipants,
+      db.guardianAlerts,
+      db.guardianZones,
     ],
     async () => {
       await Promise.all([
@@ -31,7 +42,70 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
         db.observations.bulkPut(snapshot.observations),
         db.alerts.bulkPut(snapshot.alerts),
         db.insights.bulkPut(snapshot.insights),
+        db.guardianParticipants.bulkPut(snapshot.guardianParticipants),
+        db.guardianAlerts.bulkPut(snapshot.guardianAlerts),
+        db.guardianZones.bulkPut(snapshot.guardianZones),
       ])
+    },
+  )
+}
+
+export async function initializeFieldDatabase(
+  snapshot: DashboardSnapshot | null,
+) {
+  return db.transaction(
+    'rw',
+    [
+      db.appMetadata,
+      db.properties,
+      db.seasons,
+      db.fields,
+      db.ecologicalSites,
+      db.readings,
+      db.observations,
+      db.alerts,
+      db.insights,
+      db.guardianParticipants,
+      db.guardianAlerts,
+      db.guardianZones,
+    ],
+    async () => {
+      if (await db.appMetadata.get('initial-seed')) return false
+      const counts = await Promise.all([
+        db.properties.count(),
+        db.seasons.count(),
+        db.fields.count(),
+        db.ecologicalSites.count(),
+        db.readings.count(),
+        db.observations.count(),
+        db.alerts.count(),
+        db.insights.count(),
+        db.guardianParticipants.count(),
+        db.guardianAlerts.count(),
+        db.guardianZones.count(),
+      ])
+      const empty = counts.every((count) => count === 0)
+      if (empty && snapshot) {
+        await Promise.all([
+          db.properties.bulkPut(snapshot.properties),
+          db.seasons.bulkPut(snapshot.seasons),
+          db.fields.bulkPut(snapshot.fields),
+          db.ecologicalSites.bulkPut(snapshot.ecologicalSites),
+          db.readings.bulkPut(snapshot.readings),
+          db.observations.bulkPut(snapshot.observations),
+          db.alerts.bulkPut(snapshot.alerts),
+          db.insights.bulkPut(snapshot.insights),
+          db.guardianParticipants.bulkPut(snapshot.guardianParticipants),
+          db.guardianAlerts.bulkPut(snapshot.guardianAlerts),
+          db.guardianZones.bulkPut(snapshot.guardianZones),
+        ])
+      }
+      await db.appMetadata.put({
+        key: 'initial-seed',
+        completedAt: new Date().toISOString(),
+        mode: snapshot ? 'preview' : 'empty',
+      })
+      return empty && snapshot !== null
     },
   )
 }
@@ -42,6 +116,7 @@ type MutableFieldEntity =
   | { type: 'field'; value: Field }
   | { type: 'ecological_site'; value: EcologicalSite }
   | { type: 'observation'; value: Observation }
+  | { type: 'alert'; value: Alert }
 
 export async function saveLocalEntity(entity: MutableFieldEntity) {
   await db.transaction(
@@ -52,7 +127,9 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
       db.fields,
       db.ecologicalSites,
       db.observations,
+      db.alerts,
       db.outbox,
+      db.syncMetadata,
     ],
     async () => {
       switch (entity.type) {
@@ -71,6 +148,9 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
         case 'observation':
           await db.observations.put(entity.value)
           break
+        case 'alert':
+          await db.alerts.put(entity.value)
+          break
       }
       await queueMutation({
         entityType: entity.type,
@@ -82,9 +162,14 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
   )
 }
 
-export async function loadDashboard(): Promise<
-  Omit<DashboardSnapshot, 'contacts'>
-> {
+export type FieldDashboardData = Omit<DashboardSnapshot, 'contacts'> & {
+  media: MediaCapture[]
+  guardianActions: GuardianActionOutbox[]
+  conflicts: OutboxItem[]
+  offlineMapRegions: OfflineMapRegion[]
+}
+
+export async function loadDashboard(): Promise<FieldDashboardData> {
   const [
     properties,
     seasons,
@@ -92,8 +177,15 @@ export async function loadDashboard(): Promise<
     ecologicalSites,
     readings,
     observations,
+    media,
     alerts,
     insights,
+    guardianParticipants,
+    guardianAlerts,
+    guardianZones,
+    guardianActions,
+    conflicts,
+    offlineMapRegions,
   ] = await Promise.all([
     db.properties.toArray(),
     db.seasons.toArray(),
@@ -101,8 +193,15 @@ export async function loadDashboard(): Promise<
     db.ecologicalSites.toArray(),
     db.readings.orderBy('recordedAt').reverse().toArray(),
     db.observations.orderBy('observedAt').reverse().toArray(),
+    db.media.orderBy('capturedAt').reverse().toArray(),
     db.alerts.orderBy('createdAt').reverse().toArray(),
     db.insights.orderBy('generatedAt').reverse().toArray(),
+    db.guardianParticipants.orderBy('updatedAt').reverse().toArray(),
+    db.guardianAlerts.orderBy('openedAt').reverse().toArray(),
+    db.guardianZones.orderBy('updatedAt').reverse().toArray(),
+    db.guardianActions.orderBy('createdAt').toArray(),
+    db.outbox.filter((item) => item.conflict !== null).toArray(),
+    db.offlineMapRegions.orderBy('updatedAt').reverse().toArray(),
   ])
 
   return {
@@ -112,9 +211,16 @@ export async function loadDashboard(): Promise<
     ecologicalSites,
     readings,
     observations,
+    media,
     alerts,
     insights: insights.filter(
       (insight) => new Date(insight.expiresAt).getTime() > Date.now(),
     ),
+    guardianParticipants,
+    guardianAlerts,
+    guardianZones,
+    guardianActions,
+    conflicts,
+    offlineMapRegions,
   }
 }

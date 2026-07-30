@@ -1,5 +1,14 @@
-import { Capacitor, registerPlugin } from '@capacitor/core'
-import type { TakConnectionState, TakContact } from '../domain/models'
+import {
+  Capacitor,
+  registerPlugin,
+  type PluginListenerHandle,
+} from '@capacitor/core'
+import { z } from 'zod'
+import {
+  takContactSchema,
+  type TakConnectionState,
+  type TakContact,
+} from '../domain/models'
 import { operationToCot } from '../tak/cot'
 import type { TakOperation } from '../tak/operations'
 
@@ -19,6 +28,12 @@ export interface TakStatus {
   error: string | null
 }
 
+export interface BackgroundTrackingStatus {
+  supported: boolean
+  enabled: boolean
+  detail: string
+}
+
 export interface CotMessage {
   uid: string
   type: string
@@ -30,13 +45,107 @@ export interface CotMessage {
   staleSeconds?: number
 }
 
+export const fieldIdentitySchema = z
+  .object({
+    authenticated: z.literal(true),
+    commonName: z.string().min(1).max(128),
+    permissions: z
+      .object({
+        publisher: z.boolean(),
+        guardianCheckIn: z.boolean(),
+        guardianSupervisor: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export type FieldIdentity = z.infer<typeof fieldIdentitySchema>
+
 interface AetherTakTransportPlugin {
   importEnrollmentPackage(options: { path: string }): Promise<TakServerProfile>
   connect(options?: { profileId?: string }): Promise<TakStatus>
   disconnect(): Promise<void>
+  removeEnrollment(): Promise<void>
   getStatus(): Promise<TakStatus>
+  getBackgroundTrackingStatus(): Promise<BackgroundTrackingStatus>
+  setBackgroundTracking(options: {
+    enabled: boolean
+  }): Promise<BackgroundTrackingStatus>
   getContacts(): Promise<{ contacts: TakContact[] }>
   sendCot(options: { xml: string }): Promise<{ accepted: boolean }>
+  fieldHealth(options: {
+    port: number
+  }): Promise<NativeFieldResponse>
+  fieldIdentity(options: {
+    port: number
+  }): Promise<NativeFieldResponse>
+  fieldMutation(options: {
+    port: number
+    mutation: Record<string, unknown>
+  }): Promise<NativeFieldResponse>
+  fieldChanges(options: {
+    port: number
+    cursor: number
+    limit: number
+  }): Promise<NativeFieldResponse>
+  guardianAction(options: {
+    port: number
+    action: Record<string, unknown>
+  }): Promise<NativeFieldResponse>
+  fieldUpload(options: {
+    port: number
+    mediaId: string
+    uri: string
+    contentType: string
+    observationId?: string
+    role?: string
+    sha256?: string
+  }): Promise<NativeFieldResponse>
+  fieldDownload(options: {
+    port: number
+    mediaId: string
+    expectedSha256?: string
+    expectedContentType?: string
+  }): Promise<NativeFieldResponse>
+  missionPackageUpload(options: {
+    port: number
+    uri: string
+    fileName: string
+    creatorUid: string
+  }): Promise<MissionPackageUploadResult>
+  missionPackageDownload(options: {
+    port: number
+    senderUrl: string
+    fileName: string
+    expectedSha256: string
+    expectedSizeBytes: number
+  }): Promise<MissionPackageDownloadResult>
+  addListener(
+    eventName: 'cotEvent',
+    listener: (event: { xml: string }) => void,
+  ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'statusChanged',
+    listener: (event: TakStatus) => void,
+  ): Promise<PluginListenerHandle>
+}
+
+export interface MissionPackageUploadResult {
+  senderUrl: string
+  sha256: string
+  sizeBytes: number
+}
+
+export interface MissionPackageDownloadResult {
+  localUri: string
+  sha256: string
+  sizeBytes: number
+  fileName: string
+}
+
+export interface NativeFieldResponse {
+  status: number
+  body: Record<string, unknown>
 }
 
 const nativeTak = registerPlugin<AetherTakTransportPlugin>('AetherTakTransport')
@@ -53,6 +162,49 @@ const browserStatus: TakStatus = {
   },
   lastConnectedAt: null,
   error: 'Native TAK transport is available in the iOS and Android builds.',
+}
+
+const browserBackgroundTracking: BackgroundTrackingStatus = {
+  supported: false,
+  enabled: false,
+  detail: 'Background team tracking requires the iOS or Android application.',
+}
+
+const configuredFieldPort = Number(
+  import.meta.env.VITE_AETHER_FIELD_API_PORT ?? '9443',
+)
+const configuredMissionPackagePort = Number(
+  import.meta.env.VITE_TAK_MISSION_PACKAGE_PORT ?? '8443',
+)
+
+function fieldPort() {
+  if (
+    !Number.isInteger(configuredFieldPort) ||
+    configuredFieldPort < 1 ||
+    configuredFieldPort > 65_535
+  ) {
+    throw new Error('VITE_AETHER_FIELD_API_PORT must be a valid TCP port.')
+  }
+  return configuredFieldPort
+}
+
+function missionPackagePort() {
+  if (
+    !Number.isInteger(configuredMissionPackagePort) ||
+    configuredMissionPackagePort < 1 ||
+    configuredMissionPackagePort > 65_535
+  ) {
+    throw new Error('VITE_TAK_MISSION_PACKAGE_PORT must be a valid TCP port.')
+  }
+  return configuredMissionPackagePort
+}
+
+function requireNativeFieldApi() {
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error(
+      'Secure Aether Field synchronization requires the iOS or Android application.',
+    )
+  }
 }
 
 export const takTransport = {
@@ -73,12 +225,36 @@ export const takTransport = {
 
   async contacts(): Promise<TakContact[]> {
     if (!Capacitor.isNativePlatform()) return []
-    return (await nativeTak.getContacts()).contacts
+    return (await nativeTak.getContacts()).contacts.flatMap((contact) => {
+      const parsed = takContactSchema.safeParse(contact)
+      return parsed.success ? [parsed.data] : []
+    })
   },
 
   async connect(profileId?: string): Promise<TakStatus> {
     if (!Capacitor.isNativePlatform()) return browserStatus
     return nativeTak.connect(profileId ? { profileId } : {})
+  },
+
+  async removeEnrollment(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error(
+        'TAK enrollment removal requires the iOS or Android application.',
+      )
+    }
+    await nativeTak.removeEnrollment()
+  },
+
+  async backgroundTrackingStatus(): Promise<BackgroundTrackingStatus> {
+    if (!Capacitor.isNativePlatform()) return browserBackgroundTracking
+    return nativeTak.getBackgroundTrackingStatus()
+  },
+
+  async setBackgroundTracking(
+    enabled: boolean,
+  ): Promise<BackgroundTrackingStatus> {
+    if (!Capacitor.isNativePlatform()) return browserBackgroundTracking
+    return nativeTak.setBackgroundTracking({ enabled })
   },
 
   async sendXml(xml: string): Promise<boolean> {
@@ -108,5 +284,110 @@ export const takTransport = {
       staleSeconds: message.staleSeconds,
     }
     return this.sendOperation(operation)
+  },
+
+  async onCotEvent(
+    listener: (xml: string) => void,
+  ): Promise<PluginListenerHandle | null> {
+    if (!Capacitor.isNativePlatform()) return null
+    return nativeTak.addListener('cotEvent', (event) => listener(event.xml))
+  },
+
+  async onStatusChange(
+    listener: (status: TakStatus) => void,
+  ): Promise<PluginListenerHandle | null> {
+    if (!Capacitor.isNativePlatform()) return null
+    return nativeTak.addListener('statusChanged', listener)
+  },
+
+  async uploadMissionPackage(options: {
+    uri: string
+    fileName: string
+    creatorUid: string
+  }): Promise<MissionPackageUploadResult> {
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error(
+        'TAK mission-package upload requires the iOS or Android application.',
+      )
+    }
+    return nativeTak.missionPackageUpload({
+      port: missionPackagePort(),
+      ...options,
+    })
+  },
+
+  async downloadMissionPackage(options: {
+    senderUrl: string
+    fileName: string
+    expectedSha256: string
+    expectedSizeBytes: number
+  }): Promise<MissionPackageDownloadResult> {
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error(
+        'TAK mission-package download requires the iOS or Android application.',
+      )
+    }
+    return nativeTak.missionPackageDownload({
+      port: missionPackagePort(),
+      ...options,
+    })
+  },
+}
+
+export const fieldApiTransport = {
+  async health(): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldHealth({ port: fieldPort() })
+  },
+
+  async identity(): Promise<FieldIdentity> {
+    requireNativeFieldApi()
+    const response = await nativeTak.fieldIdentity({ port: fieldPort() })
+    if (response.status !== 200) {
+      throw new Error(
+        `Aether Field identity verification returned HTTP ${response.status}.`,
+      )
+    }
+    return fieldIdentitySchema.parse(response.body)
+  },
+
+  async mutate(
+    mutation: Record<string, unknown>,
+  ): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldMutation({ port: fieldPort(), mutation })
+  },
+
+  async changes(cursor: number, limit = 100): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldChanges({ port: fieldPort(), cursor, limit })
+  },
+
+  async guardianAction(
+    action: Record<string, unknown>,
+  ): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.guardianAction({ port: fieldPort(), action })
+  },
+
+  async upload(options: {
+    mediaId: string
+    uri: string
+    contentType: string
+    observationId?: string
+    role?: string
+    sha256?: string
+  }): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldUpload({ port: fieldPort(), ...options })
+  },
+
+  async download(options: {
+    mediaId: string
+    expectedSha256?: string
+    expectedContentType?: string
+  }): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldDownload({ port: fieldPort(), ...options })
   },
 }

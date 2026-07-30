@@ -134,7 +134,7 @@ class TakTlsTransport(
         }
     }
 
-    private fun sslContext(profile: TakProfile): SSLContext {
+    internal fun sslContext(profile: TakProfile): SSLContext {
         val androidStore = identityStore.keyStore()
         val keyManagerFactory = KeyManagerFactory.getInstance(
             KeyManagerFactory.getDefaultAlgorithm(),

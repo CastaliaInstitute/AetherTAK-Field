@@ -1,5 +1,10 @@
 import * as maplibregl from 'maplibre-gl'
-import { mapCacheName, tileUrl, type TileCoordinate } from './offlineRegions'
+import {
+  mapCacheName,
+  offlineTileCacheKey,
+  tileUrl,
+  type TileCoordinate,
+} from './offlineRegions'
 
 export interface RasterTileSource {
   id: string
@@ -60,11 +65,25 @@ export function registerRasterTileProtocol(source: RasterTileSource) {
       throw new Error(`Unknown raster source ${parsed.sourceId}.`)
     }
     const networkUrl = tileUrl(source.urlTemplate, parsed.coordinate)
+    const cacheKey = offlineTileCacheKey(source.id, parsed.coordinate)
     let response: Response | undefined
 
     if ('caches' in globalThis) {
       const cache = await caches.open(mapCacheName(source.id))
-      response = (await cache.match(networkUrl)) ?? undefined
+      response = (await cache.match(cacheKey)) ?? undefined
+      if (!response) {
+        const legacy = await cache.match(networkUrl)
+        if (legacy) {
+          await cache.put(cacheKey, legacy.clone())
+          if (!(await cache.delete(networkUrl))) {
+            await cache.delete(cacheKey)
+            throw new Error(
+              'Legacy offline map cache key could not be removed.',
+            )
+          }
+          response = legacy
+        }
+      }
     }
 
     if (!response) {
@@ -74,7 +93,7 @@ export function registerRasterTileProtocol(source: RasterTileSource) {
       }
       if (source.allowOfflineDownload && 'caches' in globalThis) {
         const cache = await caches.open(mapCacheName(source.id))
-        await cache.put(networkUrl, response.clone())
+        await cache.put(cacheKey, response.clone())
       }
     }
 

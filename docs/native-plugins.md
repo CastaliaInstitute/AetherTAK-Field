@@ -13,13 +13,99 @@ Methods exposed to the shared layer:
 - `connect({ profileId? })`: establish TLS CoT streaming with reconnect and
   certificate validation.
 - `disconnect()`
+- `removeEnrollment()`: disconnect, remove the active private identity and
+  trust anchor from Keychain/Android KeyStore, and clear non-secret profile
+  metadata.
 - `getStatus()`
+- `statusChanged`: listener event emitted when native transport state changes.
+- `getBackgroundTrackingStatus()`
+- `setBackgroundTracking({ enabled })`: explicitly start or stop native,
+  system-visible team PLI updates while the web view is suspended.
 - `getContacts()`
-- `sendCot({ message })`
+- `sendCot({ xml })`
+- `fieldHealth({ port })`: perform a certificate-authenticated readiness probe
+  without reading or mutating field records.
+- `fieldIdentity({ port })`: return only the authenticated certificate common
+  name and effective publisher/Guardian role booleans from the Field API.
+- `fieldMutation({ port, mutation })`
+- `guardianAction({ port, action })`: submit a bounded check-in, alert
+  acknowledgement, or reasoned resolution to a fixed Guardian API route with
+  a UUID `Idempotency-Key`.
+- `fieldChanges({ port, cursor, limit })`
+- `fieldUpload({ port, mediaId, uri, contentType, ... })`
+- `fieldDownload({ port, mediaId, expectedSha256?, expectedContentType? })`
+- `missionPackageUpload({ port, uri, fileName, creatorUid })`
+- `missionPackageDownload({ port, senderUrl, fileName, expectedSha256,
+  expectedSizeBytes })`
 
-The plugin must support standard CoT position, contacts, chat, markers, routes,
-shapes, emergency events, and attachment mission packages. It must never return
-private key bytes, passwords, or raw PKCS#12 content over the Capacitor bridge.
+The plugin supports standard CoT position, contacts, chat, markers, routes,
+shapes, emergency events, and mission-package requests/receipts. Field and
+Marti content API calls reuse the same issued identity and
+pinned CA; downloaded artifacts are committed to app-private storage only after
+content length, type, and SHA-256 validation. It must never return private key
+bytes, passwords, or raw PKCS#12 content over the Capacitor bridge.
+
+Outbound mission packages must be valid ZIPs containing
+`MANIFEST/manifest.xml` and are limited to 25 MiB. The durable TAK outbox keeps
+the app-private file until the native client has queried or uploaded it through
+`/Marti`, marked the server asset private when supported, and queued a
+recipient-targeted `b-f-t-r` event. Inbound packages are never fetched
+automatically: the operator approves the download, the native client restricts
+the URL to the enrolled HTTPS Marti host/port, and the file remains private
+until its declared length and SHA-256 digest match. A `b-f-t-a` receipt or
+failure response is then returned to the sender.
+
+Background team tracking is opt-in and stops on disconnect, enrollment
+replacement, or credential removal. Android uses a location-typed foreground
+service with a persistent notification and Stop action; it relies on foreground
+location permission and does not request `ACCESS_BACKGROUND_LOCATION`. On
+Android 13 and newer, enabling background PLI requests notification permission
+in context; the app refuses to start or stops sharing if app/channel
+notifications cannot remain visible. iOS uses
+Core Location with the `location` background mode and displays the system
+background-location indicator. The shared foreground watcher is disabled while
+the native publisher is active so the same identity does not emit duplicate
+PLI.
+
+The shared client subscribes to `statusChanged` and reconciles the enrolled TAK
+session on native launch, foreground resume, browser-online restoration, and a
+bounded 15-second retry interval. Reconciliation is single-flight, so
+overlapping lifecycle, network, and timer signals cannot create duplicate
+connection attempts. A successful reconnect restarts contact refresh and both
+durable outbox schedulers through the shared connection state.
+
+## AetherMediaIntegrity
+
+Native photo capture copies the camera result into persistent app-private
+storage before inspection, and native video capture requests persistent
+application storage from the Capacitor camera implementation. ARKit and ARCore
+exporters write depth, confidence, point-cloud, and model artifacts into private
+application-support or files directories. Before an observation is committed
+to IndexedDB or its offline outbox, `inspect({ uri })` streams each final
+app-private file through SHA-256 and returns its digest and byte count. Swift
+accepts only files within the application sandbox; Kotlin accepts only regular
+files beneath the application files, cache, or no-backup directories. Empty
+media and paths outside those roots fail closed, and an uncommitted photo copy
+is removed if inspection fails. This avoids loading potentially large final
+media and geometry files through the JavaScript bridge while ensuring every
+synchronized evidence artifact has integrity metadata. Photo, video, depth,
+confidence, point-cloud, and model records also retain the native hardware
+model when the operating system reports it; unavailable model metadata remains
+optional and never discards otherwise valid field evidence.
+
+Photo and video records retain a portable, privacy-bounded capture evidence
+object with capture request/completion, the actual location-fix timestamp,
+normalized size, duration, resolution, format, and a valid camera-reported
+creation time when present. Raw EXIF is deliberately neither retained nor
+synchronized; the validated observation coordinate remains the authoritative
+geotag.
+
+The observation evidence viewer passes an artifact to the native open/share
+sheet only when it has a valid SHA-256 digest and a local `file:`, `content:`,
+or `capacitor:` URI. Browser records, remote URLs, inline previews, and
+checksum-pending media fail closed. The explicit operator handoff includes the
+artifact label, capture time, hardware model when available, and digest; it
+does not add coordinates or observation notes to the share-sheet text.
 
 ## AetherDepthScanner
 
@@ -27,7 +113,9 @@ The plugin reports capabilities before presenting a capture UI:
 
 - iOS: ARKit scene depth / LiDAR, confidence maps, point clouds, and mesh export.
 - Android: ARCore Depth API, confidence metadata where available, point clouds,
-  and model export.
+  and bounded sampled depth-surface OBJ model export. The Android model is
+  reconstructed from calibrated depth samples; it does not claim ARCore
+  environmental scene-mesh support.
 
 Methods:
 
@@ -52,17 +140,83 @@ Before beta distribution, verify on physical devices:
 4. Photo/video metadata and file integrity across offline sync.
 5. LiDAR/Depth accuracy against known dimensions, including confidence and
    unsupported-device fallback.
+6. Background the main map and active depth camera and confirm the iOS app
+   switcher shows the AetherTAK privacy shield. On Android 13 and newer,
+   confirm Recents uses the non-sensitive theme background; on older supported
+   Android, confirm the pause-scoped secure window hides the snapshot. Then
+   return to the foreground and confirm a deliberate validation screenshot is
+   still possible.
+
+## In-app physical-device evidence
+
+Open **Team → Device readiness** on each release-candidate installation and run
+the readiness check after enrollment and the required field exercises. Share
+the generated JSON report into the controlled release-evidence location. The
+versioned report records:
+
+- native app version/build, source revision, and physical-versus-virtual device
+  state;
+- device model, operating-system version, and WebView version;
+- sanitized TAK enrollment, connection, contact-count, and background-tracking
+  state;
+- ARKit LiDAR or ARCore Depth capability and supported artifact types;
+- field and TAK queue state, conflicts, sync cursor, and last synchronization;
+- ready/partial offline-map counts and downloaded tile totals; and
+- media counts, queue state, and SHA-256 coverage across photo, video, depth,
+  confidence, point-cloud, and model evidence.
+
+The export deliberately excludes private keys, certificates, enrollment
+passwords, server addresses, profile/device identifiers, personal device
+names, coordinates, chat/event content, observation notes, and media content.
+It is a state snapshot, not a substitute for the behavioral evidence matrix:
+retain it alongside screenshots/video, peer versions, TAK Server log intervals,
+and measured depth results.
+
+Create a separate **Team → Device validation session** for every physical
+release-candidate device. The session is bound to the installed version, build,
+source revision, device, OS, and physical/virtual state. It persists the
+non-TAK behavioral matrix: enrollment replacement, offline relaunch and ordered
+sync, conflict recovery, camera/video and media integrity, depth accuracy and
+artifact export, unsupported-hardware fallback, screen-lock tracking,
+permission revocation, airplane mode, and low storage. The known-dimension
+depth result is calculated from the recorded distances and accepted tolerance;
+it is not a manual pass/fail field.
+
+For released-client validation, create a durable session under **Team → iTAK /
+ATAK test session**. It records every direction separately for PLI, screen-lock
+background PLI, GeoChat, markers, routes, open and closed shapes, emergencies,
+mission packages, reconnect, and stale removal. Export the session JSON beside
+the referenced screenshots and TAK Server log interval. The app stores
+references rather than copying potentially sensitive screenshots or logs into
+the report.
 
 ## Implementation status
 
-The shared CoT codec and offline TAK outbox are implemented and unit tested.
+The shared CoT codec, offline TAK outbox, durable inbound/outbound activity,
+interactive map tools, GeoChat composer, foreground PLI publishing, emergency
+confirmation/cancellation, server-hosted mission-package lifecycle, and
+bidirectional domain/media sync are implemented and unit tested.
 The Swift and Kotlin plugins are registered in their native projects. Both TAK
 plugins parse the issued mission package, enforce archive-size and XML safety
 limits, import the client identity into Keychain/Android KeyStore, retain only
 non-secret profile metadata outside secure storage, pin the issued CA, enforce
-TLS 1.2 or newer with server-name verification, stream CoT bidirectionally, and
-extract live contacts. CI compiles Android on Ubuntu and iOS on a macOS runner.
+TLS 1.2 or newer with server-name verification, stream CoT bidirectionally,
+extract live contacts with bounded, entity-aware XML attribute decoding, and
+stream checksum-verified media into app-private
+storage. Enrollment imports validate certificate validity and chain trust,
+stage replacement credentials under unique labels, synchronously activate the
+new profile, roll staged items back on failure, and retire the previous identity
+only after activation succeeds. Disconnect preserves enrollment; explicit
+removal destroys it. CI compiles Android on Ubuntu and iOS on a macOS runner.
+Both plugins also provide explicit native background PLI sessions using a
+15-second publish throttle and 45-second stale window. Their production
+encoders have native unit coverage. Foreground and background PLI publish the
+installed app version, device model, OS version, reported horizontal/vertical
+accuracy, and the current battery percentage when the operating system makes it
+available; they omit unavailable telemetry rather than fabricating values.
+Platform suspension, battery-management, permission revocation, and
+notification/indicator behavior still require physical-device evidence.
 
-ARKit capture, ARCore capture, and physical-device interoperability remain open
-gates. Native enrollment and transport are not considered verified against
-iTAK/ATAK until those device tests pass.
+ARKit LiDAR and ARCore Depth capture/export are implemented with capability
+fallbacks. Physical-device accuracy, end-to-end sync, iTAK/ATAK
+interoperability, signing, and beta distribution remain open gates.

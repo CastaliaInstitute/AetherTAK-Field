@@ -21,6 +21,20 @@ describe('offline field repository', () => {
   })
 
   it('hydrates the full agriculture and ecology dashboard', async () => {
+    await db.media.add({
+      id: '5a52acec-f6ac-4050-8c0f-c47456485726',
+      observationId: null,
+      kind: 'photo',
+      localUri: 'file:///private/field-photo.jpg',
+      previewUri: null,
+      mimeType: 'image/jpeg',
+      coordinate: demoSnapshot.properties[0].center,
+      capturedAt: new Date().toISOString(),
+      deviceModel: null,
+      sha256: null,
+      depthMetadata: null,
+      syncState: 'queued',
+    })
     const dashboard = await loadDashboard()
 
     expect(dashboard.properties).toHaveLength(1)
@@ -28,6 +42,10 @@ describe('offline field repository', () => {
     expect(dashboard.fields.some((field) => field.cropIcon === '🥬')).toBe(true)
     expect(dashboard.ecologicalSites[0].siteType).toBe('riparian')
     expect(dashboard.insights.every((insight) => insight.readOnly)).toBe(true)
+    expect(dashboard.guardianZones.map((zone) => zone.level)).toEqual(
+      expect.arrayContaining(['green', 'yellow']),
+    )
+    expect(dashboard.media[0].localUri).toBe('file:///private/field-photo.jpg')
   })
 
   it('atomically saves a local edit and queues synchronization', async () => {
@@ -44,5 +62,34 @@ describe('offline field repository', () => {
       'Aether Farm Updated',
     )
     expect(await db.outbox.where('entityId').equals(property.id).count()).toBe(1)
+  })
+
+  it('hydrates unresolved outbox conflicts for operator action', async () => {
+    const property = {
+      ...demoSnapshot.properties[0],
+      name: 'Offline Name',
+      syncState: 'queued' as const,
+      updatedAt: new Date().toISOString(),
+    }
+    await saveLocalEntity({ type: 'property', value: property })
+    const queued = (await db.outbox.where('entityId').equals(property.id).first())!
+    await db.outbox.update(queued.id, {
+      conflict: {
+        entityType: 'property',
+        entityId: property.id,
+        revision: 3,
+        deleted: false,
+        payload: { ...property, name: 'Server Name' },
+        updatedAt: new Date().toISOString(),
+        author: 'Field Two',
+      },
+    })
+
+    expect((await loadDashboard()).conflicts).toEqual([
+      expect.objectContaining({
+        id: queued.id,
+        conflict: expect.objectContaining({ author: 'Field Two' }),
+      }),
+    ])
   })
 })

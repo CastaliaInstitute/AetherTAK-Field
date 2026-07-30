@@ -6,32 +6,116 @@ client and inside Capacitor shells for iOS and Android.
 
 ## Current foundation
 
-- MapLibre field map with crop polygons, LoRaWAN sensor points, and TAK contacts.
+- MapLibre operational map with crop and ecological polygons, labeled LoRaWAN
+  sensor values, offline evidence, anchored alerts, read-only Al insights, safe
+  tap details, and TAK contacts.
 - Property/season crop records and ecological site status.
 - Persisted property, season, crop-field, ecological-site, observation, alert,
   and read-only Al insight records.
+- Shared property, crop-field, and ecological-site boundaries use bounded,
+  range-checked, closed geometry before storage, synchronization, or rendering.
 - ChirpStack v4 uplink normalization with LoRaWAN radio metadata.
+- Publisher-managed ChirpStack readings and read-only Al insights delivered
+  through the ordered field change feed and refreshed every 30 seconds while
+  connected, without granting mobile clients mutation rights.
 - Offline map-region planning, Cache Storage downloads, and a cache-first
-  MapLibre raster protocol for authorized tile sources.
-- Durable geotagged photo and video observations using native Camera,
-  Geolocation, Filesystem, SHA-256 photo integrity, and an atomic sync outbox.
-- IndexedDB field records and durable mutation outbox for offline sync.
+  MapLibre raster protocol for authorized tile sources, with a 100 MiB
+  free-space reserve, recoverable quota-exhaustion handling, and startup/resume
+  reconciliation when the OS evicts cached tiles.
+- Credential-free offline-map manifests and synthetic cache keys; upgrades
+  rekey legacy cached responses before scrubbing previously persisted network
+  URL templates.
+- Installable web manifest and content-versioned offline application shell with
+  generated 192/512/maskable icons, network-first navigation fallback, and
+  cache rotation that preserves independently managed offline map regions.
+- A self-contained presentation layer using platform-native fonts, with a
+  release gate that rejects remote stylesheets, fonts, and CSS assets.
+- Structured field/ecology observation capture with category, title, notes,
+  geotagged native photo/video, selectable depth output, app-private media,
+  streaming SHA-256 integrity for photo, video, depth, confidence, point-cloud,
+  and model evidence, visible hardware provenance, verified native open/share,
+  and an atomic sync outbox. Camera evidence records capture request/completion
+  and location-fix times plus normalized size, duration, resolution, and
+  format; raw EXIF is intentionally excluded.
+- Cloud/device-transfer backup exclusion for operational databases, evidence,
+  and mission packages; iOS protected-file enforcement; Android no-backup
+  extraction rules; and scoped FileProvider roots for explicit operator shares.
+- Background-only task-switcher privacy shields for the operational map and
+  depth camera on iOS and Android, without preventing controlled foreground
+  screenshots used for physical release evidence.
+- Bidirectional field-record and media synchronization with durable revisions,
+  conflict preservation, paginated cursors, mTLS uploads/downloads, checksum
+  verification, and atomic app-private file hydration.
 - Native plugin contracts for certificate-backed TAK transport and
   capability-detected ARKit LiDAR / ARCore Depth.
 - CoT 2.0 encoding and parsing for PLI, GeoChat, markers, routes, shapes, and
-  emergency events, backed by a durable offline TAK event outbox.
-- Read-only Al field insight surface.
+  emergency events, plus server-hosted mission-package requests and receipts,
+  backed by a durable offline TAK event outbox and activity history.
+- Fail-closed inbound TAK validation before persistence or map rendering,
+  including bounded XML/geometry, declaration rejection, valid event times,
+  renderable coordinates, constrained mission-package metadata, and
+  schema-filtered native contacts.
+- Live native contacts, foreground PLI publishing, addressed GeoChat,
+  tap-to-compose markers/routes/open lines/closed areas, rendered TAK geometry, and explicitly
+  confirmed emergency signaling with cancellation. Live map objects honor CoT
+  stale times on a bounded clock while durable activity remains available for
+  operator history.
+- Recipient-targeted TAK mission-package ZIP exchange with app-private offline
+  staging, authenticated Marti upload/download, explicit inbound approval,
+  byte-count and SHA-256 verification, receipts, and native open/share.
+- Opt-in native background PLI with a visible iOS location indicator or Android
+  location foreground-service notification and an in-app stop control.
+- Single-flight TAK session recovery on native launch, foreground resume,
+  connectivity restoration, and bounded retry, driven by native transport
+  status events so contacts and offline queues resume without an operator tap.
+- Live-expiring, read-only Al field insights with priority ordering, rationale,
+  synchronized ChirpStack source-reading provenance, explicit missing-evidence
+  warnings, and no field, alert, or TAK command authority.
+- Server-authoritative Guardian participant snapshots delivered through the
+  ordered mTLS field change feed, retained for offline safety awareness, and
+  rendered as a prioritized roster plus map markers with source-specific
+  uncertainty. Strict client schemas reject undeclared biometric fields.
+- Server-authoritative Guardian green/yellow/red zone projections with closed,
+  bounded geometry and explicit entry/exit dwell settings, synchronized for
+  offline use and rendered beneath participant uncertainty on the property map.
+- Durable Guardian check-in, acknowledgement, and reasoned-resolution actions
+  with stable UUID idempotency keys, offline retry/discard controls, fixed
+  native API routes, and certificate-authenticated delivery. Alert projections
+  remain server-authoritative and distinguish acknowledgement from resolution.
+- An authenticated Field identity probe displays the exact client-certificate
+  common name and effective publisher/Guardian roles without exposing
+  certificate bytes or private-key material; privacy-safe readiness evidence
+  records only whether the required Guardian role was verified.
+- Versioned, privacy-safe physical-device readiness reports with native
+  app/build, hardware, TAK, certificate-authenticated Aether Field API health,
+  depth, sync, offline-map, and media-integrity evidence export through the
+  platform share sheet.
+- Durable per-device release-validation sessions for enrollment renewal,
+  offline recovery, camera/video integrity, depth accuracy and artifacts,
+  platform fallback, screen-lock tracking, permission loss, airplane mode, and
+  low-storage behavior.
+- Durable per-device iTAK/ATAK physical-test sessions with bidirectional
+  capability results, exact build/source traceability, controlled screen/log
+  references, and privacy-bounded JSON export.
+- A fail-closed private evidence-bundle verifier that binds beta distribution
+  to the exact version, build, commit, physical platform/depth coverage, and
+  complete released-client interoperability results.
 
-The browser provides a safe preview. Certificate enrollment, CoT transport, and
-depth capture are intentionally native-only so private key material does not
-cross the JavaScript bridge.
+The browser provides a safe preview with clearly synthetic demonstration data.
+Fresh native installations start with an empty field database and display only
+locally created or server-synchronized operational records. Certificate
+enrollment, CoT transport, and depth capture are intentionally native-only so
+private key material does not cross the JavaScript bridge.
 
-The checked-in Swift and Kotlin native bridge classes currently provide real
-device capability detection. Swift and Kotlin TAK bridges now import the issued
+The checked-in Swift and Kotlin native bridge classes provide real device
+capability detection and guided depth capture. Swift and Kotlin TAK bridges import the issued
 data-package format directly, keep PKCS#12 passphrases native-only, store client
 identities in Keychain/Android KeyStore, pin the issued CA, require TLS 1.2 or
 newer, verify the server identity, stream CoT bidirectionally, and maintain live
-contacts. ARKit and ARCore depth-capture sessions remain an implementation gate.
+contacts. Native field API clients reuse that identity for verified streaming
+media transfers. ARKit exports depth, confidence, point clouds, measurements,
+and supported meshes; ARCore exports depth, confidence, point clouds,
+measurements, and bounded sampled depth-surface OBJ models.
 
 ## Development
 
@@ -73,12 +157,23 @@ npm run cap:sync
 npm run android
 ```
 
-The production native implementations must provide the
-`AetherTakTransport` and `AetherDepthScanner` Capacitor plugins described in
+The native implementations provide the `AetherTakTransport`,
+`AetherDepthScanner`, and `AetherMediaIntegrity` Capacitor plugins described in
 [docs/native-plugins.md](docs/native-plugins.md).
 
 Offline map source requirements and remaining runtime integration gates are in
 [docs/offline-maps.md](docs/offline-maps.md).
+
+Secret-gated TestFlight and Google Play internal-testing setup is documented in
+[docs/beta-distribution.md](docs/beta-distribution.md).
+
+The physical-device execution matrix and controlled-evidence rules are in
+[docs/physical-release-validation.md](docs/physical-release-validation.md).
+
+The engineering baseline for the Castalia Guardian people-safety subsystem,
+including wearable constraints, protobuf, BLE GATT, CoT detail, PostGIS schema,
+APIs, deployment, privacy, and acceptance criteria, is in
+[docs/castalia-guardian-architecture.md](docs/castalia-guardian-architecture.md).
 
 ## Server endpoints
 

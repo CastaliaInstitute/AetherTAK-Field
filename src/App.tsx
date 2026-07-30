@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { App as CapacitorApp } from '@capacitor/app'
 import {
   AlertTriangle,
   Camera,
@@ -6,33 +7,103 @@ import {
   Download,
   Leaf,
   Map,
-  MessageCircle,
-  Radio,
-  ScanLine,
-  Sprout,
   Users,
-  Video,
   Wifi,
   WifiOff,
 } from 'lucide-react'
+import { CapturePanel } from './components/CapturePanel'
+import { AlInsightsPanel } from './components/AlInsightsPanel'
+import { DeviceReadinessPanel } from './components/DeviceReadinessPanel'
+import { FieldIdentityPanel } from './components/FieldIdentityPanel'
+import { InteroperabilityEvidencePanel } from './components/InteroperabilityEvidencePanel'
+import { PhysicalReleaseEvidencePanel } from './components/PhysicalReleaseEvidencePanel'
 import { FieldMap } from './components/FieldMap'
+import { FieldRecords } from './components/FieldRecords'
+import { GuardianRoster } from './components/GuardianRoster'
+import { GuardianAlertQueue } from './components/GuardianAlertQueue'
+import { OfflineMapManager } from './components/OfflineMapManager'
+import { SensorMonitor } from './components/SensorMonitor'
+import {
+  TakMapComposer,
+  TakTrackingControl,
+  TakTeamPanel,
+} from './components/TakCollaboration'
 import { demoSnapshot } from './domain/seed'
-import type { DepthCapability, TakConnectionState } from './domain/models'
+import { useDashboard } from './data/useDashboard'
+import type {
+  Coordinate,
+  DepthCapability,
+  TakConnectionState,
+  TakContact,
+} from './domain/models'
 import {
   captureObservationPhoto,
   captureObservationVideo,
+  type ObservationCaptureInput,
 } from './media/observationCapture'
-import { depthScanner } from './platform/depth'
-import { takTransport } from './platform/tak'
 import {
-  createOfflineMapRegion,
-  downloadOfflineMapRegion,
-} from './maps/offlineRegions'
+  captureDepthObservation,
+  type DepthScanMode,
+} from './media/depthObservation'
+import { depthScanner } from './platform/depth'
+import {
+  takTransport,
+  type BackgroundTrackingStatus,
+  type TakServerProfile,
+} from './platform/tak'
+import {
+  currentCoordinate,
+  watchCurrentCoordinate,
+} from './platform/capture'
+import { synchronizeFieldData } from './sync/fieldSync'
+import { startSyncScheduler } from './sync/scheduler'
+import {
+  flushTakOutbox,
+  queueTakOperation,
+} from './tak/outbox'
+import {
+  markMissionPackageDownloaded,
+  recentTakActivity,
+  recordInboundCot,
+  type TakActivity,
+} from './tak/activity'
+import {
+  downloadMissionPackage,
+  persistMissionPackage,
+  removePersistedMissionPackage,
+  shareDownloadedMissionPackage,
+} from './tak/missionPackage'
+import type {
+  EmergencyOperation,
+  TakIdentity,
+  TakOperation,
+} from './tak/operations'
 import { activeRasterSource } from './maps/tileSource'
+import { currentTakDeviceMetadata } from './platform/deviceMetadata'
+import {
+  buildSensorChannels,
+  selectLatestSensorReadings,
+} from './domain/sensorMonitoring'
+import {
+  activeAlInsights,
+  nextAlInsightExpiry,
+} from './domain/alInsights'
 import { importTakDataPackage } from './tak/enrollmentImport'
+import { startTakSessionRecovery } from './tak/sessionRecovery'
+import {
+  discardGuardianAction,
+  flushGuardianActions,
+  queueGuardianAction,
+  retryGuardianAction,
+} from './guardian/actions'
 import './App.css'
 
 type Tab = 'map' | 'fields' | 'capture' | 'team'
+type MapDraft = {
+  kind: 'marker' | 'route' | 'shape'
+  closed: boolean | null
+  points: Coordinate[]
+}
 
 const initialDepth: DepthCapability = {
   supported: false,
@@ -43,127 +114,533 @@ const initialDepth: DepthCapability = {
   reason: 'Checking device…',
 }
 
-function relativeTime(value: string) {
-  const minutes = Math.max(
-    0,
-    Math.round((Date.now() - new Date(value).getTime()) / 60_000),
-  )
-  return minutes < 1 ? 'now' : `${minutes}m ago`
+const initialBackgroundTracking: BackgroundTrackingStatus = {
+  supported: false,
+  enabled: false,
+  detail: 'Checking native tracking capability…',
+}
+
+const zeroCoordinate: Coordinate = {
+  latitude: 0,
+  longitude: 0,
+  altitudeMeters: null,
+  horizontalAccuracyMeters: null,
+  verticalAccuracyMeters: null,
+  headingDegrees: null,
 }
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('map')
   const [connection, setConnection] =
     useState<TakConnectionState>('disconnected')
+  const [profile, setProfile] = useState<TakServerProfile | null>(null)
+  const [contacts, setContacts] = useState<TakContact[]>(
+    takTransport.isNative() ? [] : demoSnapshot.contacts,
+  )
+  const [takActivity, setTakActivity] = useState<TakActivity[]>([])
+  const [mapDraft, setMapDraft] = useState<MapDraft | null>(null)
   const [depth, setDepth] = useState<DepthCapability>(initialDepth)
+  const [backgroundTracking, setBackgroundTracking] =
+    useState<BackgroundTrackingStatus>(initialBackgroundTracking)
+  const [trackingBusy, setTrackingBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [offlineMapState, setOfflineMapState] = useState<
-    'idle' | 'downloading' | 'ready'
-  >('idle')
+  const [monitoringNow, setMonitoringNow] = useState(() => new Date())
   const enrollmentInput = useRef<HTMLInputElement>(null)
   const {
+    data: dashboard,
+    loading: dashboardLoading,
+    error: dashboardError,
+  } = useDashboard()
+  const {
     properties,
-    seasons,
     fields,
     ecologicalSites,
     readings,
+    observations,
     alerts,
     insights,
-    contacts,
-  } = demoSnapshot
+    guardianParticipants,
+    guardianAlerts,
+    guardianZones,
+    guardianActions,
+    offlineMapRegions,
+  } = dashboard
 
   useEffect(() => {
-    void takTransport.status().then((status) => setConnection(status.state))
     void depthScanner.capability().then(setDepth)
+    void takTransport.backgroundTrackingStatus().then(setBackgroundTracking)
+    void recentTakActivity().then(setTakActivity)
   }, [])
+
+  useEffect(() => {
+    if (!takTransport.isNative()) {
+      void takTransport.status().then((status) => {
+        setConnection(status.state)
+        setProfile(status.profile)
+      })
+      return
+    }
+    return startTakSessionRecovery({
+      status: () => takTransport.status(),
+      connect: (profileId) => takTransport.connect(profileId),
+      onStatus: (status) => {
+        setConnection(status.state)
+        setProfile(status.profile)
+        if (status.state === 'not_enrolled') setContacts([])
+      },
+      isOnline: () => navigator.onLine,
+      setInterval: (callback, intervalMs) =>
+        window.setInterval(callback, intervalMs),
+      clearInterval: (id) => window.clearInterval(id),
+      addOnlineListener: (callback) =>
+        window.addEventListener('online', callback),
+      removeOnlineListener: (callback) =>
+        window.removeEventListener('online', callback),
+      addResumeListener: async (callback) =>
+        CapacitorApp.addListener('appStateChange', ({ isActive }) =>
+          callback(isActive),
+        ),
+      addStatusListener: (callback) =>
+        takTransport.onStatusChange(callback),
+    })
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => setMonitoringNow(new Date())
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    const timer = window.setInterval(
+      refresh,
+      60_000,
+    )
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!takTransport.isNative()) return
+    let disposed = false
+    const refresh = async () => {
+      const status = await takTransport.backgroundTrackingStatus()
+      if (!disposed) setBackgroundTracking(status)
+    }
+    const timer = window.setInterval(() => void refresh(), 5_000)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!takTransport.isNative() || connection !== 'connected') return
+    let cancelled = false
+    const refreshContacts = async () => {
+      const next = await takTransport.contacts()
+      if (!cancelled) setContacts(next)
+    }
+    void refreshContacts()
+    const timer = window.setInterval(() => void refreshContacts(), 5_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [connection])
+
+  useEffect(() => {
+    let disposed = false
+    let remove: (() => Promise<void>) | undefined
+    void takTransport.onCotEvent((xml) => {
+      void recordInboundCot(xml)
+        .then(() => recentTakActivity())
+        .then((items) => {
+          if (!disposed) setTakActivity(items)
+        })
+        .catch(() => undefined)
+    }).then((handle) => {
+      if (!handle) return
+      if (disposed) {
+        void handle.remove()
+      } else {
+        remove = handle.remove
+      }
+    })
+    return () => {
+      disposed = true
+      if (remove) void remove()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (connection !== 'connected' || !takTransport.isNative()) return
+    return startSyncScheduler(() =>
+      Promise.allSettled([
+        flushTakOutbox(),
+        flushGuardianActions(),
+        synchronizeFieldData(),
+      ]),
+    )
+  }, [connection])
 
   const averageHealth = useMemo(() => {
     const scored = fields.flatMap((field) =>
       field.healthScore === null ? [] : [field.healthScore],
     )
-    return Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length)
+    return scored.length
+      ? Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length)
+      : 0
   }, [fields])
+  const sensorChannels = useMemo(
+    () => buildSensorChannels(readings, monitoringNow),
+    [monitoringNow, readings],
+  )
+  const liveSensorCount = sensorChannels.filter(
+    (channel) => channel.freshness === 'live',
+  ).length
+  const latestSensorReadings = useMemo(
+    () => selectLatestSensorReadings(readings),
+    [readings],
+  )
+  const liveInsights = useMemo(
+    () => activeAlInsights(insights, monitoringNow),
+    [insights, monitoringNow],
+  )
 
-  async function takePhoto() {
-    setNotice('Opening camera and acquiring a precise location…')
-    try {
-      const capture = await captureObservationPhoto({
-        fieldId: fields[0]?.id ?? null,
-        siteId: null,
-        category: 'crop',
-        title: 'Field photo',
-        notes: 'Captured in AetherTAK Field.',
-      })
+  useEffect(() => {
+    const expiresAt = nextAlInsightExpiry(insights, monitoringNow)
+    if (expiresAt === null) return
+    const delay = Math.min(
+      Math.max(0, expiresAt - Date.now() + 25),
+      2_147_483_647,
+    )
+    const timer = window.setTimeout(() => setMonitoringNow(new Date()), delay)
+    return () => window.clearTimeout(timer)
+  }, [insights, monitoringNow])
+
+  const identity = useMemo<TakIdentity>(() => ({
+    uid: profile ? `AETHER-${profile.id}` : 'AETHER-FIELD-PREVIEW',
+    callsign: profile?.callsign ?? 'Field Preview',
+    team: profile?.team ?? 'Green',
+    role: 'Team Member',
+  }), [profile])
+
+  useEffect(() => {
+    if (
+      connection !== 'connected' ||
+      !takTransport.isNative() ||
+      backgroundTracking.enabled
+    ) return
+    let disposed = false
+    let publishing = false
+    let lastPublishedAt = 0
+    let stop: (() => Promise<void>) | undefined
+    void watchCurrentCoordinate((coordinate) => {
+      const now = Date.now()
+      if (
+        disposed ||
+        publishing ||
+        now - lastPublishedAt < 15_000
+      ) return
+      publishing = true
+      lastPublishedAt = now
+      void currentTakDeviceMetadata()
+        .catch(() => undefined)
+        .then((device) =>
+          queueTakOperation({
+            kind: 'position',
+            uid: identity.uid,
+            identity,
+            coordinate,
+            device,
+            createdAt: new Date(now).toISOString(),
+            staleSeconds: 45,
+          }),
+        )
+        .then(() => flushTakOutbox())
+        .then(() => recentTakActivity())
+        .then((items) => {
+          if (!disposed) setTakActivity(items)
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          publishing = false
+        })
+    }).then((cleanup) => {
+      if (disposed) {
+        void cleanup()
+      } else {
+        stop = cleanup
+      }
+    }).catch(() => undefined)
+    return () => {
+      disposed = true
+      if (stop) void stop()
+    }
+  }, [backgroundTracking.enabled, connection, identity])
+
+  async function refreshTakActivity() {
+    setTakActivity(await recentTakActivity())
+  }
+
+  async function dispatchTakOperation(operation: TakOperation) {
+    await queueTakOperation(operation)
+    await refreshTakActivity()
+    if (connection === 'connected' && navigator.onLine) {
+      const result = await flushTakOutbox()
+      await refreshTakActivity()
       setNotice(
-        `Observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
+        result.failed
+          ? `TAK event retained offline after a delivery error.`
+          : `${result.sent} TAK event${result.sent === 1 ? '' : 's'} delivered.`,
       )
-    } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : 'Camera capture was cancelled.',
-      )
+    } else {
+      setNotice('TAK event queued offline and will send after reconnection.')
     }
   }
 
-  async function recordVideo() {
-    setNotice('Opening video camera and acquiring a precise location…')
+  function addDraftPoint(coordinate: Coordinate) {
+    setMapDraft((current) => {
+      if (!current) return null
+      return {
+        ...current,
+        points:
+          current.kind === 'marker'
+            ? [coordinate]
+            : [...current.points, coordinate].slice(0, 100),
+      }
+    })
+  }
+
+  async function sendMapDraft(title: string, remarks: string) {
+    if (!mapDraft) return
+    const createdAt = new Date().toISOString()
+    const uid = `AetherTAK-Field.${mapDraft.kind}.${crypto.randomUUID()}`
+    let operation: TakOperation
+    if (mapDraft.kind === 'marker') {
+      operation = {
+        kind: 'marker',
+        uid,
+        callsign: title,
+        coordinate: mapDraft.points[0],
+        remarks: remarks || undefined,
+        cotType: 'a-u-G',
+        createdAt,
+      }
+    } else if (mapDraft.kind === 'route') {
+      operation = {
+        kind: 'route',
+        uid,
+        title,
+        colorArgb: 0xff71d4d1 | 0,
+        points: mapDraft.points,
+        createdAt,
+      }
+    } else {
+      operation = {
+        kind: 'shape',
+        uid,
+        title,
+        colorArgb: 0xffefb75e | 0,
+        closed: mapDraft.closed ?? true,
+        points: mapDraft.points,
+        createdAt,
+      }
+    }
+    await dispatchTakOperation(operation)
+    setMapDraft(null)
+  }
+
+  async function sendChat(contact: TakContact, message: string) {
+    await dispatchTakOperation({
+      kind: 'chat',
+      uid: `GeoChat.${identity.uid}.${contact.uid}.${crypto.randomUUID()}`,
+      sender: identity,
+      recipientUid: contact.uid,
+      conversationId: contact.uid,
+      conversationName: contact.callsign,
+      message,
+      createdAt: new Date().toISOString(),
+    })
+  }
+
+  async function sendMissionPackage(contact: TakContact, file: File) {
+    const persisted = await persistMissionPackage(file)
     try {
-      const capture = await captureObservationVideo({
-        fieldId: fields[0]?.id ?? null,
-        siteId: null,
-        category: 'crop',
-        title: 'Field video',
-        notes: 'Recorded in AetherTAK Field.',
+      const coordinate = await currentCoordinate().catch(() => zeroCoordinate)
+      await dispatchTakOperation({
+        kind: 'missionPackage',
+        uid: `AetherTAK-Field.package.${crypto.randomUUID()}`,
+        sender: identity,
+        recipientUid: contact.uid,
+        recipientCallsign: contact.callsign,
+        transferName: file.name.replace(/\.zip$/i, '').slice(0, 80),
+        fileName: persisted.fileName,
+        localUri: persisted.localUri,
+        storagePath: persisted.storagePath,
+        coordinate,
+        ackUid: crypto.randomUUID(),
+        upload: null,
+        createdAt: new Date().toISOString(),
+        staleSeconds: 10,
       })
-      setNotice(
-        `Video observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
-      )
     } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : 'Video recording was cancelled.',
-      )
+      await removePersistedMissionPackage(persisted.storagePath)
+        .catch(() => undefined)
+      throw error
     }
   }
 
-  async function cachePropertyMap() {
-    if (!activeRasterSource.allowOfflineDownload) {
-      setNotice(
-        'Offline download is disabled for the preview basemap. Configure an authorized tile source first.',
+  async function receiveMissionPackage(item: TakActivity) {
+    const transfer = item.fileTransfer
+    if (!transfer || transfer.mode !== 'request') {
+      throw new Error('This TAK event is not a mission-package request.')
+    }
+    const coordinate = await currentCoordinate().catch(() => zeroCoordinate)
+    try {
+      const downloaded = await downloadMissionPackage(item)
+      await markMissionPackageDownloaded(item.id, downloaded.localUri)
+      await refreshTakActivity()
+      if (transfer.ackUid) {
+        await dispatchTakOperation({
+          kind: 'missionPackageAck',
+          uid: `AetherTAK-Field.package-ack.${crypto.randomUUID()}`,
+          sender: identity,
+          recipientCallsign: transfer.senderCallsign,
+          coordinate,
+          ackUid: transfer.ackUid,
+          transferName: transfer.transferName,
+          sha256: transfer.sha256 ?? downloaded.sha256,
+          sizeBytes: transfer.sizeBytes,
+          success: true,
+          reason: 'Transfer complete',
+          createdAt: new Date().toISOString(),
+          staleSeconds: 10,
+        })
+      }
+      setNotice(`Verified ${transfer.transferName} and saved it privately.`)
+    } catch (error) {
+      if (transfer.ackUid) {
+        await dispatchTakOperation({
+          kind: 'missionPackageAck',
+          uid: `AetherTAK-Field.package-nack.${crypto.randomUUID()}`,
+          sender: identity,
+          recipientCallsign: transfer.senderCallsign,
+          coordinate,
+          ackUid: transfer.ackUid,
+          transferName: transfer.transferName,
+          sha256: transfer.sha256 ?? '0'.repeat(64),
+          sizeBytes: transfer.sizeBytes,
+          success: false,
+          reason: 'Download or integrity verification failed',
+          createdAt: new Date().toISOString(),
+          staleSeconds: 10,
+        }).catch(() => undefined)
+      }
+      throw error
+    }
+  }
+
+  async function sendEmergency(
+    emergencyType: EmergencyOperation['emergencyType'],
+  ) {
+    setNotice('Acquiring a precise location for the emergency signal…')
+    const coordinate = await currentCoordinate()
+    await dispatchTakOperation({
+      kind: 'emergency',
+      uid: `AetherTAK-Field.emergency.${identity.uid}`,
+      identity,
+      coordinate,
+      emergencyType,
+      createdAt: new Date().toISOString(),
+      staleSeconds: emergencyType === 'Cancel' ? 60 : 600,
+    })
+  }
+
+  async function submitGuardianAction(
+    kind: 'check_in' | 'acknowledge' | 'resolve',
+    targetId: string,
+    reason: string | null = null,
+  ) {
+    await queueGuardianAction({ kind, targetId, reason })
+    setNotice('Guardian safety action queued for authenticated delivery.')
+    if (
+      connection === 'connected' &&
+      takTransport.isNative() &&
+      navigator.onLine
+    ) {
+      const result = await flushGuardianActions()
+      if (result.sent > 0) {
+        await synchronizeFieldData()
+        setNotice('Guardian safety action delivered and synchronized.')
+      } else if (result.failed > 0) {
+        setNotice('Guardian action remains queued after a delivery error.')
+      }
+    }
+  }
+
+  async function resolveGuardianAlert(alertId: string, reason: string) {
+    if (
+      !window.confirm(
+        'Resolve this alert as safe? Acknowledgement alone does not resolve a safety condition.',
       )
+    ) return
+    await submitGuardianAction('resolve', alertId, reason)
+  }
+
+  async function retryPendingGuardianAction(actionId: string) {
+    await retryGuardianAction(actionId)
+    const result =
+      connection === 'connected' && navigator.onLine
+        ? await flushGuardianActions()
+        : null
+    if (result?.sent) await synchronizeFieldData()
+    setNotice(
+      result?.sent
+        ? 'Guardian action delivered and synchronized.'
+        : 'Guardian action queued for another delivery attempt.',
+    )
+  }
+
+  async function discardPendingGuardianAction(actionId: string) {
+    if (!window.confirm('Discard this undelivered Guardian safety action?')) {
       return
     }
-    const boundary = properties[0]?.boundary
-    if (!boundary) return
-    const longitudes = boundary.map(([longitude]) => longitude)
-    const latitudes = boundary.map(([, latitude]) => latitude)
-    const region = createOfflineMapRegion({
-      name: properties[0].name,
-      tileSourceId: activeRasterSource.id,
-      tileUrlTemplate: activeRasterSource.urlTemplate,
-      bounds: {
-        west: Math.min(...longitudes),
-        south: Math.min(...latitudes),
-        east: Math.max(...longitudes),
-        north: Math.max(...latitudes),
-      },
-      minZoom: 12,
-      maxZoom: 17,
-    })
-    setOfflineMapState('downloading')
-    setNotice(`Downloading ${region.tileCount} authorized map tiles…`)
-    try {
-      const downloaded = await downloadOfflineMapRegion(region, {
-        maxTiles: 5_000,
-      })
-      setOfflineMapState(downloaded.status === 'ready' ? 'ready' : 'idle')
-      setNotice(
-        `${downloaded.downloadedTiles}/${downloaded.tileCount} map tiles are available offline.`,
-      )
-    } catch (error) {
-      setOfflineMapState('idle')
-      setNotice(
-        error instanceof Error ? error.message : 'Offline map download failed.',
-      )
-    }
+    await discardGuardianAction(actionId)
+    setNotice('Undelivered Guardian action discarded.')
+  }
+
+  async function takePhoto(input: ObservationCaptureInput) {
+    const capture = await captureObservationPhoto(input)
+    setNotice(
+      `Observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
+    )
+  }
+
+  async function recordVideo(input: ObservationCaptureInput) {
+    const capture = await captureObservationVideo(input)
+    setNotice(
+      `Video observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
+    )
+  }
+
+  async function captureDepth(
+    input: ObservationCaptureInput,
+    mode: DepthScanMode,
+  ) {
+    const captured = await captureDepthObservation(input, mode)
+    const median = captured.scan.measurements.find(
+      (measurement) => measurement.label === 'Median range',
+    )
+    setNotice(
+      `${captured.media.length} depth artifacts queued offline${
+        median ? ` · median range ${median.value.toFixed(2)} m` : ''
+      }.`,
+    )
   }
 
   async function enrollTak(file: File | undefined) {
@@ -174,12 +651,63 @@ export default function App() {
       setNotice(`Enrolled ${profile.callsign} with ${profile.name}.`)
       const status = await takTransport.connect(profile.id)
       setConnection(status.state)
+      setProfile(status.profile)
     } catch (error) {
       setNotice(
         error instanceof Error ? error.message : 'TAK enrollment failed.',
       )
     } finally {
       if (enrollmentInput.current) enrollmentInput.current.value = ''
+    }
+  }
+
+  async function removeTakEnrollment() {
+    if (
+      !window.confirm(
+        'Remove this TAK certificate enrollment and its private identity from this device?',
+      )
+    ) return
+    try {
+      await takTransport.removeEnrollment()
+      setConnection('not_enrolled')
+      setProfile(null)
+      setContacts([])
+      setBackgroundTracking({
+        supported: true,
+        enabled: false,
+        detail: 'Background team position is off.',
+      })
+      setNotice('TAK enrollment and device credentials were removed.')
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : 'TAK enrollment removal failed.',
+      )
+    }
+  }
+
+  async function toggleBackgroundTracking() {
+    setTrackingBusy(true)
+    try {
+      const next = await takTransport.setBackgroundTracking(
+        !backgroundTracking.enabled,
+      )
+      setBackgroundTracking(next)
+      setNotice(
+        next.enabled
+          ? 'Background team location is active. Use the system indicator or this control to stop sharing.'
+          : 'Background team location stopped.',
+      )
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : 'Background team tracking could not be changed.',
+      )
+      setBackgroundTracking(await takTransport.backgroundTrackingStatus())
+    } finally {
+      setTrackingBusy(false)
     }
   }
 
@@ -194,7 +722,10 @@ export default function App() {
           className={`connection ${connection}`}
           type="button"
           aria-label={`TAK status: ${connection}`}
-          onClick={() => void takTransport.connect().then((value) => setConnection(value.state))}
+          onClick={() => void takTransport.connect().then((value) => {
+            setConnection(value.state)
+            setProfile(value.profile)
+          })}
         >
           {connection === 'connected' ? <Wifi size={17} /> : <WifiOff size={17} />}
           <span>{connection === 'connected' ? 'TAK live' : 'TAK preview'}</span>
@@ -203,29 +734,82 @@ export default function App() {
 
       {tab === 'map' && (
         <>
+          {dashboardLoading && (
+            <p className="dashboard-state" role="status">Loading offline field records…</p>
+          )}
+          {dashboardError && (
+            <p className="dashboard-state error" role="alert">{dashboardError}</p>
+          )}
           <section className="status-strip" aria-label="Field status">
             <div><strong>{fields.length + ecologicalSites.length}</strong><span>Active sites</span></div>
-            <div><strong>{readings.length}</strong><span>Sensors live</span></div>
+            <div><strong>{liveSensorCount}</strong><span>Sensors live</span></div>
             <div><strong>{averageHealth}%</strong><span>Field health</span></div>
           </section>
 
-          <button
-            className={`offline-map-button ${offlineMapState}`}
-            type="button"
-            disabled={offlineMapState === 'downloading'}
-            onClick={() => void cachePropertyMap()}
-          >
-            <Download size={14} />
-            {offlineMapState === 'ready'
-              ? 'Property map available offline'
-              : offlineMapState === 'downloading'
-                ? 'Downloading property map…'
-                : activeRasterSource.allowOfflineDownload
-                  ? 'Download property map'
-                  : 'Preview basemap · online'}
-          </button>
+          <OfflineMapManager
+            properties={properties}
+            regions={offlineMapRegions}
+            source={activeRasterSource}
+            onNotice={setNotice}
+          />
 
-          <FieldMap fields={fields} readings={readings} contacts={contacts} />
+          <FieldMap
+            fields={fields}
+            ecologicalSites={ecologicalSites}
+            readings={latestSensorReadings}
+            observations={observations}
+            alerts={alerts}
+            insights={liveInsights}
+        guardianParticipants={guardianParticipants}
+        guardianZones={guardianZones}
+            contacts={contacts}
+            activity={takActivity}
+            draft={mapDraft}
+            onMapPress={mapDraft ? addDraftPoint : null}
+          />
+          <GuardianRoster
+            participants={guardianParticipants}
+            now={monitoringNow}
+          />
+          <GuardianAlertQueue
+            alerts={guardianAlerts}
+            participants={guardianParticipants}
+            pendingActions={guardianActions}
+            actionsEnabled={takTransport.isNative()}
+            onCheckIn={(participantId) =>
+              void submitGuardianAction('check_in', participantId)}
+            onAcknowledge={(alertId) =>
+              void submitGuardianAction('acknowledge', alertId)}
+            onResolve={(alertId, reason) =>
+              void resolveGuardianAlert(alertId, reason)}
+            onRetry={(actionId) =>
+              void retryPendingGuardianAction(actionId)}
+            onDiscard={(actionId) =>
+              void discardPendingGuardianAction(actionId)}
+          />
+          <TakMapComposer
+            draft={
+              mapDraft
+                ? {
+                    kind: mapDraft.kind,
+                    closed: mapDraft.closed,
+                    pointCount: mapDraft.points.length,
+                  }
+                : null
+            }
+            onStart={({ kind, closed }) =>
+              setMapDraft({ kind, closed, points: [] })
+            }
+            onUndo={() =>
+              setMapDraft((current) =>
+                current
+                  ? { ...current, points: current.points.slice(0, -1) }
+                  : null,
+              )
+            }
+            onCancel={() => setMapDraft(null)}
+            onSubmit={sendMapDraft}
+          />
 
           <section className="section-block">
             <div className="section-title">
@@ -249,22 +833,7 @@ export default function App() {
             </div>
           </section>
 
-          <section className="sensor-panel">
-            <div className="sensor-heading">
-              <Radio size={18} />
-              <div><p className="eyebrow">CHIRPSTACK</p><h2>Ground truth</h2></div>
-              <span className="live-dot">Live</span>
-            </div>
-            {readings.map((reading) => (
-              <div className="reading" key={reading.id}>
-                <div>
-                  <strong>{reading.label}</strong>
-                  <span>{relativeTime(reading.recordedAt)} · {reading.quality}</span>
-                </div>
-                <p>{reading.value}<small>{reading.unit}</small></p>
-              </div>
-            ))}
-          </section>
+          <SensorMonitor readings={readings} now={monitoringNow} />
 
           {alerts.map((alert) => (
             <aside className={`alert ${alert.severity}`} key={alert.id}>
@@ -274,68 +843,27 @@ export default function App() {
             </aside>
           ))}
 
-          <aside className="al-card">
-            <div className="al-mark">Al</div>
-            <div>
-              <p className="eyebrow">READ-ONLY FIELD INSIGHT</p>
-              <strong>{insights[0]?.title ?? 'No current insight'}</strong>
-              <p>{insights[0]?.summary ?? 'Al insights will appear when fresh field evidence is available.'}</p>
-            </div>
-          </aside>
+          <AlInsightsPanel
+            insights={liveInsights}
+            readings={readings}
+            now={monitoringNow}
+          />
         </>
       )}
 
       {tab === 'fields' && (
-        <section className="placeholder-page">
-          <Sprout size={30} />
-          <p className="eyebrow">PROPERTIES · SEASONS · ECOLOGY</p>
-          <h2>Field records</h2>
-          <article className="record-row">
-            <span>🏡</span>
-            <div>
-              <strong>{properties[0]?.name}</strong>
-              <p>{seasons.find((season) => season.status === 'active')?.name} · active season</p>
-            </div>
-            <ChevronRight />
-          </article>
-          {fields.map((field) => (
-            <article className="record-row" key={field.id}>
-              <span>{field.cropIcon}</span>
-              <div><strong>{field.name}</strong><p>{field.seasonLabel} · {field.crop}</p></div>
-              <ChevronRight />
-            </article>
-          ))}
-          {ecologicalSites.map((site) => (
-            <article className="record-row" key={site.id}>
-              <span>🌿</span>
-              <div>
-                <strong>{site.name}</strong>
-                <p>{site.siteType} · {site.conditionScore ?? '—'} condition</p>
-              </div>
-              <ChevronRight />
-            </article>
-          ))}
-        </section>
+        <FieldRecords data={dashboard} onNotice={setNotice} />
       )}
 
       {tab === 'capture' && (
-        <section className="placeholder-page capture-page">
-          <Camera size={30} />
-          <p className="eyebrow">OFFLINE-FIRST EVIDENCE</p>
-          <h2>Capture an observation</h2>
-          <p>Photos retain coordinates, accuracy, time, field metadata, and sync state.</p>
-          <button className="primary-action" type="button" onClick={() => void takePhoto()}>
-            <Camera size={19} /> Take geotagged photo
-          </button>
-          <button className="secondary-action" type="button" onClick={() => void recordVideo()}>
-            <Video size={19} /> Record geotagged video
-          </button>
-          <button className="secondary-action" type="button" disabled={!depth.supported}>
-            <ScanLine size={19} />
-            {depth.supported ? `Start ${depth.provider} scan` : 'Depth unavailable on this device'}
-          </button>
-          {depth.reason && <small className="capability-note">{depth.reason}</small>}
-        </section>
+        <CapturePanel
+          fields={fields}
+          ecologicalSites={ecologicalSites}
+          depth={depth}
+          onPhoto={takePhoto}
+          onVideo={recordVideo}
+          onDepth={captureDepth}
+        />
       )}
 
       {tab === 'team' && (
@@ -343,7 +871,7 @@ export default function App() {
           <Users size={30} />
           <p className="eyebrow">TAK NETWORK</p>
           <h2>Team contacts</h2>
-          {connection === 'not_enrolled' || connection === 'disconnected' ? (
+          {takTransport.isNative() ? (
             <>
               <input
                 ref={enrollmentInput}
@@ -357,19 +885,54 @@ export default function App() {
               <button
                 className="primary-action enrollment-action"
                 type="button"
+                disabled={connection === 'connecting'}
                 onClick={() => enrollmentInput.current?.click()}
               >
-                <Download size={18} /> Import TAK server package
+                <Download size={18} />
+                {profile
+                  ? 'Replace TAK server package'
+                  : 'Import TAK server package'}
               </button>
             </>
           ) : null}
-          {contacts.map((contact) => (
-            <article className="record-row" key={contact.uid}>
-              <span className="team-avatar">{contact.callsign.slice(0, 2)}</span>
-              <div><strong>{contact.callsign}</strong><p>{contact.team ?? 'No team'} · active</p></div>
-              <MessageCircle size={19} />
-            </article>
-          ))}
+          {takTransport.isNative() && profile && (
+            <button
+              className="remove-enrollment-action"
+              type="button"
+              onClick={() => void removeTakEnrollment()}
+            >
+              Remove certificate enrollment
+            </button>
+          )}
+          <TakTrackingControl
+            status={backgroundTracking}
+            busy={trackingBusy}
+            connected={connection === 'connected'}
+            onToggle={toggleBackgroundTracking}
+          />
+          {takTransport.isNative() && profile && <FieldIdentityPanel />}
+          <DeviceReadinessPanel contactCount={contacts.length} />
+          <PhysicalReleaseEvidencePanel />
+          <InteroperabilityEvidencePanel
+            defaultSenderCallsign={identity.callsign}
+          />
+          <TakTeamPanel
+            callsign={identity.callsign}
+            contacts={contacts}
+            activity={takActivity}
+            queuedCount={
+              takActivity.filter(
+                (item) =>
+                  item.deliveryStatus === 'queued' ||
+                  item.deliveryStatus === 'failed',
+              ).length
+            }
+            onSendChat={sendChat}
+            onSendMissionPackage={sendMissionPackage}
+            onDownloadMissionPackage={receiveMissionPackage}
+            onShareMissionPackage={shareDownloadedMissionPackage}
+            onSendEmergency={sendEmergency}
+          />
         </section>
       )}
 

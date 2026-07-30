@@ -1,6 +1,22 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
+def releaseVersionCode = (System.getenv("AETHER_VERSION_CODE") ?: "1").toInteger()
+def releaseVersionName = System.getenv("AETHER_VERSION_NAME") ?: "1.0"
+def releaseKeystorePath = System.getenv("AETHER_ANDROID_KEYSTORE_PATH")
+def releaseSigningEnabled = [
+    releaseKeystorePath,
+    System.getenv("AETHER_ANDROID_KEYSTORE_PASSWORD"),
+    System.getenv("AETHER_ANDROID_KEY_ALIAS"),
+    System.getenv("AETHER_ANDROID_KEY_PASSWORD"),
+].every { it != null && !it.isBlank() }
+if (releaseVersionCode <= 0) {
+    throw new GradleException("AETHER_VERSION_CODE must be positive.")
+}
+if (!(releaseVersionName ==~ /^[0-9]+(\.[0-9]+){1,2}$/)) {
+    throw new GradleException("AETHER_VERSION_NAME must contain two or three numeric components.")
+}
+
 android {
     namespace = "org.castaliainstitute.aethertak.field"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,8 +24,8 @@ android {
         applicationId "org.castaliainstitute.aethertak.field"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode releaseVersionCode
+        versionName releaseVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -17,8 +33,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    if (releaseSigningEnabled) {
+        signingConfigs {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword System.getenv("AETHER_ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("AETHER_ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("AETHER_ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseSigningEnabled) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -44,6 +73,7 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation 'com.google.ar:core:1.54.0'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
@@ -51,6 +81,17 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+gradle.taskGraph.whenReady { graph ->
+    def requestedRelease = graph.allTasks.any {
+        it.name == "bundleRelease" || it.name == "assembleRelease"
+    }
+    if (requestedRelease && !releaseSigningEnabled) {
+        throw new GradleException(
+            "Release builds require the AETHER_ANDROID_KEYSTORE_* signing environment."
+        )
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')

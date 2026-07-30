@@ -4,6 +4,9 @@ import type {
   DashboardSnapshot,
   EcologicalSite,
   Field,
+  GuardianParticipantState,
+  GuardianAlert,
+  GuardianZone,
   Property,
   Season,
   SensorReading,
@@ -74,6 +77,7 @@ export const demoFields: Field[] = [
       [-104.9968, 39.7425],
     ],
     updatedAt: minutesAgo(4),
+    syncState: 'synced',
   },
   {
     id: 'd590ba20-76fa-46a0-a880-e1b3eb56569c',
@@ -94,6 +98,7 @@ export const demoFields: Field[] = [
       [-104.9917, 39.7418],
     ],
     updatedAt: minutesAgo(12),
+    syncState: 'synced',
   },
 ]
 
@@ -213,6 +218,7 @@ export const demoAlerts: Alert[] = [
     deviceId: 'cs-soil-009',
     createdAt: minutesAgo(18),
     acknowledgedAt: null,
+    syncState: 'synced',
   },
 ]
 
@@ -247,6 +253,81 @@ export const demoContacts: TakContact[] = [
   },
 ]
 
+export const demoGuardianParticipants: GuardianParticipantState[] = [
+  {
+    id: '88be2f51-6e6d-4a0a-85bf-0fa42d25a0de',
+    displayName: 'Participant 7',
+    mode: 'child',
+    team: 'Green',
+    state: 'normal',
+    zone: 'North Market Beds',
+    alertState: 'none',
+    checkIn: 'current',
+    location: {
+      coordinate: {
+        latitude: 39.7412,
+        longitude: -104.9942,
+        altitudeMeters: 1608,
+        horizontalAccuracyMeters: 8,
+        verticalAccuracyMeters: 15,
+        headingDegrees: 184,
+      },
+      source: 'watch_gnss',
+      confidence: 'good',
+      observedAt: minutesAgo(1),
+    },
+    device: {
+      connectivity: 'watch_phone_wifi',
+      lastContactAt: minutesAgo(1),
+      batteryPercent: 72,
+    },
+    updatedAt: minutesAgo(1),
+  },
+]
+
+export const demoGuardianAlerts: GuardianAlert[] = [
+  {
+    id: '2ef8e548-27f6-4faf-9c35-b536b4d30599',
+    participantId: demoGuardianParticipants[0].id,
+    ruleId: 'yellow-zone-entry',
+    severity: 'warning',
+    status: 'active',
+    reasonCode: 'yellow_zone_entry',
+    title: 'Participant entered a caution zone',
+    detail: 'Confirm awareness and continue monitoring.',
+    openedAt: minutesAgo(2),
+    acknowledgedAt: null,
+    resolvedAt: null,
+    resolutionReason: null,
+    updatedAt: minutesAgo(2),
+  },
+]
+
+export const demoGuardianZones: GuardianZone[] = [
+  {
+    id: '46c2a063-38d5-4875-8de6-839b85f3df42',
+    propertyId: demoProperties[0].id,
+    name: 'Property operating area',
+    level: 'green',
+    boundary: demoProperties[0].boundary,
+    enterDwellSeconds: 5,
+    exitDwellSeconds: 20,
+    active: true,
+    updatedAt: minutesAgo(10),
+  },
+  {
+    id: 'ce794c50-0b87-4f77-a412-5220fbaebdf4',
+    propertyId: demoProperties[0].id,
+    name: 'Creek caution area',
+    level: 'yellow',
+    boundary: demoEcologicalSites[0].boundary,
+    enterDwellSeconds: 10,
+    exitDwellSeconds: 30,
+    active: true,
+    updatedAt: minutesAgo(10),
+  },
+]
+
 export const demoSnapshot: DashboardSnapshot = {
   properties: demoProperties,
   seasons: demoSeasons,
@@ -256,5 +337,8 @@ export const demoSnapshot: DashboardSnapshot = {
   observations: [],
   alerts: demoAlerts,
   insights: demoInsights,
+  guardianParticipants: demoGuardianParticipants,
+  guardianAlerts: demoGuardianAlerts,
+  guardianZones: demoGuardianZones,
   contacts: demoContacts,
 }

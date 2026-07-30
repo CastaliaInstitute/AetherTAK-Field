@@ -6,6 +6,8 @@ import {
   captureGeotaggedVideo,
   type GeotaggedMedia,
 } from '../platform/capture'
+import { currentDeviceModel } from '../platform/deviceMetadata'
+import { mediaIntegrity } from '../platform/mediaIntegrity'
 import { db, queueMutation } from '../data/database'
 
 export interface ObservationCaptureInput {
@@ -26,21 +28,12 @@ interface StoredMedia {
 
 export interface ObservationCaptureDependencies {
   capture: () => Promise<GeotaggedMedia>
+  deviceModel: () => Promise<string | null>
   persist: (
     capture: GeotaggedMedia,
     observationId: string,
     mediaId: string,
   ) => Promise<StoredMedia>
-}
-
-function bytesFromBase64(value: string) {
-  const binary = atob(value)
-  const buffer = new ArrayBuffer(binary.length)
-  const bytes = new Uint8Array(buffer)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return buffer
 }
 
 async function sha256(bytes: ArrayBuffer) {
@@ -50,7 +43,7 @@ async function sha256(bytes: ArrayBuffer) {
     .join('')
 }
 
-async function persistMedia(
+export async function persistCapturedMedia(
   capture: GeotaggedMedia,
   observationId: string,
   mediaId: string,
@@ -58,34 +51,42 @@ async function persistMedia(
   const extension = capture.kind === 'video' ? 'mp4' : 'jpg'
   const mimeType = capture.kind === 'video' ? 'video/mp4' : 'image/jpeg'
   const path = `observations/${observationId}/${mediaId}.${extension}`
+  const isNative = Capacitor.isNativePlatform()
   let data: string | Blob
-  let bytes: ArrayBuffer
+  let browserBytes: ArrayBuffer | null = null
 
   if (
     capture.kind === 'video' &&
-    Capacitor.isNativePlatform() &&
+    isNative &&
     capture.media.uri
   ) {
-    return {
-      uri: capture.media.uri,
-      previewUri: capture.media.thumbnail
-        ? `data:image/jpeg;base64,${capture.media.thumbnail}`
-        : null,
-      mimeType,
-      sha256: null,
-      cleanup: async () => {
-        await Filesystem.deleteFile({ path: capture.media.uri! })
-      },
+    const uri = capture.media.uri
+    const cleanup = async () => {
+      await Filesystem.deleteFile({ path: uri })
+    }
+    try {
+      const integrity = await mediaIntegrity.inspect(uri)
+      return {
+        uri,
+        previewUri: capture.media.thumbnail
+          ? `data:image/jpeg;base64,${capture.media.thumbnail}`
+          : null,
+        mimeType,
+        sha256: integrity.sha256,
+        cleanup,
+      }
+    } catch (error) {
+      await cleanup().catch(() => undefined)
+      throw error
     }
   }
 
-  if (Capacitor.isNativePlatform() && capture.media.uri) {
+  if (isNative && capture.media.uri) {
     const source = await Filesystem.readFile({ path: capture.media.uri })
     if (typeof source.data !== 'string') {
       throw new Error('Native camera returned an unsupported media payload.')
     }
     data = source.data
-    bytes = bytesFromBase64(source.data)
   } else if (capture.media.webPath) {
     const response = await fetch(capture.media.webPath)
     if (!response.ok) {
@@ -93,47 +94,71 @@ async function persistMedia(
     }
     const blob = await response.blob()
     data = blob
-    bytes = await blob.arrayBuffer()
+    browserBytes = await blob.arrayBuffer()
   } else {
     throw new Error('The camera did not return readable media.')
   }
 
   const written = await Filesystem.writeFile({
     path,
-    directory: Directory.Data,
+    directory: Directory.LibraryNoCloud,
     data,
     recursive: true,
   })
-  return {
-    uri: written.uri,
-    previewUri:
-      capture.media.webPath ??
-      (capture.media.thumbnail
-        ? `data:image/jpeg;base64,${capture.media.thumbnail}`
-        : written.uri),
-    mimeType,
-    sha256: await sha256(bytes),
-    cleanup: async () => {
-      await Filesystem.deleteFile({ path, directory: Directory.Data })
-    },
+  const cleanup = async () => {
+    await Filesystem.deleteFile({
+      path,
+      directory: Directory.LibraryNoCloud,
+    })
+  }
+  try {
+    let digest: string
+    if (isNative) {
+      digest = (await mediaIntegrity.inspect(written.uri)).sha256
+    } else {
+      if (!browserBytes) {
+        throw new Error('Captured media has no browser byte payload.')
+      }
+      digest = await sha256(browserBytes)
+    }
+    return {
+      uri: written.uri,
+      previewUri: isNative
+        ? written.uri
+        : capture.media.webPath ??
+          (capture.media.thumbnail
+            ? `data:image/jpeg;base64,${capture.media.thumbnail}`
+            : written.uri),
+      mimeType,
+      sha256: digest,
+      cleanup,
+    }
+  } catch (error) {
+    await cleanup().catch(() => undefined)
+    throw error
   }
 }
 
 const photoDependencies: ObservationCaptureDependencies = {
   capture: captureGeotaggedPhoto,
-  persist: persistMedia,
+  deviceModel: currentDeviceModel,
+  persist: persistCapturedMedia,
 }
 
 const videoDependencies: ObservationCaptureDependencies = {
   capture: captureGeotaggedVideo,
-  persist: persistMedia,
+  deviceModel: currentDeviceModel,
+  persist: persistCapturedMedia,
 }
 
 export async function captureObservationMedia(
   input: ObservationCaptureInput,
   dependencies: ObservationCaptureDependencies,
 ) {
-  const captured = await dependencies.capture()
+  const [captured, deviceModel] = await Promise.all([
+    dependencies.capture(),
+    dependencies.deviceModel().catch(() => null),
+  ])
   const observationId = crypto.randomUUID()
   const mediaId = crypto.randomUUID()
   const stored = await dependencies.persist(captured, observationId, mediaId)
@@ -159,15 +184,17 @@ export async function captureObservationMedia(
     mimeType: stored.mimeType,
     coordinate: captured.coordinate,
     capturedAt: captured.capturedAt,
-    deviceModel: null,
+    deviceModel,
     sha256: stored.sha256,
+    cameraCaptureEvidence: captured.cameraCaptureEvidence,
+    depthMetadata: null,
     syncState: 'queued',
   }
 
   try {
     await db.transaction(
       'rw',
-      [db.observations, db.media, db.outbox],
+      [db.observations, db.media, db.outbox, db.syncMetadata],
       async () => {
         await db.observations.add(observation)
         await db.media.add(media)

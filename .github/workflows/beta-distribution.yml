@@ -1,0 +1,364 @@
+name: Beta Distribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to distribute
+        required: true
+        type: choice
+        default: both
+        options:
+          - both
+          - android
+          - ios
+      version_name:
+        description: Release version, for example 0.2.0
+        required: true
+        type: string
+      build_number:
+        description: New positive store build number/version code
+        required: true
+        type: string
+      itak_version:
+        description: Released iTAK version used for this candidate
+        required: true
+        type: string
+      atak_version:
+        description: Released ATAK version used for this candidate
+        required: true
+        type: string
+      tak_server_version:
+        description: AetherTAK/TAK Server version used for validation
+        required: true
+        type: string
+      confirm:
+        description: Type BETA to authorize external beta uploads
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  VITE_AETHER_SOURCE_REVISION: ${{ github.sha }}
+
+concurrency:
+  group: aethertak-field-beta
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    name: Validate release request and evidence
+    runs-on: ubuntu-latest
+    environment: beta-distribution
+    steps:
+      - uses: actions/checkout@v7
+      - name: Require explicit beta authorization
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          ITAK_VERSION: ${{ inputs.itak_version }}
+          ATAK_VERSION: ${{ inputs.atak_version }}
+          TAK_SERVER_VERSION: ${{ inputs.tak_server_version }}
+        run: |
+          test "$GITHUB_REF_NAME" = "main"
+          test "$CONFIRM" = "BETA"
+          [[ "$VERSION_NAME" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]
+          [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          test "$BUILD_NUMBER" -le 2100000000
+          test -n "$ITAK_VERSION"
+          test -n "$ATAK_VERSION"
+          test -n "$TAK_SERVER_VERSION"
+      - name: Verify native and store compliance declarations
+        run: node scripts/store-compliance.mjs
+      - name: Verify private physical release evidence
+        env:
+          RELEASE_EVIDENCE_BUNDLE_BASE64: ${{ secrets.RELEASE_EVIDENCE_BUNDLE_BASE64 }}
+        run: |
+          umask 077
+          test -n "$RELEASE_EVIDENCE_BUNDLE_BASE64"
+          EVIDENCE_ARCHIVE="$RUNNER_TEMP/aethertak-release-evidence.json.gz"
+          EVIDENCE_BUNDLE="$RUNNER_TEMP/aethertak-release-evidence.json"
+          EVIDENCE_MANIFEST="$RUNNER_TEMP/aethertak-release-attestation.json"
+          printf '%s' "$RELEASE_EVIDENCE_BUNDLE_BASE64" | base64 --decode > "$EVIDENCE_ARCHIVE"
+          node scripts/release-evidence.mjs decode \
+            --input "$EVIDENCE_ARCHIVE" \
+            --output "$EVIDENCE_BUNDLE"
+          node scripts/release-evidence.mjs verify \
+            --bundle "$EVIDENCE_BUNDLE" \
+            --version "${{ inputs.version_name }}" \
+            --build "${{ inputs.build_number }}" \
+            --revision "$GITHUB_SHA" \
+            --platform "${{ inputs.platform }}" \
+            --itak-version "${{ inputs.itak_version }}" \
+            --atak-version "${{ inputs.atak_version }}" \
+            --server-version "${{ inputs.tak_server_version }}" \
+            --manifest-out "$EVIDENCE_MANIFEST"
+          sha256sum "$EVIDENCE_MANIFEST" > "$RUNNER_TEMP/aethertak-release-attestation.sha256"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: aethertak-field-release-attestation-${{ inputs.version_name }}-${{ inputs.build_number }}
+          path: |
+            ${{ runner.temp }}/aethertak-release-attestation.json
+            ${{ runner.temp }}/aethertak-release-attestation.sha256
+          if-no-files-found: error
+      - name: Remove private release evidence
+        if: always()
+        run: |
+          rm -f \
+            "$RUNNER_TEMP/aethertak-release-evidence.json.gz" \
+            "$RUNNER_TEMP/aethertak-release-evidence.json"
+
+  android:
+    name: Google Play internal testing
+    if: ${{ inputs.platform == 'both' || inputs.platform == 'android' }}
+    needs: authorize
+    runs-on: ubuntu-latest
+    environment: beta-distribution
+    env:
+      AETHER_VERSION_CODE: ${{ inputs.build_number }}
+      AETHER_VERSION_NAME: ${{ inputs.version_name }}
+      AETHER_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      AETHER_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      AETHER_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+      AETHER_ANDROID_PACKAGE_NAME: org.castaliainstitute.aethertak.field
+      AETHER_ANDROID_BUNDLE_PATH: android/app/build/outputs/bundle/release/app-release.aab
+      AETHER_GOOGLE_PLAY_TRACK: internal
+      AETHER_RELEASE_NAME: AetherTAK Field ${{ inputs.version_name }} (${{ inputs.build_number }})
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: aethertak-field-release-attestation-${{ inputs.version_name }}-${{ inputs.build_number }}
+          path: ${{ runner.temp }}/release-attestation
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Configure Android temporary paths
+        run: |
+          echo "AETHER_ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/aethertak-field-release.jks" >> "$GITHUB_ENV"
+          echo "AETHER_RELEASE_ATTESTATION_PATH=$RUNNER_TEMP/release-attestation/aethertak-release-attestation.json" >> "$GITHUB_ENV"
+          echo "AETHER_ANDROID_PROVENANCE_PATH=$RUNNER_TEMP/aethertak-field-android-provenance.json" >> "$GITHUB_ENV"
+      - name: Require Android distribution secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          test -n "$AETHER_ANDROID_KEYSTORE_PASSWORD"
+          test -n "$AETHER_ANDROID_KEY_ALIAS"
+          test -n "$AETHER_ANDROID_KEY_PASSWORD"
+          test -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
+          ANDROID_KEYSTORE_BASE64="$KEYSTORE_BASE64" \
+            node scripts/beta-credential-preflight.mjs android
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$AETHER_ANDROID_KEYSTORE_PATH"
+      - run: npm ci
+      - run: npm run test:run
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Build signed Android App Bundle
+        working-directory: android
+        run: ./gradlew test bundleRelease
+      - name: Record Android artifact checksum
+        run: sha256sum "$AETHER_ANDROID_BUNDLE_PATH" > "$RUNNER_TEMP/aethertak-field-android.sha256"
+      - name: Attest Android artifact
+        run: |
+          node scripts/release-provenance.mjs \
+            --attestation "$AETHER_RELEASE_ATTESTATION_PATH" \
+            --artifact "$AETHER_ANDROID_BUNDLE_PATH" \
+            --version "${{ inputs.version_name }}" \
+            --build "${{ inputs.build_number }}" \
+            --revision "$GITHUB_SHA" \
+            --platform android \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output "$AETHER_ANDROID_PROVENANCE_PATH"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: aethertak-field-android-${{ inputs.version_name }}-${{ inputs.build_number }}
+          path: |
+            android/app/build/outputs/bundle/release/app-release.aab
+            ${{ runner.temp }}/aethertak-field-android.sha256
+            ${{ runner.temp }}/aethertak-field-android-provenance.json
+          if-no-files-found: error
+      - name: Publish to Google Play internal testing
+        run: node scripts/google-play-publisher.mjs
+      - name: Remove temporary Android signing material
+        if: always()
+        run: |
+          test "$AETHER_ANDROID_KEYSTORE_PATH" = "$RUNNER_TEMP/aethertak-field-release.jks"
+          rm -f "$AETHER_ANDROID_KEYSTORE_PATH"
+
+  ios:
+    name: TestFlight upload
+    if: ${{ inputs.platform == 'both' || inputs.platform == 'ios' }}
+    needs: authorize
+    runs-on: macos-15
+    environment: beta-distribution
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+      APPLE_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: aethertak-field-release-attestation-${{ inputs.version_name }}-${{ inputs.build_number }}
+          path: ${{ runner.temp }}/release-attestation
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Configure Apple temporary paths
+        run: |
+          echo "ARCHIVE_PATH=$RUNNER_TEMP/AetherTAK-Field.xcarchive" >> "$GITHUB_ENV"
+          echo "EXPORT_PATH=$RUNNER_TEMP/AetherTAK-Field-export" >> "$GITHUB_ENV"
+          echo "EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions-Beta.plist" >> "$GITHUB_ENV"
+          echo "API_KEY_DIRECTORY=$RUNNER_TEMP/appstoreconnect-private-keys" >> "$GITHUB_ENV"
+          echo "TEMP_KEYCHAIN_PATH=$RUNNER_TEMP/aethertak-field-signing.keychain-db" >> "$GITHUB_ENV"
+          echo "AETHER_RELEASE_ATTESTATION_PATH=$RUNNER_TEMP/release-attestation/aethertak-release-attestation.json" >> "$GITHUB_ENV"
+          echo "AETHER_IOS_PROVENANCE_PATH=$RUNNER_TEMP/aethertak-field-ios-provenance.json" >> "$GITHUB_ENV"
+      - name: Require Apple distribution secrets
+        run: |
+          test -n "$APPLE_TEAM_ID"
+          test -n "$APP_STORE_CONNECT_KEY_ID"
+          test -n "$APP_STORE_CONNECT_ISSUER_ID"
+          test -n "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64"
+          test -n "$APPLE_DISTRIBUTION_CERTIFICATE_BASE64"
+          test -n "$APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD"
+          node scripts/beta-credential-preflight.mjs ios
+      - name: Install temporary signing identity and API key
+        env:
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/distribution.p12"
+          mkdir -p "$API_KEY_DIRECTORY"
+          printf '%s' "$APPLE_DISTRIBUTION_CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64" | /usr/bin/base64 -D > "$API_KEY_DIRECTORY/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$TEMP_KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$TEMP_KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$TEMP_KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$TEMP_KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$TEMP_KEYCHAIN_PATH"
+          security list-keychains -d user -s "$TEMP_KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          cp ios/ExportOptions-Beta.plist "$EXPORT_OPTIONS_PATH"
+          /usr/libexec/PlistBuddy -c "Set :teamID $APPLE_TEAM_ID" "$EXPORT_OPTIONS_PATH"
+      - run: npm ci
+      - run: npm run test:run
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: Archive signed iOS application
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$API_KEY_DIRECTORY/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="${{ inputs.version_name }}" \
+            CURRENT_PROJECT_VERSION="${{ inputs.build_number }}" \
+            archive
+      - name: Export signed IPA
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist "$EXPORT_OPTIONS_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$API_KEY_DIRECTORY/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+      - name: Locate exported IPA
+        id: ipa
+        run: |
+          IPA_FILES=("$EXPORT_PATH"/*.ipa)
+          test "${#IPA_FILES[@]}" -eq 1
+          IPA_PATH="${IPA_FILES[0]}"
+          test -f "$IPA_PATH"
+          shasum -a 256 "$IPA_PATH" > "$RUNNER_TEMP/aethertak-field-ios.sha256"
+          echo "path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+      - name: Verify exported IPA identity
+        env:
+          IPA_PATH: ${{ steps.ipa.outputs.path }}
+        run: |
+          APP_EXPANSION="$RUNNER_TEMP/verified-ipa"
+          mkdir "$APP_EXPANSION"
+          ditto -x -k "$IPA_PATH" "$APP_EXPANSION"
+          APP_PATHS=("$APP_EXPANSION"/Payload/*.app)
+          test "${#APP_PATHS[@]}" -eq 1
+          APP_PATH="${APP_PATHS[0]}"
+          test -d "$APP_PATH"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "org.castaliainstitute.aethertak.field"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "${{ inputs.version_name }}"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "${{ inputs.build_number }}"
+          codesign --verify --deep --strict "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
+      - name: Attest iOS artifact
+        env:
+          IPA_PATH: ${{ steps.ipa.outputs.path }}
+        run: |
+          node scripts/release-provenance.mjs \
+            --attestation "$AETHER_RELEASE_ATTESTATION_PATH" \
+            --artifact "$IPA_PATH" \
+            --version "${{ inputs.version_name }}" \
+            --build "${{ inputs.build_number }}" \
+            --revision "$GITHUB_SHA" \
+            --platform ios \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output "$AETHER_IOS_PROVENANCE_PATH"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: aethertak-field-ios-${{ inputs.version_name }}-${{ inputs.build_number }}
+          path: |
+            ${{ steps.ipa.outputs.path }}
+            ${{ runner.temp }}/aethertak-field-ios.sha256
+            ${{ runner.temp }}/aethertak-field-ios-provenance.json
+          if-no-files-found: error
+      - name: Validate with App Store Connect
+        env:
+          IPA_PATH: ${{ steps.ipa.outputs.path }}
+        run: |
+          API_PRIVATE_KEYS_DIR="$API_KEY_DIRECTORY" xcrun altool \
+            --validate-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+      - name: Upload to TestFlight processing
+        env:
+          IPA_PATH: ${{ steps.ipa.outputs.path }}
+        run: |
+          API_PRIVATE_KEYS_DIR="$API_KEY_DIRECTORY" xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+      - name: Remove temporary Apple signing material
+        if: always()
+        run: |
+          security delete-keychain "$TEMP_KEYCHAIN_PATH" || true
+          rm -f "$RUNNER_TEMP/distribution.p12"
+          test "$API_KEY_DIRECTORY" = "$RUNNER_TEMP/appstoreconnect-private-keys"
+          rm -rf "$API_KEY_DIRECTORY"
