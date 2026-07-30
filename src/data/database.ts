@@ -21,6 +21,7 @@ export interface OutboxItem {
   operation: 'create' | 'update' | 'delete'
   payload: unknown
   createdAt: string
+  clientSequence: number
   attempts: number
   lastError: string | null
   baseRevision: number | null
@@ -227,6 +228,39 @@ class AetherFieldDatabase extends Dexie {
             record.syncState = stateFor('alert', record.id)
           })
       })
+    this.version(8)
+      .stores({
+        properties: 'id, name, updatedAt, syncState',
+        seasons: 'id, propertyId, status, startsOn, endsOn, updatedAt, syncState',
+        fields: 'id, propertyId, seasonId, status, updatedAt, syncState',
+        ecologicalSites: 'id, propertyId, siteType, updatedAt, syncState',
+        readings: 'id, deviceId, fieldId, siteId, measurement, recordedAt',
+        observations: 'id, fieldId, siteId, category, observedAt, syncState',
+        media: 'id, observationId, kind, capturedAt, syncState',
+        alerts:
+          'id, severity, fieldId, deviceId, createdAt, acknowledgedAt, syncState',
+        insights: 'id, fieldId, siteId, severity, generatedAt, expiresAt',
+        offlineMapRegions: 'id, tileSourceId, status, updatedAt',
+        outbox:
+          'id, entityType, entityId, operation, createdAt, clientSequence, attempts, nextAttemptAt',
+        takOutbox: 'id, createdAt, attempts, operation.kind',
+        takActivity:
+          'id, uid, direction, kind, createdAt, deliveryStatus, outboxId',
+        syncMetadata: 'key, entityType, entityId, revision',
+        syncControl: 'id',
+        appMetadata: 'key',
+      })
+      .upgrade(async (transaction) => {
+        const outbox = transaction.table('outbox')
+        const queued = (await outbox.toArray()).sort(
+          (left, right) =>
+            String(left.createdAt).localeCompare(String(right.createdAt)) ||
+            String(left.id).localeCompare(String(right.id)),
+        )
+        for (const [index, item] of queued.entries()) {
+          await outbox.update(item.id, { clientSequence: index + 1 })
+        }
+      })
   }
 }
 
@@ -237,6 +271,7 @@ export async function queueMutation(
     OutboxItem,
     | 'id'
     | 'createdAt'
+    | 'clientSequence'
     | 'attempts'
     | 'lastError'
     | 'baseRevision'
@@ -244,23 +279,32 @@ export async function queueMutation(
     | 'conflict'
   >,
 ) {
-  const metadata = await db.syncMetadata.get(
-    `${item.entityType}:${item.entityId}`,
+  return db.transaction(
+    'rw',
+    [db.outbox, db.syncMetadata],
+    async () => {
+      const metadata = await db.syncMetadata.get(
+        `${item.entityType}:${item.entityId}`,
+      )
+      const operation =
+        item.operation === 'update' && !metadata ? 'create' : item.operation
+      const highestSequence = (await db.outbox.orderBy('clientSequence').last())
+        ?.clientSequence ?? 0
+      const now = new Date().toISOString()
+      const queued: OutboxItem = {
+        ...item,
+        operation,
+        id: crypto.randomUUID(),
+        createdAt: now,
+        clientSequence: highestSequence + 1,
+        attempts: 0,
+        lastError: null,
+        baseRevision: metadata?.revision ?? null,
+        nextAttemptAt: now,
+        conflict: null,
+      }
+      await db.outbox.add(queued)
+      return queued
+    },
   )
-  const operation =
-    item.operation === 'update' && !metadata ? 'create' : item.operation
-  const now = new Date().toISOString()
-  const queued: OutboxItem = {
-    ...item,
-    operation,
-    id: crypto.randomUUID(),
-    createdAt: now,
-    attempts: 0,
-    lastError: null,
-    baseRevision: metadata?.revision ?? null,
-    nextAttemptAt: now,
-    conflict: null,
-  }
-  await db.outbox.add(queued)
-  return queued
 }

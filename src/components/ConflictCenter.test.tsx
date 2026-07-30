@@ -15,6 +15,7 @@ const conflict: OutboxItem = {
   operation: 'update',
   payload: { ...demoSnapshot.fields[0], name: 'Device Beds' },
   createdAt: '2026-07-30T12:00:00.000Z',
+  clientSequence: 1,
   attempts: 1,
   lastError: 'revision conflict',
   baseRevision: 2,

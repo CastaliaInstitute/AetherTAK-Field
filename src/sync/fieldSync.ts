@@ -507,11 +507,7 @@ export async function resolveFieldConflict(
   }
   const matching = (await db.outbox.where('entityId').equals(item.entityId).toArray())
     .filter((candidate) => candidate.entityType === item.entityType)
-    .sort(
-      (left, right) =>
-        new Date(left.createdAt).getTime() -
-        new Date(right.createdAt).getTime(),
-    )
+    .sort((left, right) => left.clientSequence - right.clientSequence)
 
   if (
     resolution === 'keep_device' &&
@@ -636,7 +632,7 @@ export async function flushFieldOutbox(
   transport: FieldSyncTransport = fieldApiTransport,
   now = new Date(),
 ): Promise<FieldFlushResult> {
-  const pending = (await db.outbox.orderBy('createdAt').toArray())
+  const pending = (await db.outbox.orderBy('clientSequence').toArray())
     .filter(
       (item) =>
         !item.conflict &&

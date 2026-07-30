@@ -70,12 +70,14 @@ describe('field database initialization', () => {
         id: 'legacy-conflict',
         entityType: 'field',
         entityId: firstField.id,
+        createdAt: '2026-07-30T12:00:00.000Z',
         conflict: { revision: 2 },
       },
       {
         id: 'legacy-queued',
         entityType: 'field',
         entityId: secondField.id,
+        createdAt: '2026-07-30T12:00:00.000Z',
         conflict: null,
       },
     ])
@@ -86,5 +88,14 @@ describe('field database initialization', () => {
     expect((await db.fields.get(firstField.id))?.syncState).toBe('conflict')
     expect((await db.fields.get(secondField.id))?.syncState).toBe('queued')
     expect((await db.alerts.get(alert.id))?.syncState).toBe('synced')
+    expect(
+      (await db.outbox.orderBy('clientSequence').toArray()).map((item) => [
+        item.id,
+        item.clientSequence,
+      ]),
+    ).toEqual([
+      ['legacy-conflict', 1],
+      ['legacy-queued', 2],
+    ])
   })
 })
