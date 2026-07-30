@@ -201,6 +201,7 @@ export interface ParsedCotEvent {
   stale: string
   coordinate: Coordinate
   points: Coordinate[]
+  closed: boolean | null
   callsign: string | null
   remarks: string | null
   emergencyType: string | null
@@ -270,6 +271,7 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
   }
   const kind = operationKind(value.type)
   let points: Coordinate[] = [coordinate]
+  let closed: boolean | null = null
   if (kind === 'route') {
     points = values(detail.link).flatMap((linkValue) => {
       const rawPoint = record(linkValue).point
@@ -291,6 +293,10 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
   if (kind === 'shape') {
     const shape = record(detail.shape)
     const polyline = record(shape.polyline)
+    closed =
+      polyline.closed === undefined
+        ? null
+        : String(polyline.closed).toLowerCase() === 'true'
     points = values(polyline.vertex).flatMap((vertexValue) => {
       const vertex = record(vertexValue)
       const latitude = Number(vertex.lat)
@@ -316,6 +322,7 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
     stale: String(value.stale ?? ''),
     coordinate,
     points,
+    closed,
     callsign:
       typeof contact.callsign === 'string'
         ? contact.callsign

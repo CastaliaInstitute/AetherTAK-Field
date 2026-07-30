@@ -1487,6 +1487,75 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
   font-size: 9px;
 }
 .readiness-message.error { color: #ef8b84; }
+.interop-evidence {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(113, 212, 209, .2);
+  border-radius: 14px;
+  background: rgba(15, 32, 35, .78);
+}
+.interop-heading { display: flex; align-items: flex-start; gap: 10px; }
+.interop-heading > svg { flex: 0 0 auto; margin-top: 2px; color: var(--green); }
+.interop-heading h3, .interop-heading p { margin: 0; }
+.interop-heading span, .interop-session-meta span, .interop-privacy {
+  color: var(--muted);
+  font-size: 9px;
+}
+.interop-start, .interop-log {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+.interop-start label, .interop-results label, .interop-log label {
+  display: grid;
+  gap: 4px;
+}
+.interop-start label > span, .interop-results label > span, .interop-log label > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.interop-start input, .interop-start select, .interop-results input,
+.interop-results select, .interop-results textarea, .interop-log input {
+  box-sizing: border-box;
+  width: 100%;
+}
+.interop-session-meta { display: grid; gap: 3px; margin: 10px 0; }
+.interop-results { display: grid; gap: 6px; }
+.interop-results details {
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,.025);
+}
+.interop-results summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  cursor: pointer;
+}
+.interop-results summary span {
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: capitalize;
+}
+.interop-results fieldset, .interop-log {
+  margin: 8px;
+  padding: 9px;
+  border: 1px solid rgba(113,212,209,.15);
+  border-radius: 9px;
+}
+.interop-results fieldset { display: grid; gap: 8px; }
+.interop-results legend, .interop-log legend {
+  padding: 0 4px;
+  color: var(--green);
+  font-size: 8px;
+  font-weight: 800;
+}
+.interop-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.interop-actions button { display: inline-flex; align-items: center; gap: 5px; }
 .visually-hidden {
   position: absolute;
   width: 1px;

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { CapturePanel } from './components/CapturePanel'
 import { DeviceReadinessPanel } from './components/DeviceReadinessPanel'
+import { InteroperabilityEvidencePanel } from './components/InteroperabilityEvidencePanel'
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
 import { OfflineMapManager } from './components/OfflineMapManager'
@@ -75,6 +76,7 @@ import './App.css'
 type Tab = 'map' | 'fields' | 'capture' | 'team'
 type MapDraft = {
   kind: 'marker' | 'route' | 'shape'
+  closed: boolean | null
   points: Coordinate[]
 }
 
@@ -343,7 +345,7 @@ export default function App() {
         uid,
         title,
         colorArgb: 0xffefb75e | 0,
-        closed: true,
+        closed: mapDraft.closed ?? true,
         points: mapDraft.points,
         createdAt,
       }
@@ -535,10 +537,16 @@ export default function App() {
           <TakMapComposer
             draft={
               mapDraft
-                ? { kind: mapDraft.kind, pointCount: mapDraft.points.length }
+                ? {
+                    kind: mapDraft.kind,
+                    closed: mapDraft.closed,
+                    pointCount: mapDraft.points.length,
+                  }
                 : null
             }
-            onStart={(kind) => setMapDraft({ kind, points: [] })}
+            onStart={({ kind, closed }) =>
+              setMapDraft({ kind, closed, points: [] })
+            }
             onUndo={() =>
               setMapDraft((current) =>
                 current
@@ -653,6 +661,9 @@ export default function App() {
             onToggle={toggleBackgroundTracking}
           />
           <DeviceReadinessPanel contactCount={contacts.length} />
+          <InteroperabilityEvidencePanel
+            defaultSenderCallsign={identity.callsign}
+          />
           <TakTeamPanel
             callsign={identity.callsign}
             contacts={contacts}

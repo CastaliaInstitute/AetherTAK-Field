@@ -80,6 +80,9 @@ For each beta, retain:
 - generated AAB/IPA artifact checksums;
 - Google Play/TestFlight processing result and tester group;
 - the in-app Device readiness JSON from every physical test device; and
+- one exported iTAK/ATAK interoperability-session JSON per peer device and
+  released-client version, with controlled screenshot and server-log
+  references;
 - physical-device smoke-test evidence for enrollment, TAK transport, offline
   recovery, background PLI, camera/video, and supported depth hardware.
 

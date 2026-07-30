@@ -40,7 +40,11 @@ interface FieldMapProps {
   insights: AlInsight[]
   contacts: TakContact[]
   activity: TakActivity[]
-  draft: { kind: 'marker' | 'route' | 'shape'; points: Coordinate[] } | null
+  draft: {
+    kind: 'marker' | 'route' | 'shape'
+    closed: boolean | null
+    points: Coordinate[]
+  } | null
   onMapPress: ((coordinate: Coordinate) => void) | null
 }
 
@@ -88,7 +92,11 @@ function activityLineCollection(activity: TakActivity[]): FeatureCollection {
           point.longitude,
           point.latitude,
         ])
-        if (item.kind === 'shape' && item.points.length >= 3) {
+        if (
+          item.kind === 'shape' &&
+          item.closed !== false &&
+          item.points.length >= 3
+        ) {
           return {
             type: 'Feature' as const,
             properties,
@@ -137,7 +145,12 @@ function draftCollection(
             properties: { geometry: 'line' },
             geometry: {
               type: 'LineString' as const,
-              coordinates,
+              coordinates:
+                draft.kind === 'shape' &&
+                draft.closed === true &&
+                coordinates.length >= 3
+                  ? [...coordinates, coordinates[0]]
+                  : coordinates,
             },
           }]
         : []),

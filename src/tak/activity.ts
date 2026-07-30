@@ -15,6 +15,7 @@ export interface TakActivity {
   message: string | null
   coordinate: Coordinate
   points: Coordinate[]
+  closed: boolean | null
   createdAt: string
   staleAt: string
   deliveryStatus: TakDeliveryStatus
@@ -42,6 +43,7 @@ function operationPresentation(operation: TakOperation) {
         message: null,
         coordinate: operation.coordinate,
         points: [operation.coordinate],
+        closed: null,
       }
     case 'chat':
       return {
@@ -49,6 +51,7 @@ function operationPresentation(operation: TakOperation) {
         message: operation.message,
         coordinate: zeroCoordinate,
         points: [],
+        closed: null,
       }
     case 'marker':
       return {
@@ -56,6 +59,7 @@ function operationPresentation(operation: TakOperation) {
         message: operation.remarks ?? null,
         coordinate: operation.coordinate,
         points: [operation.coordinate],
+        closed: null,
       }
     case 'route':
       return {
@@ -63,6 +67,7 @@ function operationPresentation(operation: TakOperation) {
         message: null,
         coordinate: operation.points[0],
         points: operation.points,
+        closed: null,
       }
     case 'shape':
       return {
@@ -70,6 +75,7 @@ function operationPresentation(operation: TakOperation) {
         message: null,
         coordinate: operation.points[0],
         points: operation.points,
+        closed: operation.closed,
       }
     case 'emergency':
       return {
@@ -77,6 +83,7 @@ function operationPresentation(operation: TakOperation) {
         message: operation.identity.callsign,
         coordinate: operation.coordinate,
         points: [operation.coordinate],
+        closed: null,
       }
   }
 }
@@ -116,6 +123,7 @@ export function activityFromCot(xml: string): TakActivity {
     message: event.remarks,
     coordinate: event.coordinate,
     points: event.points,
+    closed: event.closed,
     createdAt: event.time,
     staleAt: event.stale,
     deliveryStatus: 'received',

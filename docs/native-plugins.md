@@ -98,6 +98,14 @@ It is a state snapshot, not a substitute for the behavioral evidence matrix:
 retain it alongside screenshots/video, peer versions, TAK Server log intervals,
 and measured depth results.
 
+For released-client validation, create a durable session under **Team → iTAK /
+ATAK test session**. It records every direction separately for PLI, screen-lock
+background PLI, GeoChat, markers, routes, open and closed shapes, emergencies,
+mission packages, reconnect, and stale removal. Export the session JSON beside
+the referenced screenshots and TAK Server log interval. The app stores
+references rather than copying potentially sensitive screenshots or logs into
+the report.
+
 ## Implementation status
 
 The shared CoT codec, offline TAK outbox, durable inbound/outbound activity,

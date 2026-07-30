@@ -72,7 +72,7 @@ describe('TAK collaboration controls', () => {
     const onSubmit = vi.fn(async () => undefined)
     const view = render(
       <TakMapComposer
-        draft={{ kind: 'route', pointCount: 1 }}
+        draft={{ kind: 'route', closed: null, pointCount: 1 }}
         onStart={vi.fn()}
         onUndo={vi.fn()}
         onCancel={vi.fn()}
@@ -84,7 +84,7 @@ describe('TAK collaboration controls', () => {
 
     view.rerender(
       <TakMapComposer
-        draft={{ kind: 'route', pointCount: 2 }}
+        draft={{ kind: 'route', closed: null, pointCount: 2 }}
         onStart={vi.fn()}
         onUndo={vi.fn()}
         onCancel={vi.fn()}
@@ -93,6 +93,43 @@ describe('TAK collaboration controls', () => {
     )
     await user.click(screen.getByRole('button', { name: 'Send to TAK' }))
     expect(onSubmit).toHaveBeenCalledWith('Irrigation walk', '')
+  })
+
+  it('offers open lines and closed areas with the correct point minimums', async () => {
+    const user = userEvent.setup()
+    const onStart = vi.fn()
+    const onSubmit = vi.fn(async () => undefined)
+    const view = render(
+      <TakMapComposer
+        draft={null}
+        onStart={onStart}
+        onUndo={vi.fn()}
+        onCancel={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Line' }))
+    await user.click(screen.getByRole('button', { name: 'Area' }))
+    expect(onStart).toHaveBeenNthCalledWith(1, {
+      kind: 'shape',
+      closed: false,
+    })
+    expect(onStart).toHaveBeenNthCalledWith(2, {
+      kind: 'shape',
+      closed: true,
+    })
+
+    view.rerender(
+      <TakMapComposer
+        draft={{ kind: 'shape', closed: false, pointCount: 2 }}
+        onStart={onStart}
+        onUndo={vi.fn()}
+        onCancel={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    )
+    await user.type(screen.getByLabelText('Name'), 'Fence line')
+    expect(screen.getByRole('button', { name: 'Send to TAK' })).toBeEnabled()
   })
 
   it('composes an addressed GeoChat message', async () => {

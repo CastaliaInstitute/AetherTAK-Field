@@ -21,6 +21,7 @@ import type {
 
 export interface TakMapDraft {
   kind: 'marker' | 'route' | 'shape'
+  closed: boolean | null
   pointCount: number
 }
 
@@ -69,16 +70,17 @@ export function TakTrackingControl({
 
 interface TakMapComposerProps {
   draft: TakMapDraft | null
-  onStart: (kind: TakMapDraft['kind']) => void
+  onStart: (draft: Pick<TakMapDraft, 'kind' | 'closed'>) => void
   onUndo: () => void
   onCancel: () => void
   onSubmit: (title: string, remarks: string) => Promise<void>
 }
 
 const mapActions = [
-  { kind: 'marker' as const, label: 'Marker', icon: MapPin },
-  { kind: 'route' as const, label: 'Route', icon: Route },
-  { kind: 'shape' as const, label: 'Area', icon: Pentagon },
+  { kind: 'marker' as const, closed: null, label: 'Marker', icon: MapPin },
+  { kind: 'route' as const, closed: null, label: 'Route', icon: Route },
+  { kind: 'shape' as const, closed: false, label: 'Line', icon: Route },
+  { kind: 'shape' as const, closed: true, label: 'Area', icon: Pentagon },
 ]
 
 export function TakMapComposer({
@@ -100,7 +102,15 @@ export function TakMapComposer({
   }, [draft?.kind])
 
   const minimum =
-    draft?.kind === 'marker' ? 1 : draft?.kind === 'route' ? 2 : 3
+    draft?.kind === 'marker'
+      ? 1
+      : draft?.kind === 'route' || draft?.closed === false
+        ? 2
+        : 3
+  const draftLabel =
+    draft?.kind === 'shape'
+      ? draft.closed ? 'area' : 'line'
+      : draft?.kind
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -122,8 +132,12 @@ export function TakMapComposer({
     <section className="tak-map-composer" aria-label="TAK map tools">
       {!draft ? (
         <div className="tak-map-actions">
-          {mapActions.map(({ kind, label, icon: Icon }) => (
-            <button key={kind} type="button" onClick={() => onStart(kind)}>
+          {mapActions.map(({ kind, closed, label, icon: Icon }) => (
+            <button
+              key={`${kind}:${closed}`}
+              type="button"
+              onClick={() => onStart({ kind, closed })}
+            >
               <Icon size={16} />
               {label}
             </button>
@@ -133,7 +147,7 @@ export function TakMapComposer({
         <form onSubmit={(event) => void submit(event)}>
           <div className="tak-draft-heading">
             <div>
-              <strong>New {draft.kind}</strong>
+              <strong>New {draftLabel}</strong>
               <span>
                 Tap the map · {draft.pointCount} point
                 {draft.pointCount === 1 ? '' : 's'}

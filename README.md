@@ -30,7 +30,7 @@ client and inside Capacitor shells for iOS and Android.
   emergency events, backed by a durable offline TAK event outbox and activity
   history.
 - Live native contacts, foreground PLI publishing, addressed GeoChat,
-  tap-to-compose markers/routes/areas, rendered TAK geometry, and explicitly
+  tap-to-compose markers/routes/open lines/closed areas, rendered TAK geometry, and explicitly
   confirmed emergency signaling with cancellation.
 - Opt-in native background PLI with a visible iOS location indicator or Android
   location foreground-service notification and an in-app stop control.
@@ -38,6 +38,9 @@ client and inside Capacitor shells for iOS and Android.
 - Versioned, privacy-safe physical-device readiness reports with native
   app/build, hardware, TAK, depth, sync, offline-map, and media-integrity
   evidence export through the platform share sheet.
+- Durable per-device iTAK/ATAK physical-test sessions with bidirectional
+  capability results, exact build/source traceability, controlled screen/log
+  references, and privacy-bounded JSON export.
 
 The browser provides a safe preview. Certificate enrollment, CoT transport, and
 depth capture are intentionally native-only so private key material does not

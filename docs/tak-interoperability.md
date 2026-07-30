@@ -33,6 +33,13 @@ probes and do not claim to be captured traffic from a particular release.
 Before beta distribution, record a bidirectional test between AetherTAK Field,
 current iTAK, and current ATAK for each row:
 
+Use **Team → iTAK / ATAK test session** on the physical AetherTAK Field device.
+Create a separate session for each peer device and released-client version. The
+session persists locally while testing, records Field → peer and peer → Field
+results independently, and exports versioned JSON through the platform share
+sheet. A `blocked` or `fail` result is useful evidence but does not satisfy the
+beta gate.
+
 | Capability | Field → iTAK | iTAK → Field | Field → ATAK | ATAK → Field |
 | --- | --- | --- | --- | --- |
 | PLI and contact lifecycle | Pending | Pending | Pending | Pending |
@@ -40,12 +47,18 @@ current iTAK, and current ATAK for each row:
 | Direct GeoChat | Pending | Pending | Pending | Pending |
 | Marker | Pending | Pending | Pending | Pending |
 | Route | Pending | Pending | Pending | Pending |
-| Closed and open shape | Pending | Pending | Pending | Pending |
+| Open shape | Pending | Pending | Pending | Pending |
+| Closed shape | Pending | Pending | Pending | Pending |
 | Emergency initiation | Pending | Pending | Pending | Pending |
 | Emergency cancellation | Pending | Pending | Pending | Pending |
 | Mission-package attachment | Pending | Pending | Pending | Pending |
+| Reconnect after network loss | Pending | Pending | Pending | Pending |
+| Stale-item removal | Pending | Pending | Pending | Pending |
 
 For every test, retain the client versions, device/OS versions, server version,
 UTC timestamp, sender and recipient callsigns, screen evidence, and the matching
-TAK Server log interval. Test reconnect and stale-item removal after the live
-exchange.
+TAK Server log interval. Store screenshots/video and server logs separately in
+the controlled evidence location; enter only their references in the app. The
+JSON deliberately excludes server addresses, coordinates, message content, and
+binary evidence. Exported metadata does not replace the referenced behavioral
+evidence.

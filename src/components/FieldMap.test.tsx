@@ -184,6 +184,78 @@ describe('FieldMap operational layers', () => {
     expect(instance.remove).not.toHaveBeenCalled()
   })
 
+  it('renders open TAK shapes as lines and closed shapes as polygons', () => {
+    const coordinate = {
+      latitude: 39.74,
+      longitude: -104.99,
+      altitudeMeters: null,
+      horizontalAccuracyMeters: null,
+      verticalAccuracyMeters: null,
+      headingDegrees: null,
+    }
+    const activity = [
+      {
+        id: 'outbound:open',
+        uid: 'open',
+        outboxId: null,
+        direction: 'outbound' as const,
+        kind: 'shape' as const,
+        title: 'Fence line',
+        message: null,
+        coordinate,
+        points: [coordinate, { ...coordinate, latitude: 39.75 }],
+        closed: false,
+        createdAt: '2026-07-30T10:00:00.000Z',
+        staleAt: '2026-07-30T10:05:00.000Z',
+        deliveryStatus: 'sent' as const,
+        xml: '<event/>',
+      },
+      {
+        id: 'outbound:closed',
+        uid: 'closed',
+        outboxId: null,
+        direction: 'outbound' as const,
+        kind: 'shape' as const,
+        title: 'Treatment area',
+        message: null,
+        coordinate,
+        points: [
+          coordinate,
+          { ...coordinate, latitude: 39.75 },
+          { ...coordinate, longitude: -105 },
+        ],
+        closed: true,
+        createdAt: '2026-07-30T10:00:00.000Z',
+        staleAt: '2026-07-30T10:05:00.000Z',
+        deliveryStatus: 'sent' as const,
+        xml: '<event/>',
+      },
+    ]
+    render(
+      <FieldMap
+        fields={[]}
+        ecologicalSites={[]}
+        readings={[]}
+        observations={[]}
+        alerts={[]}
+        insights={[]}
+        contacts={[]}
+        activity={activity}
+        draft={null}
+        onMapPress={null}
+      />,
+    )
+    const instance = mapState.instances[0] as MapState
+    act(() => instance.emit('load'))
+    const collection = instance.sources.get('tak-activity-lines')?.data as {
+      features: Array<{ geometry: { type: string } }>
+    }
+    expect(collection.features.map((feature) => feature.geometry.type)).toEqual([
+      'LineString',
+      'Polygon',
+    ])
+  })
+
   it('shows tapped map details as text without interpreting record markup', () => {
     const { unmount } = render(
       <FieldMap

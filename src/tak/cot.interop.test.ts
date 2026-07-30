@@ -136,6 +136,7 @@ describe('ATAK and iTAK CoT interoperability fixtures', () => {
   it('accepts peer shape serialization with extra style details', () => {
     const parsed = parseCotEvent(peerShape)
     expect(parsed.kind).toBe('shape')
+    expect(parsed.closed).toBe(true)
     expect(parsed.callsign).toBe('Treatment zone')
     expect(parsed.points).toHaveLength(3)
   })
@@ -197,6 +198,22 @@ describe('ATAK and iTAK CoT interoperability fixtures', () => {
     expect(shape).toContain(
       '<polyline closed="true" color="-256" fillColor="0">',
     )
+    const openShape = operationToCot({
+      kind: 'shape',
+      uid: 'shape-2',
+      title: 'Fence line',
+      colorArgb: -256,
+      closed: false,
+      points: [coordinate, { ...coordinate, latitude: 39.741 }],
+      createdAt,
+    })
+    expect(openShape).toContain(
+      '<polyline closed="false" color="-256" fillColor="0">',
+    )
+    expect(parseCotEvent(openShape)).toMatchObject({
+      kind: 'shape',
+      closed: false,
+    })
 
     const cancel = operationToCot({
       kind: 'emergency',
