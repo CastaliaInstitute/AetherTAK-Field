@@ -73,7 +73,10 @@ files beneath the application files, cache, or no-backup directories. Empty
 media and paths outside those roots fail closed, and an uncommitted photo copy
 is removed if inspection fails. This avoids loading potentially large final
 media and geometry files through the JavaScript bridge while ensuring every
-synchronized evidence artifact has integrity metadata.
+synchronized evidence artifact has integrity metadata. Photo, video, depth,
+confidence, point-cloud, and model records also retain the native hardware
+model when the operating system reports it; unavailable model metadata remains
+optional and never discards otherwise valid field evidence.
 
 ## AetherDepthScanner
 

@@ -30,6 +30,7 @@ function dependencies(
       coordinate,
       capturedAt: '2026-07-30T06:00:00.000Z',
     }),
+    deviceModel: async () => 'Pixel 10 Pro',
     persist: async () => ({
       uri: `file:///data/evidence.${kind === 'photo' ? 'jpg' : 'mp4'}`,
       previewUri: null,
@@ -67,6 +68,7 @@ describe('offline observation media capture', () => {
 
       expect(result.media.kind).toBe(kind)
       expect(result.media.coordinate).toEqual(coordinate)
+      expect(result.media.deviceModel).toBe('Pixel 10 Pro')
       expect(result.media.sha256).toHaveLength(64)
       expect(result.observation.syncState).toBe('queued')
       expect(await db.media.count()).toBe(1)
@@ -74,4 +76,26 @@ describe('offline observation media capture', () => {
       expect(await db.outbox.count()).toBe(2)
     },
   )
+
+  it('keeps a valid capture when device provenance is unavailable', async () => {
+    const captureDependencies = dependencies('photo')
+    captureDependencies.deviceModel = async () => {
+      throw new Error('Device information unavailable.')
+    }
+
+    const result = await captureObservationMedia(
+      {
+        fieldId: null,
+        siteId: null,
+        category: 'habitat',
+        title: 'Offline habitat evidence',
+        notes: '',
+      },
+      captureDependencies,
+    )
+
+    expect(result.media.deviceModel).toBeNull()
+    expect(await db.observations.count()).toBe(1)
+    expect(await db.media.count()).toBe(1)
+  })
 })

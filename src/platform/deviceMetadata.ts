@@ -21,6 +21,26 @@ function platformName(value: string) {
   return value || 'Capacitor'
 }
 
+export function createDeviceModelProvider(
+  isNative: () => boolean,
+  getInfo: () => Promise<{ model?: string }>,
+) {
+  return async (): Promise<string | null> => {
+    if (!isNative()) return null
+    try {
+      const model = (await getInfo()).model?.trim()
+      return model || null
+    } catch {
+      return null
+    }
+  }
+}
+
+export const currentDeviceModel = createDeviceModelProvider(
+  () => Capacitor.isNativePlatform(),
+  () => Device.getInfo(),
+)
+
 export async function currentTakDeviceMetadata(): Promise<TakDeviceMetadata> {
   if (!Capacitor.isNativePlatform()) {
     throw new Error('TAK device metadata requires the native application.')

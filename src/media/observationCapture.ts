@@ -6,6 +6,7 @@ import {
   captureGeotaggedVideo,
   type GeotaggedMedia,
 } from '../platform/capture'
+import { currentDeviceModel } from '../platform/deviceMetadata'
 import { mediaIntegrity } from '../platform/mediaIntegrity'
 import { db, queueMutation } from '../data/database'
 
@@ -27,6 +28,7 @@ interface StoredMedia {
 
 export interface ObservationCaptureDependencies {
   capture: () => Promise<GeotaggedMedia>
+  deviceModel: () => Promise<string | null>
   persist: (
     capture: GeotaggedMedia,
     observationId: string,
@@ -136,11 +138,13 @@ export async function persistCapturedMedia(
 
 const photoDependencies: ObservationCaptureDependencies = {
   capture: captureGeotaggedPhoto,
+  deviceModel: currentDeviceModel,
   persist: persistCapturedMedia,
 }
 
 const videoDependencies: ObservationCaptureDependencies = {
   capture: captureGeotaggedVideo,
+  deviceModel: currentDeviceModel,
   persist: persistCapturedMedia,
 }
 
@@ -148,7 +152,10 @@ export async function captureObservationMedia(
   input: ObservationCaptureInput,
   dependencies: ObservationCaptureDependencies,
 ) {
-  const captured = await dependencies.capture()
+  const [captured, deviceModel] = await Promise.all([
+    dependencies.capture(),
+    dependencies.deviceModel().catch(() => null),
+  ])
   const observationId = crypto.randomUUID()
   const mediaId = crypto.randomUUID()
   const stored = await dependencies.persist(captured, observationId, mediaId)
@@ -174,7 +181,7 @@ export async function captureObservationMedia(
     mimeType: stored.mimeType,
     coordinate: captured.coordinate,
     capturedAt: captured.capturedAt,
-    deviceModel: null,
+    deviceModel,
     sha256: stored.sha256,
     depthMetadata: null,
     syncState: 'queued',

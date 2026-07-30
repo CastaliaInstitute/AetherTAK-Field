@@ -60,6 +60,7 @@ describe('offline depth observation capture', () => {
       'point_cloud',
       {
         locate: async () => coordinate,
+        deviceModel: async () => 'Pixel 10 Pro',
         scan: async () => scan,
         inspect,
         cleanup,
@@ -74,6 +75,9 @@ describe('offline depth observation capture', () => {
     expect(result.media[0].depthMetadata?.measurements).toEqual(
       scan.measurements,
     )
+    expect(result.media.every((artifact) =>
+      artifact.deviceModel === 'Pixel 10 Pro'
+    )).toBe(true)
     expect(result.media.map((artifact) => artifact.sha256)).toEqual([
       'a'.repeat(64),
       'b'.repeat(64),
@@ -115,6 +119,9 @@ describe('offline depth observation capture', () => {
       'mesh',
       {
         locate: async () => coordinate,
+        deviceModel: async () => {
+          throw new Error('Device information unavailable.')
+        },
         scan: async () => meshScan,
         inspect,
         cleanup,
@@ -132,6 +139,9 @@ describe('offline depth observation capture', () => {
       mimeType: 'model/obj',
       sha256: 'd'.repeat(64),
     })
+    expect(result.media.every((artifact) =>
+      artifact.deviceModel === null
+    )).toBe(true)
     expect(inspect).toHaveBeenCalledTimes(4)
     expect(cleanup).not.toHaveBeenCalled()
     expect(result.observation.mediaIds).toHaveLength(4)
@@ -161,6 +171,7 @@ describe('offline depth observation capture', () => {
         'point_cloud',
         {
           locate: async () => coordinate,
+          deviceModel: async () => 'Pixel 10 Pro',
           scan: async () => scan,
           inspect,
           cleanup,

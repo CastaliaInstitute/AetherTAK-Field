@@ -7,6 +7,7 @@ import type {
   Observation,
 } from '../domain/models'
 import { currentCoordinate } from '../platform/capture'
+import { currentDeviceModel } from '../platform/deviceMetadata'
 import { depthScanner } from '../platform/depth'
 import {
   mediaIntegrity,
@@ -18,6 +19,7 @@ export type DepthScanMode = 'measure' | 'point_cloud' | 'mesh'
 
 export interface DepthObservationDependencies {
   locate: () => Promise<Coordinate>
+  deviceModel: () => Promise<string | null>
   scan: (
     coordinate: Coordinate,
     mode: DepthScanMode,
@@ -28,6 +30,7 @@ export interface DepthObservationDependencies {
 
 const nativeDependencies: DepthObservationDependencies = {
   locate: currentCoordinate,
+  deviceModel: currentDeviceModel,
   scan: depthScanner.scan,
   inspect: mediaIntegrity.inspect,
   cleanup: async (uris) => {
@@ -42,7 +45,10 @@ export async function captureDepthObservation(
   mode: DepthScanMode,
   dependencies: DepthObservationDependencies = nativeDependencies,
 ) {
-  const coordinate = await dependencies.locate()
+  const [coordinate, deviceModel] = await Promise.all([
+    dependencies.locate(),
+    dependencies.deviceModel().catch(() => null),
+  ])
   const scan = await dependencies.scan(coordinate, mode)
   const observationId = crypto.randomUUID()
 
@@ -108,7 +114,7 @@ export async function captureDepthObservation(
         mimeType: artifact.mimeType,
         coordinate: scan.coordinate,
         capturedAt: scan.capturedAt,
-        deviceModel: null,
+        deviceModel,
         sha256: integrity.sha256,
         depthMetadata: {
           scanId: scan.id,
