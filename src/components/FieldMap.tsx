@@ -8,6 +8,7 @@ import type { FeatureCollection } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Field, SensorReading, TakContact } from '../domain/models'
 import type { Coordinate } from '../domain/models'
+import { normalizeBoundary } from '../domain/boundary'
 import type { TakActivity } from '../tak/activity'
 import {
   activeRasterSource,
@@ -27,20 +28,26 @@ interface FieldMapProps {
 function fieldCollection(fields: Field[]): FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: fields.map((field) => ({
-      type: 'Feature',
-      properties: {
-        id: field.id,
-        name: field.name,
-        crop: field.crop,
-        icon: field.cropIcon,
-        status: field.status,
-      },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [field.boundary],
-      },
-    })),
+    features: fields.flatMap((field) => {
+      try {
+        return [{
+          type: 'Feature' as const,
+          properties: {
+            id: field.id,
+            name: field.name,
+            crop: field.crop,
+            icon: field.cropIcon,
+            status: field.status,
+          },
+          geometry: {
+            type: 'Polygon' as const,
+            coordinates: [normalizeBoundary(field.boundary)],
+          },
+        }]
+      } catch {
+        return []
+      }
+    }),
   }
 }
 

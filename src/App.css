@@ -838,6 +838,151 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
   border-radius: 9px;
   font-size: 10px;
 }
+.boundary-editor {
+  margin-top: 15px;
+  padding: 13px;
+  background: rgba(113,212,209,.035);
+  border: 1px solid rgba(113,212,209,.16);
+  border-radius: 12px;
+}
+.boundary-editor > header,
+.boundary-editor > header > div,
+.boundary-gps,
+.boundary-actions,
+.boundary-manual {
+  display: flex;
+  align-items: center;
+}
+.boundary-editor > header {
+  justify-content: space-between;
+  gap: 12px;
+}
+.boundary-editor > header > div { gap: 8px; }
+.boundary-editor > header svg { color: var(--cyan); }
+.boundary-editor > header strong { font-size: 12px; }
+.boundary-editor > header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+.boundary-editor > header > span {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  font-size: 8px;
+}
+.boundary-editor > header > span.valid {
+  color: var(--green);
+  border-color: rgba(137,207,120,.3);
+}
+.boundary-preview {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(130px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 120px;
+  margin-top: 11px;
+  padding: 9px;
+  background: #111a16;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.boundary-preview > div:first-child {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.boundary-preview svg { width: 100%; height: 104px; overflow: visible; }
+.boundary-preview polygon {
+  fill: rgba(84,167,107,.26);
+  stroke: var(--green);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.boundary-preview polyline {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.boundary-preview circle {
+  fill: #f3e8ae;
+  stroke: #18231d;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.boundary-metrics { display: grid; gap: 4px; }
+.boundary-metrics strong { color: var(--ink); font-size: 18px; }
+.boundary-metrics span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.boundary-gps {
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 41px;
+  margin-top: 9px;
+  color: var(--cyan);
+  background: rgba(113,212,209,.04);
+  border: 1px solid rgba(113,212,209,.18);
+  border-radius: 9px;
+  font-size: 10px;
+}
+.boundary-gps:disabled,
+.boundary-actions button:disabled { opacity: .45; }
+.boundary-accuracy {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 8px;
+  text-align: center;
+}
+.boundary-manual {
+  align-items: end;
+  gap: 7px;
+  margin-top: 5px;
+}
+.boundary-manual label { flex: 1; min-width: 0; }
+.boundary-manual button {
+  min-height: 43px;
+  padding: 0 13px;
+  color: var(--ink);
+  background: rgba(255,255,255,.055);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 10px;
+}
+.boundary-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+.boundary-actions button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 9px;
+}
+.boundary-advisory,
+.boundary-error {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.4;
+}
+.boundary-error { color: #ef8b84; }
 .record-save {
   width: 100%;
   min-height: 48px;

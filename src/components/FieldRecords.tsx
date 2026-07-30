@@ -17,9 +17,16 @@ import {
   propertySchema,
   seasonSchema,
 } from '../domain/models'
+import {
+  boundaryCenter,
+  type BoundaryPoint,
+  normalizeBoundary,
+  stripClosingVertex,
+} from '../domain/boundary'
 import type { FieldDashboard } from '../data/useDashboard'
 import { saveLocalEntity } from '../data/fieldRepository'
 import { currentCoordinate } from '../platform/capture'
+import { BoundaryEditor } from './BoundaryEditor'
 import { ObservationDetail } from './ObservationDetail'
 import { ConflictCenter } from './ConflictCenter'
 import { resolveFieldConflict } from '../sync/fieldSync'
@@ -30,17 +37,6 @@ type Editor = { kind: EditableKind; id?: string } | null
 interface FieldRecordsProps {
   data: FieldDashboard
   onNotice: (message: string) => void
-}
-
-function squareBoundary(coordinate: Coordinate, radius = 0.00045) {
-  const { longitude, latitude } = coordinate
-  return [
-    [longitude - radius, latitude - radius],
-    [longitude + radius, latitude - radius],
-    [longitude + radius, latitude + radius],
-    [longitude - radius, latitude + radius],
-    [longitude - radius, latitude - radius],
-  ] as Array<[number, number]>
 }
 
 function finiteNumber(value: FormDataEntryValue | null, label: string) {
@@ -66,6 +62,9 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [location, setLocation] = useState<Coordinate | null>(null)
+  const [editorBoundary, setEditorBoundary] = useState<BoundaryPoint[]>([])
+  const [editorPropertyId, setEditorPropertyId] = useState('')
+  const [editorSeasonId, setEditorSeasonId] = useState('')
   const [selectedObservationId, setSelectedObservationId] =
     useState<string | null>(null)
 
@@ -84,14 +83,50 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
   const selectedObservation = selectedObservationId
     ? data.observations.find((item) => item.id === selectedObservationId)
     : undefined
+  const editorProperty = data.properties.find(
+    (item) => item.id === editorPropertyId,
+  )
+  const eligibleSeasons = data.seasons.filter(
+    (item) => item.propertyId === editorPropertyId,
+  )
 
   function open(kind: EditableKind, id?: string) {
     const selectedProperty =
       kind === 'property' && id
         ? data.properties.find((item) => item.id === id)
         : undefined
+    const selectedSeason =
+      kind === 'season' && id
+        ? data.seasons.find((item) => item.id === id)
+        : undefined
+    const selectedField =
+      kind === 'field' && id
+        ? data.fields.find((item) => item.id === id)
+        : undefined
+    const selectedSite =
+      kind === 'ecological_site' && id
+        ? data.ecologicalSites.find((item) => item.id === id)
+        : undefined
+    const propertyId =
+      selectedSeason?.propertyId ??
+      selectedField?.propertyId ??
+      selectedSite?.propertyId ??
+      data.properties[0]?.id ??
+      ''
+    const boundary =
+      selectedProperty?.boundary ??
+      selectedField?.boundary ??
+      selectedSite?.boundary ??
+      []
     setEditor({ kind, id })
     setError(null)
+    setEditorBoundary(stripClosingVertex(boundary))
+    setEditorPropertyId(propertyId)
+    setEditorSeasonId(
+      selectedField?.seasonId ??
+      data.seasons.find((item) => item.propertyId === propertyId)?.id ??
+      '',
+    )
     setLocation(
       kind === 'property'
         ? selectedProperty?.center ?? data.properties[0]?.center ?? null
@@ -139,7 +174,7 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
             name: form.get('name'),
             description: form.get('description') ?? '',
             center: coordinate,
-            boundary: property?.boundary ?? squareBoundary(coordinate),
+            boundary: normalizeBoundary(editorBoundary),
             timezone: form.get('timezone'),
             updatedAt: now,
             syncState: 'queued',
@@ -185,7 +220,7 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
             seasonLabel: growingSeason.name,
             status: form.get('status'),
             healthScore: optionalNumber(form.get('healthScore')),
-            boundary: field?.boundary ?? squareBoundary(parent.center, 0.00018),
+            boundary: normalizeBoundary(editorBoundary),
             updatedAt: now,
             syncState: 'queued',
           })
@@ -196,6 +231,8 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
           const propertyId = String(form.get('propertyId'))
           const parent = data.properties.find((item) => item.id === propertyId)
           if (!parent) throw new Error('Select a property.')
+          const boundary = normalizeBoundary(editorBoundary)
+          const center = boundaryCenter(boundary)
           const value = ecologicalSiteSchema.parse({
             id: site?.id ?? crypto.randomUUID(),
             propertyId,
@@ -203,8 +240,20 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
             siteType: form.get('siteType'),
             targetCondition: form.get('targetCondition') ?? '',
             conditionScore: optionalNumber(form.get('conditionScore')),
-            center: site?.center ?? parent.center,
-            boundary: site?.boundary ?? squareBoundary(parent.center, 0.00018),
+            center: {
+              latitude: center.latitude,
+              longitude: center.longitude,
+              altitudeMeters:
+                site?.center.altitudeMeters ?? parent.center.altitudeMeters,
+              horizontalAccuracyMeters:
+                site?.center.horizontalAccuracyMeters ??
+                parent.center.horizontalAccuracyMeters,
+              verticalAccuracyMeters:
+                site?.center.verticalAccuracyMeters ??
+                parent.center.verticalAccuracyMeters,
+              headingDegrees: null,
+            },
+            boundary,
             indicatorSpecies: String(form.get('indicatorSpecies') ?? '')
               .split(',')
               .map((item) => item.trim())
@@ -219,6 +268,7 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
       onNotice(`${editorTitle(editor.kind, Boolean(editor.id))} saved offline.`)
       setEditor(null)
       setLocation(null)
+      setEditorBoundary([])
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : 'The field record could not be saved.',
@@ -463,7 +513,29 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
             {(editor.kind === 'season' || editor.kind === 'field' || editor.kind === 'ecological_site') && (
               <label>
                 <span>Property</span>
-                <select name="propertyId" required defaultValue={season?.propertyId ?? field?.propertyId ?? site?.propertyId ?? data.properties[0]?.id}>
+                <select
+                  name="propertyId"
+                  required
+                  value={editorPropertyId}
+                  onChange={(event) => {
+                    const propertyId = event.currentTarget.value
+                    setEditorPropertyId(propertyId)
+                    if (
+                      editor.kind === 'field' &&
+                      !data.seasons.some(
+                        (item) =>
+                          item.id === editorSeasonId &&
+                          item.propertyId === propertyId,
+                      )
+                    ) {
+                      setEditorSeasonId(
+                        data.seasons.find(
+                          (item) => item.propertyId === propertyId,
+                        )?.id ?? '',
+                      )
+                    }
+                  }}
+                >
                   {data.properties.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </label>
@@ -483,7 +555,20 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
 
             {editor.kind === 'field' && (
               <>
-                <label><span>Season</span><select name="seasonId" required defaultValue={field?.seasonId ?? data.seasons[0]?.id}>{data.seasons.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+                <label>
+                  <span>Season</span>
+                  <select
+                    name="seasonId"
+                    required
+                    value={editorSeasonId}
+                    onChange={(event) => setEditorSeasonId(event.currentTarget.value)}
+                  >
+                    {eligibleSeasons.length === 0 && (
+                      <option value="">Create a season for this property first</option>
+                    )}
+                    {eligibleSeasons.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </label>
                 <label><span>Field name</span><input name="name" required maxLength={100} defaultValue={field?.name} /></label>
                 <div className="record-crop-fields">
                   <label><span>Crop symbol</span><input name="cropIcon" required maxLength={8} defaultValue={field?.cropIcon ?? '🥬'} /></label>
@@ -505,6 +590,21 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
                 <label><span>Condition 0–100</span><input name="conditionScore" type="number" min="0" max="100" defaultValue={site?.conditionScore ?? ''} /></label>
                 <label><span>Indicator species, comma separated</span><textarea name="indicatorSpecies" rows={2} defaultValue={site?.indicatorSpecies.join(', ')} /></label>
               </>
+            )}
+
+            {editor.kind !== 'season' && (
+              <BoundaryEditor
+                vertices={editorBoundary}
+                onChange={(vertices) => {
+                  setEditorBoundary(vertices)
+                  setError(null)
+                }}
+                center={
+                  editor.kind === 'property'
+                    ? location ?? property?.center
+                    : editorProperty?.center
+                }
+              />
             )}
 
             {error && <p className="record-editor-error" role="alert">{error}</p>}
