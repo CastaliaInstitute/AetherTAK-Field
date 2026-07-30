@@ -263,6 +263,33 @@ class AetherTakTransportPlugin : Plugin() {
         }
     }
 
+    @PluginMethod
+    fun missionPackageUpload(call: PluginCall) {
+        executeFieldRequest(call) { profile, port ->
+            fieldApi.uploadMissionPackage(
+                profile = profile,
+                port = port,
+                uriValue = requireNotNull(call.getString("uri")),
+                fileName = requireNotNull(call.getString("fileName")),
+                creatorUid = requireNotNull(call.getString("creatorUid")),
+            )
+        }
+    }
+
+    @PluginMethod
+    fun missionPackageDownload(call: PluginCall) {
+        executeFieldRequest(call) { profile, port ->
+            fieldApi.downloadMissionPackage(
+                profile = profile,
+                port = port,
+                senderUrl = requireNotNull(call.getString("senderUrl")),
+                fileName = requireNotNull(call.getString("fileName")),
+                expectedSha256 = requireNotNull(call.getString("expectedSha256")),
+                expectedSizeBytes = requireNotNull(call.getLong("expectedSizeBytes")),
+            )
+        }
+    }
+
     private fun executeFieldRequest(
         call: PluginCall,
         action: (TakProfile, Int) -> org.castaliainstitute.aethertak.field.tak.FieldApiResponse,

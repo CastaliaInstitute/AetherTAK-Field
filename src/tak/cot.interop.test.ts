@@ -229,4 +229,64 @@ describe('ATAK and iTAK CoT interoperability fixtures', () => {
     )
     expect(parseCotEvent(cancel).emergencyType).toBe('Cancel')
   })
+
+  it('emits and parses targeted TAK mission-package requests and receipts', () => {
+    const request = operationToCot({
+      kind: 'missionPackage',
+      uid: 'package-request-1',
+      sender: identity,
+      recipientUid: 'ANDROID-123456',
+      recipientCallsign: 'ATAK One',
+      transferName: 'Field evidence',
+      fileName: 'field-evidence.zip',
+      localUri: 'file:///private/field-evidence.zip',
+      storagePath: 'mission-packages/outbound/field-evidence.zip',
+      coordinate,
+      ackUid: 'package-ack-1',
+      upload: {
+        senderUrl:
+          'https://tak.example.test:8443/Marti/api/sync/metadata/abc/tool',
+        sha256: 'a'.repeat(64),
+        sizeBytes: 4096,
+      },
+      createdAt,
+    })
+    expect(request).toContain('type="b-f-t-r"')
+    expect(request).toContain(
+      '<fileshare filename="field-evidence.zip" name="Field evidence"',
+    )
+    expect(request).toContain(
+      '<ackrequest uid="package-ack-1" ackrequested="true"',
+    )
+    expect(request).toContain('<marti><dest callsign="ATAK One"/></marti>')
+    expect(parseCotEvent(request).fileTransfer).toMatchObject({
+      mode: 'request',
+      fileName: 'field-evidence.zip',
+      ackUid: 'package-ack-1',
+      sha256: 'a'.repeat(64),
+      sizeBytes: 4096,
+    })
+
+    const receipt = operationToCot({
+      kind: 'missionPackageAck',
+      uid: 'package-receipt-1',
+      sender: identity,
+      recipientCallsign: 'ATAK One',
+      coordinate,
+      ackUid: 'package-ack-1',
+      transferName: 'Field evidence',
+      sha256: 'a'.repeat(64),
+      sizeBytes: 4096,
+      success: true,
+      reason: 'Transfer complete',
+      createdAt,
+    })
+    expect(receipt).toContain('type="b-f-t-a"')
+    expect(parseCotEvent(receipt).fileTransfer).toMatchObject({
+      mode: 'ack',
+      ackUid: 'package-ack-1',
+      success: true,
+      reason: 'Transfer complete',
+    })
+  })
 })

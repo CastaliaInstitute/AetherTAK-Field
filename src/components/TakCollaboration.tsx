@@ -1,12 +1,15 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   LocateFixed,
+  Download,
   MapPin,
   MessageCircle,
+  Paperclip,
   Pentagon,
   Route,
   Send,
   Siren,
+  Share2,
   Undo2,
   Users,
   X,
@@ -217,6 +220,9 @@ interface TakTeamPanelProps {
   activity: TakActivity[]
   queuedCount: number
   onSendChat: (contact: TakContact, message: string) => Promise<void>
+  onSendMissionPackage: (contact: TakContact, file: File) => Promise<void>
+  onDownloadMissionPackage: (activity: TakActivity) => Promise<void>
+  onShareMissionPackage: (activity: TakActivity) => Promise<void>
   onSendEmergency: (
     type: EmergencyOperation['emergencyType'],
   ) => Promise<void>
@@ -231,7 +237,10 @@ const emergencyTypes: EmergencyOperation['emergencyType'][] = [
 ]
 
 function activityLabel(kind: TakOperationKind) {
-  return kind === 'shape' ? 'area' : kind
+  if (kind === 'shape') return 'area'
+  if (kind === 'missionPackage') return 'package'
+  if (kind === 'missionPackageAck') return 'receipt'
+  return kind
 }
 
 export function TakTeamPanel({
@@ -240,6 +249,9 @@ export function TakTeamPanel({
   activity,
   queuedCount,
   onSendChat,
+  onSendMissionPackage,
+  onDownloadMissionPackage,
+  onShareMissionPackage,
   onSendEmergency,
 }: TakTeamPanelProps) {
   const [chatContact, setChatContact] = useState<TakContact | null>(null)
@@ -249,6 +261,10 @@ export function TakTeamPanel({
   const [submitting, setSubmitting] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const [emergencyError, setEmergencyError] = useState<string | null>(null)
+  const [packageContact, setPackageContact] = useState<TakContact | null>(null)
+  const [packageBusyId, setPackageBusyId] = useState<string | null>(null)
+  const [packageError, setPackageError] = useState<string | null>(null)
+  const packageInput = useRef<HTMLInputElement>(null)
 
   async function sendChat(event: FormEvent) {
     event.preventDefault()
@@ -301,6 +317,41 @@ export function TakTeamPanel({
       )
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function selectMissionPackage(file: File | undefined) {
+    if (!file || !packageContact) return
+    setPackageBusyId(packageContact.uid)
+    setPackageError(null)
+    try {
+      await onSendMissionPackage(packageContact, file)
+      setPackageContact(null)
+    } catch (cause) {
+      setPackageError(
+        cause instanceof Error
+          ? cause.message
+          : 'The mission package could not be queued.',
+      )
+    } finally {
+      setPackageBusyId(null)
+      if (packageInput.current) packageInput.current.value = ''
+    }
+  }
+
+  async function receiveMissionPackage(item: TakActivity) {
+    setPackageBusyId(item.id)
+    setPackageError(null)
+    try {
+      await onDownloadMissionPackage(item)
+    } catch (cause) {
+      setPackageError(
+        cause instanceof Error
+          ? cause.message
+          : 'The mission package could not be downloaded.',
+      )
+    } finally {
+      setPackageBusyId(null)
     }
   }
 
@@ -381,6 +432,16 @@ export function TakTeamPanel({
       </section>
 
       <section aria-labelledby="tak-contact-heading">
+        <input
+          ref={packageInput}
+          className="visually-hidden"
+          type="file"
+          accept=".zip,application/zip"
+          aria-label="Choose TAK mission package"
+          onChange={(event) =>
+            void selectMissionPackage(event.currentTarget.files?.[0])
+          }
+        />
         <div className="tak-section-heading">
           <div>
             <p className="eyebrow">LIVE TAK NETWORK</p>
@@ -399,13 +460,26 @@ export function TakTeamPanel({
               <strong>{contact.callsign}</strong>
               <p>{contact.team ?? 'No team'} · active</p>
             </div>
-            <button
-              type="button"
-              aria-label={`Message ${contact.callsign}`}
-              onClick={() => setChatContact(contact)}
-            >
-              <MessageCircle size={19} />
-            </button>
+            <div className="tak-contact-actions">
+              <button
+                type="button"
+                aria-label={`Send package to ${contact.callsign}`}
+                disabled={packageBusyId !== null}
+                onClick={() => {
+                  setPackageContact(contact)
+                  packageInput.current?.click()
+                }}
+              >
+                <Paperclip size={18} />
+              </button>
+              <button
+                type="button"
+                aria-label={`Message ${contact.callsign}`}
+                onClick={() => setChatContact(contact)}
+              >
+                <MessageCircle size={19} />
+              </button>
+            </div>
           </article>
         ))}
       </section>
@@ -443,6 +517,9 @@ export function TakTeamPanel({
           )}
         </form>
       )}
+      {packageError && (
+        <p className="tak-form-error" role="alert">{packageError}</p>
+      )}
 
       <section className="tak-activity" aria-labelledby="tak-activity-heading">
         <div className="tak-section-heading">
@@ -466,6 +543,25 @@ export function TakTeamPanel({
             <span className={`delivery ${item.deliveryStatus}`}>
               {item.deliveryStatus}
             </span>
+            {item.fileTransfer?.mode === 'request' &&
+              item.fileTransfer.status === 'available' && (
+                <button
+                  type="button"
+                  disabled={packageBusyId !== null}
+                  onClick={() => void receiveMissionPackage(item)}
+                >
+                  <Download size={15} />
+                  {packageBusyId === item.id ? 'Verifying…' : 'Download'}
+                </button>
+              )}
+            {item.fileTransfer?.status === 'downloaded' && (
+              <button
+                type="button"
+                onClick={() => void onShareMissionPackage(item)}
+              >
+                <Share2 size={15} /> Open
+              </button>
+            )}
           </article>
         ))}
       </section>

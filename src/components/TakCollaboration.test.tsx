@@ -142,6 +142,9 @@ describe('TAK collaboration controls', () => {
         activity={[]}
         queuedCount={0}
         onSendChat={sendChat}
+        onSendMissionPackage={vi.fn()}
+        onDownloadMissionPackage={vi.fn()}
+        onShareMissionPackage={vi.fn()}
         onSendEmergency={vi.fn()}
       />,
     )
@@ -157,6 +160,34 @@ describe('TAK collaboration controls', () => {
     expect(sendChat).toHaveBeenCalledWith(contact, 'Check bed four')
   })
 
+  it('requires an explicit peer and ZIP selection before queueing a package', async () => {
+    const user = userEvent.setup()
+    const sendPackage = vi.fn(async () => undefined)
+    render(
+      <TakTeamPanel
+        callsign="Field One"
+        contacts={[contact]}
+        activity={[]}
+        queuedCount={0}
+        onSendChat={vi.fn()}
+        onSendMissionPackage={sendPackage}
+        onDownloadMissionPackage={vi.fn()}
+        onShareMissionPackage={vi.fn()}
+        onSendEmergency={vi.fn()}
+      />,
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Send package to Field Two' }),
+    )
+    const file = new File(
+      [new Uint8Array([0x50, 0x4b, 0x03, 0x04])],
+      'field-evidence.zip',
+      { type: 'application/zip' },
+    )
+    await user.upload(screen.getByLabelText('Choose TAK mission package'), file)
+    expect(sendPackage).toHaveBeenCalledWith(contact, file)
+  })
+
   it('uses an explicit confirmation before broadcasting an emergency', async () => {
     const user = userEvent.setup()
     const sendEmergency = vi.fn(async () => undefined)
@@ -167,6 +198,9 @@ describe('TAK collaboration controls', () => {
         activity={[]}
         queuedCount={0}
         onSendChat={vi.fn()}
+        onSendMissionPackage={vi.fn()}
+        onDownloadMissionPackage={vi.fn()}
+        onShareMissionPackage={vi.fn()}
         onSendEmergency={sendEmergency}
       />,
     )

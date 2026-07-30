@@ -76,10 +76,36 @@ interface AetherTakTransportPlugin {
     expectedSha256?: string
     expectedContentType?: string
   }): Promise<NativeFieldResponse>
+  missionPackageUpload(options: {
+    port: number
+    uri: string
+    fileName: string
+    creatorUid: string
+  }): Promise<MissionPackageUploadResult>
+  missionPackageDownload(options: {
+    port: number
+    senderUrl: string
+    fileName: string
+    expectedSha256: string
+    expectedSizeBytes: number
+  }): Promise<MissionPackageDownloadResult>
   addListener(
     eventName: 'cotEvent',
     listener: (event: { xml: string }) => void,
   ): Promise<PluginListenerHandle>
+}
+
+export interface MissionPackageUploadResult {
+  senderUrl: string
+  sha256: string
+  sizeBytes: number
+}
+
+export interface MissionPackageDownloadResult {
+  localUri: string
+  sha256: string
+  sizeBytes: number
+  fileName: string
 }
 
 export interface NativeFieldResponse {
@@ -112,6 +138,9 @@ const browserBackgroundTracking: BackgroundTrackingStatus = {
 const configuredFieldPort = Number(
   import.meta.env.VITE_AETHER_FIELD_API_PORT ?? '9443',
 )
+const configuredMissionPackagePort = Number(
+  import.meta.env.VITE_TAK_MISSION_PACKAGE_PORT ?? '8443',
+)
 
 function fieldPort() {
   if (
@@ -122,6 +151,17 @@ function fieldPort() {
     throw new Error('VITE_AETHER_FIELD_API_PORT must be a valid TCP port.')
   }
   return configuredFieldPort
+}
+
+function missionPackagePort() {
+  if (
+    !Number.isInteger(configuredMissionPackagePort) ||
+    configuredMissionPackagePort < 1 ||
+    configuredMissionPackagePort > 65_535
+  ) {
+    throw new Error('VITE_TAK_MISSION_PACKAGE_PORT must be a valid TCP port.')
+  }
+  return configuredMissionPackagePort
 }
 
 function requireNativeFieldApi() {
@@ -213,6 +253,39 @@ export const takTransport = {
   ): Promise<PluginListenerHandle | null> {
     if (!Capacitor.isNativePlatform()) return null
     return nativeTak.addListener('cotEvent', (event) => listener(event.xml))
+  },
+
+  async uploadMissionPackage(options: {
+    uri: string
+    fileName: string
+    creatorUid: string
+  }): Promise<MissionPackageUploadResult> {
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error(
+        'TAK mission-package upload requires the iOS or Android application.',
+      )
+    }
+    return nativeTak.missionPackageUpload({
+      port: missionPackagePort(),
+      ...options,
+    })
+  },
+
+  async downloadMissionPackage(options: {
+    senderUrl: string
+    fileName: string
+    expectedSha256: string
+    expectedSizeBytes: number
+  }): Promise<MissionPackageDownloadResult> {
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error(
+        'TAK mission-package download requires the iOS or Android application.',
+      )
+    }
+    return nativeTak.missionPackageDownload({
+      port: missionPackagePort(),
+      ...options,
+    })
   },
 }
 

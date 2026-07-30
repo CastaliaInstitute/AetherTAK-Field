@@ -65,6 +65,39 @@ export interface EmergencyOperation extends OperationBase {
     | 'Ring The Bell'
 }
 
+export interface MissionPackageUpload {
+  senderUrl: string
+  sha256: string
+  sizeBytes: number
+}
+
+export interface MissionPackageOperation extends OperationBase {
+  kind: 'missionPackage'
+  sender: TakIdentity
+  recipientUid: string
+  recipientCallsign: string
+  transferName: string
+  fileName: string
+  localUri: string
+  storagePath: string
+  coordinate: Coordinate
+  ackUid: string
+  upload: MissionPackageUpload | null
+}
+
+export interface MissionPackageAckOperation extends OperationBase {
+  kind: 'missionPackageAck'
+  sender: TakIdentity
+  recipientCallsign: string
+  coordinate: Coordinate
+  ackUid: string
+  transferName: string
+  sha256: string
+  sizeBytes: number
+  success: boolean
+  reason: string
+}
+
 export type TakOperation =
   | PositionOperation
   | ChatOperation
@@ -72,5 +105,7 @@ export type TakOperation =
   | RouteOperation
   | ShapeOperation
   | EmergencyOperation
+  | MissionPackageOperation
+  | MissionPackageAckOperation
 
 export type TakOperationKind = TakOperation['kind']

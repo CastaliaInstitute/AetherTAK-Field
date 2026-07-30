@@ -26,12 +26,26 @@ Methods exposed to the shared layer:
 - `fieldChanges({ port, cursor, limit })`
 - `fieldUpload({ port, mediaId, uri, contentType, ... })`
 - `fieldDownload({ port, mediaId, expectedSha256?, expectedContentType? })`
+- `missionPackageUpload({ port, uri, fileName, creatorUid })`
+- `missionPackageDownload({ port, senderUrl, fileName, expectedSha256,
+  expectedSizeBytes })`
 
 The plugin supports standard CoT position, contacts, chat, markers, routes,
-shapes, and emergency events. Field API calls reuse the same issued identity and
+shapes, emergency events, and mission-package requests/receipts. Field and
+Marti content API calls reuse the same issued identity and
 pinned CA; downloaded artifacts are committed to app-private storage only after
 content length, type, and SHA-256 validation. It must never return private key
 bytes, passwords, or raw PKCS#12 content over the Capacitor bridge.
+
+Outbound mission packages must be valid ZIPs containing
+`MANIFEST/manifest.xml` and are limited to 25 MiB. The durable TAK outbox keeps
+the app-private file until the native client has queried or uploaded it through
+`/Marti`, marked the server asset private when supported, and queued a
+recipient-targeted `b-f-t-r` event. Inbound packages are never fetched
+automatically: the operator approves the download, the native client restricts
+the URL to the enrolled HTTPS Marti host/port, and the file remains private
+until its declared length and SHA-256 digest match. A `b-f-t-a` receipt or
+failure response is then returned to the sender.
 
 Background team tracking is opt-in and stops on disconnect, enrollment
 replacement, or credential removal. Android uses a location-typed foreground
@@ -110,8 +124,8 @@ the report.
 
 The shared CoT codec, offline TAK outbox, durable inbound/outbound activity,
 interactive map tools, GeoChat composer, foreground PLI publishing, emergency
-confirmation/cancellation, and bidirectional domain/media sync are implemented
-and unit tested.
+confirmation/cancellation, server-hosted mission-package lifecycle, and
+bidirectional domain/media sync are implemented and unit tested.
 The Swift and Kotlin plugins are registered in their native projects. Both TAK
 plugins parse the issued mission package, enforce archive-size and XML safety
 limits, import the client identity into Keychain/Android KeyStore, retain only

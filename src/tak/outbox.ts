@@ -3,6 +3,7 @@ import { takTransport } from '../platform/tak'
 import type { TakOperation } from './operations'
 import { operationToCot } from './cot'
 import { activityFromOperation } from './activity'
+import { removePersistedMissionPackage } from './missionPackage'
 
 export interface QueuedTakEvent {
   id: string
@@ -15,7 +16,10 @@ export interface QueuedTakEvent {
 
 export async function queueTakOperation(operation: TakOperation) {
   const id = crypto.randomUUID()
-  const xml = operationToCot(operation)
+  const xml =
+    operation.kind === 'missionPackage' && !operation.upload
+      ? ''
+      : operationToCot(operation)
   const queued: QueuedTakEvent = {
     id,
     operation,
@@ -67,6 +71,35 @@ export async function markTakEventFailed(id: string, error: string) {
   })
 }
 
+async function prepareMissionPackage(item: QueuedTakEvent) {
+  if (item.operation.kind !== 'missionPackage' || item.operation.upload) {
+    return item
+  }
+  const upload = await takTransport.uploadMissionPackage({
+    uri: item.operation.localUri,
+    fileName: item.operation.fileName,
+    creatorUid: item.operation.sender.uid,
+  })
+  const operation: TakOperation = {
+    ...item.operation,
+    upload,
+  }
+  const xml = operationToCot(operation)
+  const prepared = { ...item, operation, xml }
+  await db.transaction('rw', [db.takOutbox, db.takActivity], async () => {
+    await db.takOutbox.put(prepared)
+    await db.takActivity.where('outboxId').equals(item.id).modify((activity) => {
+      activity.xml = xml
+      if (activity.fileTransfer) {
+        activity.fileTransfer.senderUrl = upload.senderUrl
+        activity.fileTransfer.sha256 = upload.sha256
+        activity.fileTransfer.sizeBytes = upload.sizeBytes
+      }
+    })
+  })
+  return prepared
+}
+
 export interface TakFlushResult {
   sent: number
   failed: number
@@ -78,15 +111,21 @@ export async function flushTakOutbox(limit = 100): Promise<TakFlushResult> {
   let sent = 0
   let failed = 0
 
-  for (const item of pending) {
+  for (const queued of pending) {
     try {
+      const item = await prepareMissionPackage(queued)
       const accepted = await takTransport.sendXml(item.xml)
       if (!accepted) throw new Error('TAK transport did not accept the event.')
       await markTakEventSent(item.id)
+      if (item.operation.kind === 'missionPackage') {
+        await removePersistedMissionPackage(
+          item.operation.storagePath,
+        ).catch(() => undefined)
+      }
       sent += 1
     } catch (error) {
       await markTakEventFailed(
-        item.id,
+        queued.id,
         error instanceof Error ? error.message : 'Unknown TAK transport error.',
       )
       failed += 1

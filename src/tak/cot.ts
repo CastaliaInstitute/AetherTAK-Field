@@ -190,7 +190,55 @@ export function operationToCot(operation: TakOperation): string {
         detail,
       )
     }
+    case 'missionPackage': {
+      if (!operation.upload) {
+        throw new Error('Upload the mission package before encoding its CoT request.')
+      }
+      const detail = [
+        `<fileshare ${attribute('filename', operation.fileName)} ${attribute('name', operation.transferName)} ${attribute('senderCallsign', operation.sender.callsign)} ${attribute('senderUid', operation.sender.uid)} ${attribute('senderUrl', operation.upload.senderUrl)} ${attribute('sha256', operation.upload.sha256)} ${attribute('sizeInBytes', operation.upload.sizeBytes)}/>`,
+        `<ackrequest ${attribute('uid', operation.ackUid)} ackrequested="true" ${attribute('tag', operation.transferName)}/>`,
+        `<marti><dest ${attribute('callsign', operation.recipientCallsign)}/></marti>`,
+      ].join('')
+      return event(
+        operation.uid,
+        'b-f-t-r',
+        operation.createdAt,
+        operation.staleSeconds ?? 10,
+        operation.coordinate,
+        detail,
+        'h-e',
+      )
+    }
+    case 'missionPackageAck': {
+      const detail = [
+        `<ackresponse ${attribute('uid', operation.ackUid)} ${attribute('senderUid', operation.sender.uid)} ${attribute('success', operation.success)} ${attribute('tag', operation.transferName)} ${attribute('reason', operation.reason)} ${attribute('sha256', operation.sha256)} ${attribute('sizeInBytes', operation.sizeBytes)}/>`,
+        `<marti><dest ${attribute('callsign', operation.recipientCallsign)}/></marti>`,
+      ].join('')
+      return event(
+        operation.uid,
+        'b-f-t-a',
+        operation.createdAt,
+        operation.staleSeconds ?? 10,
+        operation.coordinate,
+        detail,
+        'm-g',
+      )
+    }
   }
+}
+
+export interface ParsedCotFileTransfer {
+  mode: 'request' | 'ack'
+  fileName: string
+  transferName: string
+  senderCallsign: string
+  senderUid: string
+  senderUrl: string | null
+  sha256: string
+  sizeBytes: number
+  ackUid: string
+  success: boolean | null
+  reason: string | null
 }
 
 export interface ParsedCotEvent {
@@ -205,6 +253,7 @@ export interface ParsedCotEvent {
   callsign: string | null
   remarks: string | null
   emergencyType: string | null
+  fileTransfer: ParsedCotFileTransfer | null
   raw: string
 }
 
@@ -225,6 +274,8 @@ function text(value: unknown): string | null {
 }
 
 function operationKind(type: string): TakOperation['kind'] {
+  if (type === 'b-f-t-r') return 'missionPackage'
+  if (type === 'b-f-t-a') return 'missionPackageAck'
   if (type === 'b-t-f') return 'chat'
   if (type === 'b-m-r') return 'route'
   if (type === 'u-d-f') return 'shape'
@@ -257,6 +308,9 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
   const contact = record(detail.contact)
   const chat = record(detail.__chat)
   const emergency = record(detail.emergency)
+  const fileshare = record(detail.fileshare)
+  const ackrequest = record(detail.ackrequest)
+  const ackresponse = record(detail.ackresponse)
   const track = record(detail.track)
   const coordinate: Coordinate = {
     latitude: numeric(pointValue.lat, 0),
@@ -313,6 +367,60 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
       }]
     })
   }
+  let fileTransfer: ParsedCotFileTransfer | null = null
+  if (kind === 'missionPackage') {
+    const sizeBytes = Number(fileshare.sizeInBytes)
+    if (
+      typeof fileshare.filename === 'string' &&
+      typeof fileshare.name === 'string' &&
+      typeof fileshare.senderCallsign === 'string' &&
+      typeof fileshare.senderUid === 'string' &&
+      typeof fileshare.senderUrl === 'string' &&
+      typeof fileshare.sha256 === 'string' &&
+      Number.isSafeInteger(sizeBytes) &&
+      sizeBytes >= 0
+    ) {
+      fileTransfer = {
+        mode: 'request',
+        fileName: fileshare.filename,
+        transferName: fileshare.name,
+        senderCallsign: fileshare.senderCallsign,
+        senderUid: fileshare.senderUid,
+        senderUrl: fileshare.senderUrl,
+        sha256: fileshare.sha256.toLowerCase(),
+        sizeBytes,
+        ackUid: typeof ackrequest.uid === 'string' ? ackrequest.uid : '',
+        success: null,
+        reason: null,
+      }
+    }
+  }
+  if (kind === 'missionPackageAck') {
+    const sizeBytes = Number(ackresponse.sizeInBytes)
+    if (
+      typeof ackresponse.uid === 'string' &&
+      typeof ackresponse.senderUid === 'string' &&
+      typeof ackresponse.sha256 === 'string' &&
+      Number.isSafeInteger(sizeBytes) &&
+      sizeBytes >= 0
+    ) {
+      fileTransfer = {
+        mode: 'ack',
+        fileName: '',
+        transferName:
+          typeof ackresponse.tag === 'string' ? ackresponse.tag : 'Mission package',
+        senderCallsign: '',
+        senderUid: ackresponse.senderUid,
+        senderUrl: null,
+        sha256: ackresponse.sha256.toLowerCase(),
+        sizeBytes,
+        ackUid: ackresponse.uid,
+        success: String(ackresponse.success).toLowerCase() === 'true',
+        reason:
+          typeof ackresponse.reason === 'string' ? ackresponse.reason : null,
+      }
+    }
+  }
 
   return {
     uid: value.uid,
@@ -336,6 +444,7 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
         : typeof emergency.type === 'string'
           ? emergency.type
           : null,
+    fileTransfer,
     raw: xml,
   }
 }

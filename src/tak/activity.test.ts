@@ -1,7 +1,11 @@
 import 'fake-indexeddb/auto'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../data/database'
-import { activityFromCot, recordInboundCot } from './activity'
+import {
+  activityFromCot,
+  activityFromOperation,
+  recordInboundCot,
+} from './activity'
 import { operationToCot } from './cot'
 
 const coordinate = {
@@ -95,6 +99,65 @@ describe('durable TAK activity', () => {
         latitude: coordinate.latitude,
         longitude: coordinate.longitude,
       },
+    })
+  })
+
+  it('applies a peer mission-package receipt to the durable outbound transfer', async () => {
+    const sender = {
+      uid: 'AETHER-FIELD-01',
+      callsign: 'Field One',
+      team: 'Green',
+      role: 'Team Member' as const,
+    }
+    const operation = {
+      kind: 'missionPackage' as const,
+      uid: 'package-request-1',
+      sender,
+      recipientUid: 'ATAK-1',
+      recipientCallsign: 'ATAK One',
+      transferName: 'Field evidence',
+      fileName: 'field-evidence.zip',
+      localUri: 'file:///private/field-evidence.zip',
+      storagePath: 'mission-packages/outbound/field-evidence.zip',
+      coordinate,
+      ackUid: 'package-ack-1',
+      upload: {
+        senderUrl:
+          'https://tak.example.test:8443/Marti/api/sync/metadata/package',
+        sha256: 'c'.repeat(64),
+        sizeBytes: 2048,
+      },
+      createdAt: '2026-07-30T08:04:00.000Z',
+    }
+    await db.takActivity.put(
+      activityFromOperation(
+        operation,
+        operationToCot(operation),
+        'outbox-package-1',
+      ),
+    )
+    await recordInboundCot(
+      operationToCot({
+        kind: 'missionPackageAck',
+        uid: 'package-receipt-1',
+        sender: { ...sender, uid: 'ATAK-1', callsign: 'ATAK One' },
+        recipientCallsign: 'Field One',
+        coordinate,
+        ackUid: 'package-ack-1',
+        transferName: 'Field evidence',
+        sha256: 'c'.repeat(64),
+        sizeBytes: 2048,
+        success: true,
+        reason: 'Transfer complete',
+        createdAt: '2026-07-30T08:05:00.000Z',
+      }),
+    )
+    expect(
+      (await db.takActivity.get('outbound:package-request-1'))?.fileTransfer,
+    ).toMatchObject({
+      status: 'acknowledged',
+      success: true,
+      reason: 'Transfer complete',
     })
   })
 })

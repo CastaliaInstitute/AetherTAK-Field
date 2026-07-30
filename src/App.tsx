@@ -56,10 +56,17 @@ import {
   queueTakOperation,
 } from './tak/outbox'
 import {
+  markMissionPackageDownloaded,
   recentTakActivity,
   recordInboundCot,
   type TakActivity,
 } from './tak/activity'
+import {
+  downloadMissionPackage,
+  persistMissionPackage,
+  removePersistedMissionPackage,
+  shareDownloadedMissionPackage,
+} from './tak/missionPackage'
 import type {
   EmergencyOperation,
   TakIdentity,
@@ -93,6 +100,15 @@ const initialBackgroundTracking: BackgroundTrackingStatus = {
   supported: false,
   enabled: false,
   detail: 'Checking native tracking capability…',
+}
+
+const zeroCoordinate: Coordinate = {
+  latitude: 0,
+  longitude: 0,
+  altitudeMeters: null,
+  horizontalAccuracyMeters: null,
+  verticalAccuracyMeters: null,
+  headingDegrees: null,
 }
 
 export default function App() {
@@ -365,6 +381,83 @@ export default function App() {
       message,
       createdAt: new Date().toISOString(),
     })
+  }
+
+  async function sendMissionPackage(contact: TakContact, file: File) {
+    const persisted = await persistMissionPackage(file)
+    try {
+      const coordinate = await currentCoordinate().catch(() => zeroCoordinate)
+      await dispatchTakOperation({
+        kind: 'missionPackage',
+        uid: `AetherTAK-Field.package.${crypto.randomUUID()}`,
+        sender: identity,
+        recipientUid: contact.uid,
+        recipientCallsign: contact.callsign,
+        transferName: file.name.replace(/\.zip$/i, '').slice(0, 80),
+        fileName: persisted.fileName,
+        localUri: persisted.localUri,
+        storagePath: persisted.storagePath,
+        coordinate,
+        ackUid: crypto.randomUUID(),
+        upload: null,
+        createdAt: new Date().toISOString(),
+        staleSeconds: 10,
+      })
+    } catch (error) {
+      await removePersistedMissionPackage(persisted.storagePath)
+        .catch(() => undefined)
+      throw error
+    }
+  }
+
+  async function receiveMissionPackage(item: TakActivity) {
+    const transfer = item.fileTransfer
+    if (!transfer || transfer.mode !== 'request') {
+      throw new Error('This TAK event is not a mission-package request.')
+    }
+    const coordinate = await currentCoordinate().catch(() => zeroCoordinate)
+    try {
+      const downloaded = await downloadMissionPackage(item)
+      await markMissionPackageDownloaded(item.id, downloaded.localUri)
+      await refreshTakActivity()
+      if (transfer.ackUid) {
+        await dispatchTakOperation({
+          kind: 'missionPackageAck',
+          uid: `AetherTAK-Field.package-ack.${crypto.randomUUID()}`,
+          sender: identity,
+          recipientCallsign: transfer.senderCallsign,
+          coordinate,
+          ackUid: transfer.ackUid,
+          transferName: transfer.transferName,
+          sha256: transfer.sha256 ?? downloaded.sha256,
+          sizeBytes: transfer.sizeBytes,
+          success: true,
+          reason: 'Transfer complete',
+          createdAt: new Date().toISOString(),
+          staleSeconds: 10,
+        })
+      }
+      setNotice(`Verified ${transfer.transferName} and saved it privately.`)
+    } catch (error) {
+      if (transfer.ackUid) {
+        await dispatchTakOperation({
+          kind: 'missionPackageAck',
+          uid: `AetherTAK-Field.package-nack.${crypto.randomUUID()}`,
+          sender: identity,
+          recipientCallsign: transfer.senderCallsign,
+          coordinate,
+          ackUid: transfer.ackUid,
+          transferName: transfer.transferName,
+          sha256: transfer.sha256 ?? '0'.repeat(64),
+          sizeBytes: transfer.sizeBytes,
+          success: false,
+          reason: 'Download or integrity verification failed',
+          createdAt: new Date().toISOString(),
+          staleSeconds: 10,
+        }).catch(() => undefined)
+      }
+      throw error
+    }
   }
 
   async function sendEmergency(
@@ -676,6 +769,9 @@ export default function App() {
               ).length
             }
             onSendChat={sendChat}
+            onSendMissionPackage={sendMissionPackage}
+            onDownloadMissionPackage={receiveMissionPackage}
+            onShareMissionPackage={shareDownloadedMissionPackage}
             onSendEmergency={sendEmergency}
           />
         </section>

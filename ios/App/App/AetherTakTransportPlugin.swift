@@ -19,7 +19,9 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         CAPPluginMethod(name: "fieldMutation", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldChanges", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldUpload", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "fieldDownload", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "fieldDownload", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "missionPackageUpload", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "missionPackageDownload", returnType: CAPPluginReturnPromise)
     ]
 
     private let worker = DispatchQueue(
@@ -301,6 +303,54 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
                 mediaId: mediaId,
                 expectedSha256: call.getString("expectedSha256"),
                 expectedContentType: call.getString("expectedContentType")
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    @objc func missionPackageUpload(_ call: CAPPluginCall) {
+        guard
+            let uri = call.getString("uri"),
+            let fileName = call.getString("fileName"),
+            let creatorUid = call.getString("creatorUid")
+        else {
+            call.reject(
+                "uri, fileName, and creatorUid are required.",
+                "INVALID_MISSION_PACKAGE"
+            )
+            return
+        }
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.uploadMissionPackage(
+                profile: profile,
+                port: port,
+                uri: uri,
+                fileName: fileName,
+                creatorUid: creatorUid
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    @objc func missionPackageDownload(_ call: CAPPluginCall) {
+        guard
+            let senderURL = call.getString("senderUrl"),
+            let fileName = call.getString("fileName"),
+            let expectedSha256 = call.getString("expectedSha256"),
+            let expectedSizeBytes = call.getInt("expectedSizeBytes")
+        else {
+            call.reject(
+                "senderUrl, fileName, expectedSha256, and expectedSizeBytes are required.",
+                "INVALID_MISSION_PACKAGE"
+            )
+            return
+        }
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.downloadMissionPackage(
+                profile: profile,
+                port: port,
+                senderURL: senderURL,
+                fileName: fileName,
+                expectedSha256: expectedSha256,
+                expectedSizeBytes: expectedSizeBytes
             ) { result in self.resolveField(call, result) }
         }
     }

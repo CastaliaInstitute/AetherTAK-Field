@@ -11,6 +11,10 @@ shapes used by TAK clients:
 - ATAK routes using `link_attr` metadata and waypoint `link` elements
 - closed shapes with polyline styling and vertices
 - ATAK emergency initiation and `cancel="true"` cancellation semantics
+- recipient-targeted `b-f-t-r` mission-package requests with `fileshare`,
+  `ackrequest`, and Marti destination details
+- `b-f-t-a` mission-package success/failure receipts that reconcile against the
+  durable outbound activity
 - XML declarations, formatting whitespace, unknown detail extensions, and
   numeric-looking callsigns
 
@@ -20,6 +24,8 @@ The outbound assertions follow the public ATAK-CIV implementation:
 - `Route.toCot()` for `b-m-r` route metadata
 - `EmergencyManager` for emergency initiation and cancellation
 - `ShapeDetailHandler` for shape/polyline details
+- CommonCommo mission-package rules and `fileshare.xsd` for the server-hosted
+  transfer and receipt lifecycle
 
 Reference source:
 <https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV>
