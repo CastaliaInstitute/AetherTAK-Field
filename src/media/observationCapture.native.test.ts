@@ -1,9 +1,11 @@
 import { MediaType } from '@capacitor/camera'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { inspect, deleteFile } = vi.hoisted(() => ({
+const { inspect, deleteFile, readFile, writeFile } = vi.hoisted(() => ({
   inspect: vi.fn(),
   deleteFile: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
 }))
 
 vi.mock('@capacitor/core', () => ({
@@ -16,8 +18,8 @@ vi.mock('@capacitor/filesystem', () => ({
   Directory: { Data: 'DATA' },
   Filesystem: {
     deleteFile,
-    readFile: vi.fn(),
-    writeFile: vi.fn(),
+    readFile,
+    writeFile,
   },
 }))
 
@@ -46,10 +48,23 @@ const capturedVideo = {
   capturedAt: '2026-07-30T06:00:00.000Z',
 }
 
-describe('native video persistence', () => {
+const capturedPhoto = {
+  ...capturedVideo,
+  kind: 'photo' as const,
+  media: {
+    type: MediaType.Photo,
+    uri: '/data/user/0/org.castaliainstitute.aethertak.field/cache/camera/photo.jpg',
+    webPath: 'http://localhost/_capacitor_file_/temporary-photo.jpg',
+    saved: false,
+  },
+}
+
+describe('native media persistence', () => {
   beforeEach(() => {
     inspect.mockReset()
     deleteFile.mockReset()
+    readFile.mockReset()
+    writeFile.mockReset()
   })
 
   it('streams integrity inspection before accepting persistent video', async () => {
@@ -90,6 +105,54 @@ describe('native video persistence', () => {
     ).rejects.toThrow(/empty/)
     expect(deleteFile).toHaveBeenCalledWith({
       path: capturedVideo.media.uri,
+    })
+  })
+
+  it('verifies the final private photo file and uses it for durable preview', async () => {
+    const storedUri =
+      'file:///data/user/0/org.castaliainstitute.aethertak.field/files/observations/photo.jpg'
+    readFile.mockResolvedValue({ data: 'cGhvdG8=' })
+    writeFile.mockResolvedValue({ uri: storedUri })
+    inspect.mockResolvedValue({
+      sha256: 'c'.repeat(64),
+      sizeBytes: 2_048,
+    })
+
+    const stored = await persistCapturedMedia(
+      capturedPhoto,
+      '87e11f1d-5fca-4dd5-b17c-5d8923beac50',
+      'cd89c88b-85d5-47a1-8d79-bd1081d172b7',
+    )
+
+    expect(inspect).toHaveBeenCalledWith(storedUri)
+    expect(stored).toMatchObject({
+      uri: storedUri,
+      previewUri: storedUri,
+      mimeType: 'image/jpeg',
+      sha256: 'c'.repeat(64),
+    })
+    expect(deleteFile).not.toHaveBeenCalled()
+  })
+
+  it('removes the private photo copy when final-file inspection fails', async () => {
+    const observationId = '87e11f1d-5fca-4dd5-b17c-5d8923beac50'
+    const mediaId = 'cd89c88b-85d5-47a1-8d79-bd1081d172b7'
+    readFile.mockResolvedValue({ data: 'cGhvdG8=' })
+    writeFile.mockResolvedValue({
+      uri: 'file:///data/user/0/org.castaliainstitute.aethertak.field/files/observations/photo.jpg',
+    })
+    inspect.mockRejectedValue(new Error('The captured media file is empty.'))
+
+    await expect(
+      persistCapturedMedia(
+        capturedPhoto,
+        observationId,
+        mediaId,
+      ),
+    ).rejects.toThrow(/empty/)
+    expect(deleteFile).toHaveBeenCalledWith({
+      path: `observations/${observationId}/${mediaId}.jpg`,
+      directory: 'DATA',
     })
   })
 })

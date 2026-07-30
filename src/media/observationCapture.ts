@@ -34,16 +34,6 @@ export interface ObservationCaptureDependencies {
   ) => Promise<StoredMedia>
 }
 
-function bytesFromBase64(value: string) {
-  const binary = atob(value)
-  const buffer = new ArrayBuffer(binary.length)
-  const bytes = new Uint8Array(buffer)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return buffer
-}
-
 async function sha256(bytes: ArrayBuffer) {
   const digest = await crypto.subtle.digest('SHA-256', bytes)
   return [...new Uint8Array(digest)]
@@ -59,12 +49,13 @@ export async function persistCapturedMedia(
   const extension = capture.kind === 'video' ? 'mp4' : 'jpg'
   const mimeType = capture.kind === 'video' ? 'video/mp4' : 'image/jpeg'
   const path = `observations/${observationId}/${mediaId}.${extension}`
+  const isNative = Capacitor.isNativePlatform()
   let data: string | Blob
-  let bytes: ArrayBuffer
+  let browserBytes: ArrayBuffer | null = null
 
   if (
     capture.kind === 'video' &&
-    Capacitor.isNativePlatform() &&
+    isNative &&
     capture.media.uri
   ) {
     const uri = capture.media.uri
@@ -88,13 +79,12 @@ export async function persistCapturedMedia(
     }
   }
 
-  if (Capacitor.isNativePlatform() && capture.media.uri) {
+  if (isNative && capture.media.uri) {
     const source = await Filesystem.readFile({ path: capture.media.uri })
     if (typeof source.data !== 'string') {
       throw new Error('Native camera returned an unsupported media payload.')
     }
     data = source.data
-    bytes = bytesFromBase64(source.data)
   } else if (capture.media.webPath) {
     const response = await fetch(capture.media.webPath)
     if (!response.ok) {
@@ -102,7 +92,7 @@ export async function persistCapturedMedia(
     }
     const blob = await response.blob()
     data = blob
-    bytes = await blob.arrayBuffer()
+    browserBytes = await blob.arrayBuffer()
   } else {
     throw new Error('The camera did not return readable media.')
   }
@@ -113,18 +103,34 @@ export async function persistCapturedMedia(
     data,
     recursive: true,
   })
-  return {
-    uri: written.uri,
-    previewUri:
-      capture.media.webPath ??
-      (capture.media.thumbnail
-        ? `data:image/jpeg;base64,${capture.media.thumbnail}`
-        : written.uri),
-    mimeType,
-    sha256: await sha256(bytes),
-    cleanup: async () => {
-      await Filesystem.deleteFile({ path, directory: Directory.Data })
-    },
+  const cleanup = async () => {
+    await Filesystem.deleteFile({ path, directory: Directory.Data })
+  }
+  try {
+    let digest: string
+    if (isNative) {
+      digest = (await mediaIntegrity.inspect(written.uri)).sha256
+    } else {
+      if (!browserBytes) {
+        throw new Error('Captured media has no browser byte payload.')
+      }
+      digest = await sha256(browserBytes)
+    }
+    return {
+      uri: written.uri,
+      previewUri: isNative
+        ? written.uri
+        : capture.media.webPath ??
+          (capture.media.thumbnail
+            ? `data:image/jpeg;base64,${capture.media.thumbnail}`
+            : written.uri),
+      mimeType,
+      sha256: digest,
+      cleanup,
+    }
+  } catch (error) {
+    await cleanup().catch(() => undefined)
+    throw error
   }
 }
 

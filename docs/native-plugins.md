@@ -61,17 +61,19 @@ PLI.
 
 ## AetherMediaIntegrity
 
-Native video capture requests persistent application storage from the Capacitor
-camera implementation, while ARKit and ARCore exporters write depth,
-confidence, point-cloud, and model artifacts into private application-support
-or files directories. Before an observation is committed to IndexedDB or its
-offline outbox, `inspect({ uri })` streams each app-private file through SHA-256
-and returns its digest and byte count. Swift accepts only files within the
-application sandbox; Kotlin accepts only regular files beneath the application
-files, cache, or no-backup directories. Empty media and paths outside those
-roots fail closed. This avoids loading potentially large video and geometry
-files through the JavaScript bridge while ensuring every synchronized evidence
-artifact has integrity metadata.
+Native photo capture copies the camera result into persistent app-private
+storage before inspection, and native video capture requests persistent
+application storage from the Capacitor camera implementation. ARKit and ARCore
+exporters write depth, confidence, point-cloud, and model artifacts into private
+application-support or files directories. Before an observation is committed
+to IndexedDB or its offline outbox, `inspect({ uri })` streams each final
+app-private file through SHA-256 and returns its digest and byte count. Swift
+accepts only files within the application sandbox; Kotlin accepts only regular
+files beneath the application files, cache, or no-backup directories. Empty
+media and paths outside those roots fail closed, and an uncommitted photo copy
+is removed if inspection fails. This avoids loading potentially large final
+media and geometry files through the JavaScript bridge while ensuring every
+synchronized evidence artifact has integrity metadata.
 
 ## AetherDepthScanner
 
