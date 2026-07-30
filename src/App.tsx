@@ -1,0 +1,224 @@
+import { useEffect, useMemo, useState } from 'react'
+import {
+  AlertTriangle,
+  Camera,
+  ChevronRight,
+  Leaf,
+  Map,
+  MessageCircle,
+  Radio,
+  ScanLine,
+  Sprout,
+  Users,
+  Wifi,
+  WifiOff,
+} from 'lucide-react'
+import { FieldMap } from './components/FieldMap'
+import { demoSnapshot } from './domain/seed'
+import type { DepthCapability, TakConnectionState } from './domain/models'
+import { captureGeotaggedPhoto } from './platform/capture'
+import { depthScanner } from './platform/depth'
+import { takTransport } from './platform/tak'
+import './App.css'
+
+type Tab = 'map' | 'fields' | 'capture' | 'team'
+
+const initialDepth: DepthCapability = {
+  supported: false,
+  provider: 'none',
+  supportsPointCloud: false,
+  supportsMesh: false,
+  supportsConfidence: false,
+  reason: 'Checking device…',
+}
+
+function relativeTime(value: string) {
+  const minutes = Math.max(
+    0,
+    Math.round((Date.now() - new Date(value).getTime()) / 60_000),
+  )
+  return minutes < 1 ? 'now' : `${minutes}m ago`
+}
+
+export default function App() {
+  const [tab, setTab] = useState<Tab>('map')
+  const [connection, setConnection] =
+    useState<TakConnectionState>('disconnected')
+  const [depth, setDepth] = useState<DepthCapability>(initialDepth)
+  const [notice, setNotice] = useState<string | null>(null)
+  const { fields, readings, alerts, contacts } = demoSnapshot
+
+  useEffect(() => {
+    void takTransport.status().then((status) => setConnection(status.state))
+    void depthScanner.capability().then(setDepth)
+  }, [])
+
+  const averageHealth = useMemo(() => {
+    const scored = fields.flatMap((field) =>
+      field.healthScore === null ? [] : [field.healthScore],
+    )
+    return Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length)
+  }, [fields])
+
+  async function takePhoto() {
+    setNotice('Opening camera and acquiring a precise location…')
+    try {
+      const capture = await captureGeotaggedPhoto()
+      setNotice(
+        `Photo queued at ${capture.coordinate.latitude.toFixed(5)}, ${capture.coordinate.longitude.toFixed(5)}.`,
+      )
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : 'Camera capture was cancelled.',
+      )
+    }
+  }
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">CASTALIA INSTITUTE</p>
+          <h1>AetherTAK <span>Field</span></h1>
+        </div>
+        <button
+          className={`connection ${connection}`}
+          type="button"
+          aria-label={`TAK status: ${connection}`}
+          onClick={() => void takTransport.connect().then((value) => setConnection(value.state))}
+        >
+          {connection === 'connected' ? <Wifi size={17} /> : <WifiOff size={17} />}
+          <span>{connection === 'connected' ? 'TAK live' : 'TAK preview'}</span>
+        </button>
+      </header>
+
+      {tab === 'map' && (
+        <>
+          <section className="status-strip" aria-label="Field status">
+            <div><strong>{fields.length}</strong><span>Active sites</span></div>
+            <div><strong>{readings.length}</strong><span>Sensors live</span></div>
+            <div><strong>{averageHealth}%</strong><span>Field health</span></div>
+          </section>
+
+          <FieldMap fields={fields} readings={readings} contacts={contacts} />
+
+          <section className="section-block">
+            <div className="section-title">
+              <div><p className="eyebrow">CURRENT SEASON</p><h2>Growing now</h2></div>
+              <button type="button" onClick={() => setTab('fields')}>View fields</button>
+            </div>
+            <div className="field-grid">
+              {fields.map((field) => (
+                <article className="field-card" key={field.id}>
+                  <div className={`crop-icon ${field.status}`}>{field.cropIcon}</div>
+                  <div className="field-copy">
+                    <span className="field-status">{field.status}</span>
+                    <h3>{field.name}</h3>
+                    <p>{field.crop}{field.variety ? ` · ${field.variety}` : ''}</p>
+                  </div>
+                  <div className="health">
+                    <strong>{field.healthScore}</strong><span>health</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="sensor-panel">
+            <div className="sensor-heading">
+              <Radio size={18} />
+              <div><p className="eyebrow">CHIRPSTACK</p><h2>Ground truth</h2></div>
+              <span className="live-dot">Live</span>
+            </div>
+            {readings.map((reading) => (
+              <div className="reading" key={reading.id}>
+                <div>
+                  <strong>{reading.label}</strong>
+                  <span>{relativeTime(reading.recordedAt)} · {reading.quality}</span>
+                </div>
+                <p>{reading.value}<small>{reading.unit}</small></p>
+              </div>
+            ))}
+          </section>
+
+          {alerts.map((alert) => (
+            <aside className={`alert ${alert.severity}`} key={alert.id}>
+              <AlertTriangle size={20} />
+              <div><strong>{alert.title}</strong><p>{alert.detail}</p></div>
+              <ChevronRight size={18} />
+            </aside>
+          ))}
+
+          <aside className="al-card">
+            <div className="al-mark">Al</div>
+            <div>
+              <p className="eyebrow">READ-ONLY FIELD INSIGHT</p>
+              <strong>Irrigate North Market Beds after sunset</strong>
+              <p>Moisture remains adequate now; evening timing reduces evaporative loss.</p>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {tab === 'fields' && (
+        <section className="placeholder-page">
+          <Sprout size={30} />
+          <p className="eyebrow">PROPERTIES · SEASONS · ECOLOGY</p>
+          <h2>Field records</h2>
+          {fields.map((field) => (
+            <article className="record-row" key={field.id}>
+              <span>{field.cropIcon}</span>
+              <div><strong>{field.name}</strong><p>{field.seasonLabel} · {field.crop}</p></div>
+              <ChevronRight />
+            </article>
+          ))}
+        </section>
+      )}
+
+      {tab === 'capture' && (
+        <section className="placeholder-page capture-page">
+          <Camera size={30} />
+          <p className="eyebrow">OFFLINE-FIRST EVIDENCE</p>
+          <h2>Capture an observation</h2>
+          <p>Photos retain coordinates, accuracy, time, field metadata, and sync state.</p>
+          <button className="primary-action" type="button" onClick={() => void takePhoto()}>
+            <Camera size={19} /> Take geotagged photo
+          </button>
+          <button className="secondary-action" type="button" disabled={!depth.supported}>
+            <ScanLine size={19} />
+            {depth.supported ? `Start ${depth.provider} scan` : 'Depth unavailable on this device'}
+          </button>
+          {depth.reason && <small className="capability-note">{depth.reason}</small>}
+        </section>
+      )}
+
+      {tab === 'team' && (
+        <section className="placeholder-page">
+          <Users size={30} />
+          <p className="eyebrow">TAK NETWORK</p>
+          <h2>Team contacts</h2>
+          {contacts.map((contact) => (
+            <article className="record-row" key={contact.uid}>
+              <span className="team-avatar">{contact.callsign.slice(0, 2)}</span>
+              <div><strong>{contact.callsign}</strong><p>{contact.team ?? 'No team'} · active</p></div>
+              <MessageCircle size={19} />
+            </article>
+          ))}
+        </section>
+      )}
+
+      {notice && (
+        <button className="toast" type="button" onClick={() => setNotice(null)}>
+          {notice}
+        </button>
+      )}
+
+      <nav className="bottom-nav" aria-label="Primary navigation">
+        <button className={tab === 'map' ? 'active' : ''} onClick={() => setTab('map')}><Map /><span>Map</span></button>
+        <button className={tab === 'fields' ? 'active' : ''} onClick={() => setTab('fields')}><Leaf /><span>Fields</span></button>
+        <button className={tab === 'capture' ? 'active capture' : 'capture'} onClick={() => setTab('capture')}><Camera /><span>Capture</span></button>
+        <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}><Users /><span>Team</span></button>
+      </nav>
+    </main>
+  )
+}
