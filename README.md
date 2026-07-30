@@ -19,6 +19,9 @@ client and inside Capacitor shells for iOS and Android.
 - Offline map-region planning, Cache Storage downloads, and a cache-first
   MapLibre raster protocol for authorized tile sources, with a 100 MiB
   free-space reserve and recoverable quota-exhaustion handling.
+- Installable web manifest and content-versioned offline application shell with
+  generated 192/512/maskable icons, network-first navigation fallback, and
+  cache rotation that preserves independently managed offline map regions.
 - Structured field/ecology observation capture with category, title, notes,
   geotagged native photo/video, selectable depth output, app-private media,
   streaming SHA-256 integrity for photo, video, depth, confidence, point-cloud,
