@@ -93,6 +93,10 @@ interface AetherTakTransportPlugin {
     eventName: 'cotEvent',
     listener: (event: { xml: string }) => void,
   ): Promise<PluginListenerHandle>
+  addListener(
+    eventName: 'statusChanged',
+    listener: (event: TakStatus) => void,
+  ): Promise<PluginListenerHandle>
 }
 
 export interface MissionPackageUploadResult {
@@ -253,6 +257,13 @@ export const takTransport = {
   ): Promise<PluginListenerHandle | null> {
     if (!Capacitor.isNativePlatform()) return null
     return nativeTak.addListener('cotEvent', (event) => listener(event.xml))
+  },
+
+  async onStatusChange(
+    listener: (status: TakStatus) => void,
+  ): Promise<PluginListenerHandle | null> {
+    if (!Capacitor.isNativePlatform()) return null
+    return nativeTak.addListener('statusChanged', listener)
   },
 
   async uploadMissionPackage(options: {

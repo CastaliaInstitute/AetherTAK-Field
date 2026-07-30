@@ -17,6 +17,7 @@ Methods exposed to the shared layer:
   trust anchor from Keychain/Android KeyStore, and clear non-secret profile
   metadata.
 - `getStatus()`
+- `statusChanged`: listener event emitted when native transport state changes.
 - `getBackgroundTrackingStatus()`
 - `setBackgroundTracking({ enabled })`: explicitly start or stop native,
   system-visible team PLI updates while the web view is suspended.
@@ -58,6 +59,13 @@ Core Location with the `location` background mode and displays the system
 background-location indicator. The shared foreground watcher is disabled while
 the native publisher is active so the same identity does not emit duplicate
 PLI.
+
+The shared client subscribes to `statusChanged` and reconciles the enrolled TAK
+session on native launch, foreground resume, browser-online restoration, and a
+bounded 15-second retry interval. Reconciliation is single-flight, so
+overlapping lifecycle, network, and timer signals cannot create duplicate
+connection attempts. A successful reconnect restarts contact refresh and both
+durable outbox schedulers through the shared connection state.
 
 ## AetherMediaIntegrity
 

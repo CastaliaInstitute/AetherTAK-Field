@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { App as CapacitorApp } from '@capacitor/app'
 import {
   AlertTriangle,
   Camera,
@@ -80,6 +81,7 @@ import {
   selectLatestSensorReadings,
 } from './domain/sensorMonitoring'
 import { importTakDataPackage } from './tak/enrollmentImport'
+import { startTakSessionRecovery } from './tak/sessionRecovery'
 import './App.css'
 
 type Tab = 'map' | 'fields' | 'capture' | 'team'
@@ -147,13 +149,42 @@ export default function App() {
   } = dashboard
 
   useEffect(() => {
-    void takTransport.status().then((status) => {
-      setConnection(status.state)
-      setProfile(status.profile)
-    })
     void depthScanner.capability().then(setDepth)
     void takTransport.backgroundTrackingStatus().then(setBackgroundTracking)
     void recentTakActivity().then(setTakActivity)
+  }, [])
+
+  useEffect(() => {
+    if (!takTransport.isNative()) {
+      void takTransport.status().then((status) => {
+        setConnection(status.state)
+        setProfile(status.profile)
+      })
+      return
+    }
+    return startTakSessionRecovery({
+      status: () => takTransport.status(),
+      connect: (profileId) => takTransport.connect(profileId),
+      onStatus: (status) => {
+        setConnection(status.state)
+        setProfile(status.profile)
+        if (status.state === 'not_enrolled') setContacts([])
+      },
+      isOnline: () => navigator.onLine,
+      setInterval: (callback, intervalMs) =>
+        window.setInterval(callback, intervalMs),
+      clearInterval: (id) => window.clearInterval(id),
+      addOnlineListener: (callback) =>
+        window.addEventListener('online', callback),
+      removeOnlineListener: (callback) =>
+        window.removeEventListener('online', callback),
+      addResumeListener: async (callback) =>
+        CapacitorApp.addListener('appStateChange', ({ isActive }) =>
+          callback(isActive),
+        ),
+      addStatusListener: (callback) =>
+        takTransport.onStatusChange(callback),
+    })
   }, [])
 
   useEffect(() => {

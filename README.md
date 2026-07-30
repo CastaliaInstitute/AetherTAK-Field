@@ -40,6 +40,9 @@ client and inside Capacitor shells for iOS and Android.
   byte-count and SHA-256 verification, receipts, and native open/share.
 - Opt-in native background PLI with a visible iOS location indicator or Android
   location foreground-service notification and an in-app stop control.
+- Single-flight TAK session recovery on native launch, foreground resume,
+  connectivity restoration, and bounded retry, driven by native transport
+  status events so contacts and offline queues resume without an operator tap.
 - Read-only Al field insight surface.
 - Versioned, privacy-safe physical-device readiness reports with native
   app/build, hardware, TAK, depth, sync, offline-map, and media-integrity
