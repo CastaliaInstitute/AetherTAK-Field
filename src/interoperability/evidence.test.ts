@@ -52,6 +52,7 @@ describe('physical interoperability evidence', () => {
       build: '42',
     })
     deviceInfo.mockResolvedValue({
+      platform: 'ios',
       model: 'iPhone 16 Pro',
       operatingSystem: 'ios',
       osVersion: '19.0',
@@ -72,6 +73,7 @@ describe('physical interoperability evidence', () => {
     expect(session.results).toHaveLength(
       interoperabilityCapabilities.length * 2,
     )
+    expect(session.field.platform).toBe('ios')
     expect(session.results).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

@@ -62,8 +62,8 @@ At minimum, retain sessions for:
 
 Run **Team → Device readiness** after the exercises and retain that state
 snapshot with the session. Separately complete one bidirectional iTAK and ATAK
-session per released peer version as described in
-`docs/tak-interoperability.md`.
+session per released peer version on every AetherTAK Field platform in the
+candidate, as described in `docs/tak-interoperability.md`.
 
 ## Privacy and acceptance
 

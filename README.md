@@ -48,6 +48,9 @@ client and inside Capacitor shells for iOS and Android.
 - Durable per-device iTAK/ATAK physical-test sessions with bidirectional
   capability results, exact build/source traceability, controlled screen/log
   references, and privacy-bounded JSON export.
+- A fail-closed private evidence-bundle verifier that binds beta distribution
+  to the exact version, build, commit, physical platform/depth coverage, and
+  complete released-client interoperability results.
 
 The browser provides a safe preview. Certificate enrollment, CoT transport, and
 depth capture are intentionally native-only so private key material does not

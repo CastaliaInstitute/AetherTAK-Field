@@ -43,8 +43,9 @@ Use **Team → iTAK / ATAK test session** on the physical AetherTAK Field device
 Create a separate session for each peer device and released-client version. The
 session persists locally while testing, records Field → peer and peer → Field
 results independently, and exports versioned JSON through the platform share
-sheet. A `blocked` or `fail` result is useful evidence but does not satisfy the
-beta gate.
+sheet. Repeat the iTAK and ATAK matrices on every AetherTAK Field platform
+included in the beta (iOS, Android, or both). A `blocked` or `fail` result is
+useful evidence but does not satisfy the beta gate.
 
 | Capability | Field → iTAK | iTAK → Field | Field → ATAK | ATAK → Field |
 | --- | --- | --- | --- | --- |

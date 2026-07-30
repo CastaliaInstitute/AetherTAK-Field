@@ -26,6 +26,7 @@ vi.mock('@capacitor/app', () => ({
 vi.mock('@capacitor/device', () => ({
   Device: {
     getInfo: vi.fn(async () => ({
+      platform: 'ios',
       model: 'iPhone 16 Pro',
       operatingSystem: 'ios',
       osVersion: '19.0',

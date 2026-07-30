@@ -6,12 +6,85 @@ request. Every run requires:
 
 1. a version such as `0.2.0`;
 2. a new positive build number/version code;
-3. the target platform; and
-4. the exact confirmation value `BETA`.
+3. the target platform;
+4. the released iTAK version used for validation;
+5. the released ATAK version used for validation;
+6. the AetherTAK/TAK Server version used for validation; and
+7. the exact confirmation value `BETA`.
 
 Both store jobs use the protected `beta-distribution` GitHub environment.
 Configure required reviewers on that environment before adding secrets so a
 workflow dispatch alone cannot publish a build.
+
+The authorization job also uses that environment and fails closed unless the
+private `RELEASE_EVIDENCE_BUNDLE_BASE64` secret contains a complete, passing
+evidence bundle for the exact version, build, source revision, and requested
+platform. It requires:
+
+- a matching Device readiness report for every physical validation session;
+- passing physical iOS and/or Android validation for every requested platform;
+- supported ARKit LiDAR or ARCore Depth validation on each requested platform;
+- a physical unsupported-depth fallback session;
+- clear field/TAK queues, enrollment, connection, background tracking, offline
+  maps, and media integrity in the matching readiness reports; and
+- complete passing bidirectional sessions with current iTAK and ATAK, including
+  mission packages and matching TAK Server log references, from every requested
+  AetherTAK Field platform.
+
+The private bundle is decoded only into the Actions runner's temporary
+directory and deleted after authorization. The workflow retains only a
+non-sensitive digest attestation as an artifact.
+
+## Prepare private release evidence
+
+Export the readiness report and Device validation session from every required
+physical device. Add one exported iTAK session and one exported ATAK session
+for each released-client/device combination used by the candidate. Place only
+these JSON exports in a temporary local directory.
+
+Build, verify, and encode the bundle from the exact commit that will be
+distributed:
+
+```bash
+node scripts/release-evidence.mjs collect \
+  --input-dir /controlled/aethertak-field-0.2.0 \
+  --version 0.2.0 \
+  --build 42 \
+  --revision "$(git rev-parse HEAD)" \
+  --output /tmp/aethertak-field-evidence.json
+
+node scripts/release-evidence.mjs verify \
+  --bundle /tmp/aethertak-field-evidence.json \
+  --version 0.2.0 \
+  --build 42 \
+  --revision "$(git rev-parse HEAD)" \
+  --platform both \
+  --itak-version 2.9 \
+  --atak-version 5.5 \
+  --server-version "AetherTAK 1.0" \
+  --manifest-out /tmp/aethertak-field-attestation.json
+
+node scripts/release-evidence.mjs encode \
+  --bundle /tmp/aethertak-field-evidence.json \
+  --output /tmp/aethertak-field-evidence.base64
+
+gh secret set RELEASE_EVIDENCE_BUNDLE_BASE64 \
+  --env beta-distribution \
+  < /tmp/aethertak-field-evidence.base64
+```
+
+The encoder rejects content above GitHub's environment-secret size limit.
+Never commit the raw bundle, encoded bundle, readiness reports, or physical
+session exports. After the distribution run finishes, remove the per-candidate
+secret and temporary files:
+
+```bash
+gh secret delete RELEASE_EVIDENCE_BUNDLE_BASE64 --env beta-distribution
+rm -f \
+  /tmp/aethertak-field-evidence.json \
+  /tmp/aethertak-field-evidence.base64 \
+  /tmp/aethertak-field-attestation.json
+```
 
 ## Android and Google Play
 
@@ -22,6 +95,8 @@ this app only, with permission to manage testing-track releases.
 
 Environment secrets:
 
+- `RELEASE_EVIDENCE_BUNDLE_BASE64`: candidate-specific private evidence
+  bundle, prepared above.
 - `ANDROID_KEYSTORE_BASE64`: base64 of the release JKS/keystore.
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
@@ -53,6 +128,8 @@ password-protected PKCS#12 file.
 
 Environment secrets:
 
+- `RELEASE_EVIDENCE_BUNDLE_BASE64`: candidate-specific private evidence
+  bundle, prepared above.
 - `APPLE_TEAM_ID`
 - `APP_STORE_CONNECT_KEY_ID`
 - `APP_STORE_CONNECT_ISSUER_ID`
@@ -78,6 +155,7 @@ For each beta, retain:
 - the Git commit and successful workflow URL;
 - store version and build number;
 - generated AAB/IPA artifact checksums;
+- the release-evidence attestation JSON and checksum artifact;
 - Google Play/TestFlight processing result and tester group;
 - the in-app Device readiness JSON from every physical test device; and
 - one completed Device validation session JSON from every release-candidate
