@@ -8,18 +8,19 @@ import {
   Map,
   Radio,
   ScanLine,
-  Sprout,
   Users,
   Video,
   Wifi,
   WifiOff,
 } from 'lucide-react'
 import { FieldMap } from './components/FieldMap'
+import { FieldRecords } from './components/FieldRecords'
 import {
   TakMapComposer,
   TakTeamPanel,
 } from './components/TakCollaboration'
 import { demoSnapshot } from './domain/seed'
+import { useDashboard } from './data/useDashboard'
 import type {
   Coordinate,
   DepthCapability,
@@ -103,14 +104,18 @@ export default function App() {
   >('idle')
   const enrollmentInput = useRef<HTMLInputElement>(null)
   const {
+    data: dashboard,
+    loading: dashboardLoading,
+    error: dashboardError,
+  } = useDashboard()
+  const {
     properties,
-    seasons,
     fields,
     ecologicalSites,
     readings,
     alerts,
     insights,
-  } = demoSnapshot
+  } = dashboard
 
   useEffect(() => {
     void takTransport.status().then((status) => {
@@ -174,7 +179,9 @@ export default function App() {
     const scored = fields.flatMap((field) =>
       field.healthScore === null ? [] : [field.healthScore],
     )
-    return Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length)
+    return scored.length
+      ? Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length)
+      : 0
   }, [fields])
 
   const identity = useMemo<TakIdentity>(() => ({
@@ -481,6 +488,12 @@ export default function App() {
 
       {tab === 'map' && (
         <>
+          {dashboardLoading && (
+            <p className="dashboard-state" role="status">Loading offline field records…</p>
+          )}
+          {dashboardError && (
+            <p className="dashboard-state error" role="alert">{dashboardError}</p>
+          )}
           <section className="status-strip" aria-label="Field status">
             <div><strong>{fields.length + ecologicalSites.length}</strong><span>Active sites</span></div>
             <div><strong>{readings.length}</strong><span>Sensors live</span></div>
@@ -588,36 +601,7 @@ export default function App() {
       )}
 
       {tab === 'fields' && (
-        <section className="placeholder-page">
-          <Sprout size={30} />
-          <p className="eyebrow">PROPERTIES · SEASONS · ECOLOGY</p>
-          <h2>Field records</h2>
-          <article className="record-row">
-            <span>🏡</span>
-            <div>
-              <strong>{properties[0]?.name}</strong>
-              <p>{seasons.find((season) => season.status === 'active')?.name} · active season</p>
-            </div>
-            <ChevronRight />
-          </article>
-          {fields.map((field) => (
-            <article className="record-row" key={field.id}>
-              <span>{field.cropIcon}</span>
-              <div><strong>{field.name}</strong><p>{field.seasonLabel} · {field.crop}</p></div>
-              <ChevronRight />
-            </article>
-          ))}
-          {ecologicalSites.map((site) => (
-            <article className="record-row" key={site.id}>
-              <span>🌿</span>
-              <div>
-                <strong>{site.name}</strong>
-                <p>{site.siteType} · {site.conditionScore ?? '—'} condition</p>
-              </div>
-              <ChevronRight />
-            </article>
-          ))}
-        </section>
+        <FieldRecords data={dashboard} onNotice={setNotice} />
       )}
 
       {tab === 'capture' && (

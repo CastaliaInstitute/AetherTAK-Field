@@ -59,6 +59,11 @@ export interface SyncControl {
   lastSyncAt: string | null
 }
 
+export interface AppMetadata {
+  key: 'initial-seed'
+  completedAt: string
+}
+
 class AetherFieldDatabase extends Dexie {
   properties!: EntityTable<Property, 'id'>
   seasons!: EntityTable<Season, 'id'>
@@ -75,6 +80,7 @@ class AetherFieldDatabase extends Dexie {
   takActivity!: EntityTable<TakActivity, 'id'>
   syncMetadata!: EntityTable<SyncMetadata, 'key'>
   syncControl!: EntityTable<SyncControl, 'id'>
+  appMetadata!: EntityTable<AppMetadata, 'key'>
 
   constructor() {
     super('aethertak-field')
@@ -145,6 +151,26 @@ class AetherFieldDatabase extends Dexie {
         'id, uid, direction, kind, createdAt, deliveryStatus, outboxId',
       syncMetadata: 'key, entityType, entityId, revision',
       syncControl: 'id',
+    })
+    this.version(6).stores({
+      properties: 'id, name, updatedAt, syncState',
+      seasons: 'id, propertyId, status, startsOn, endsOn, updatedAt, syncState',
+      fields: 'id, propertyId, seasonId, status, updatedAt',
+      ecologicalSites: 'id, propertyId, siteType, updatedAt, syncState',
+      readings: 'id, deviceId, fieldId, siteId, measurement, recordedAt',
+      observations: 'id, fieldId, siteId, category, observedAt, syncState',
+      media: 'id, observationId, kind, capturedAt, syncState',
+      alerts: 'id, severity, fieldId, deviceId, createdAt, acknowledgedAt',
+      insights: 'id, fieldId, siteId, severity, generatedAt, expiresAt',
+      offlineMapRegions: 'id, tileSourceId, status, updatedAt',
+      outbox:
+        'id, entityType, entityId, operation, createdAt, attempts, nextAttemptAt',
+      takOutbox: 'id, createdAt, attempts, operation.kind',
+      takActivity:
+        'id, uid, direction, kind, createdAt, deliveryStatus, outboxId',
+      syncMetadata: 'key, entityType, entityId, revision',
+      syncControl: 'id',
+      appMetadata: 'key',
     })
   }
 }

@@ -1,5 +1,6 @@
 import type {
   DashboardSnapshot,
+  Alert,
   EcologicalSite,
   Field,
   Observation,
@@ -36,12 +37,61 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
   )
 }
 
+export async function initializeFieldDatabase(snapshot: DashboardSnapshot) {
+  return db.transaction(
+    'rw',
+    [
+      db.appMetadata,
+      db.properties,
+      db.seasons,
+      db.fields,
+      db.ecologicalSites,
+      db.readings,
+      db.observations,
+      db.alerts,
+      db.insights,
+    ],
+    async () => {
+      if (await db.appMetadata.get('initial-seed')) return false
+      const counts = await Promise.all([
+        db.properties.count(),
+        db.seasons.count(),
+        db.fields.count(),
+        db.ecologicalSites.count(),
+        db.readings.count(),
+        db.observations.count(),
+        db.alerts.count(),
+        db.insights.count(),
+      ])
+      const empty = counts.every((count) => count === 0)
+      if (empty) {
+        await Promise.all([
+          db.properties.bulkPut(snapshot.properties),
+          db.seasons.bulkPut(snapshot.seasons),
+          db.fields.bulkPut(snapshot.fields),
+          db.ecologicalSites.bulkPut(snapshot.ecologicalSites),
+          db.readings.bulkPut(snapshot.readings),
+          db.observations.bulkPut(snapshot.observations),
+          db.alerts.bulkPut(snapshot.alerts),
+          db.insights.bulkPut(snapshot.insights),
+        ])
+      }
+      await db.appMetadata.put({
+        key: 'initial-seed',
+        completedAt: new Date().toISOString(),
+      })
+      return empty
+    },
+  )
+}
+
 type MutableFieldEntity =
   | { type: 'property'; value: Property }
   | { type: 'season'; value: Season }
   | { type: 'field'; value: Field }
   | { type: 'ecological_site'; value: EcologicalSite }
   | { type: 'observation'; value: Observation }
+  | { type: 'alert'; value: Alert }
 
 export async function saveLocalEntity(entity: MutableFieldEntity) {
   await db.transaction(
@@ -52,6 +102,7 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
       db.fields,
       db.ecologicalSites,
       db.observations,
+      db.alerts,
       db.outbox,
       db.syncMetadata,
     ],
@@ -71,6 +122,9 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
           break
         case 'observation':
           await db.observations.put(entity.value)
+          break
+        case 'alert':
+          await db.alerts.put(entity.value)
           break
       }
       await queueMutation({
