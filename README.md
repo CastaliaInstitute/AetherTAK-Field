@@ -41,6 +41,10 @@ client and inside Capacitor shells for iOS and Android.
 - Versioned, privacy-safe physical-device readiness reports with native
   app/build, hardware, TAK, depth, sync, offline-map, and media-integrity
   evidence export through the platform share sheet.
+- Durable per-device release-validation sessions for enrollment renewal,
+  offline recovery, camera/video integrity, depth accuracy and artifacts,
+  platform fallback, screen-lock tracking, permission loss, airplane mode, and
+  low-storage behavior.
 - Durable per-device iTAK/ATAK physical-test sessions with bidirectional
   capability results, exact build/source traceability, controlled screen/log
   references, and privacy-bounded JSON export.
@@ -107,6 +111,9 @@ Offline map source requirements and remaining runtime integration gates are in
 
 Secret-gated TestFlight and Google Play internal-testing setup is documented in
 [docs/beta-distribution.md](docs/beta-distribution.md).
+
+The physical-device execution matrix and controlled-evidence rules are in
+[docs/physical-release-validation.md](docs/physical-release-validation.md).
 
 ## Server endpoints
 

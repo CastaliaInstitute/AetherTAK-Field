@@ -1568,6 +1568,41 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
   font-size: 8px;
   font-weight: 800;
 }
+.release-check-instruction {
+  margin: 0 10px 8px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.release-verdict {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.release-verdict.pass { color: var(--green); }
+.release-verdict.attention { color: #e8bd64; }
+.release-verdict.fail { color: #ef8b84; }
+.release-measurement {
+  display: grid;
+  gap: 8px;
+  margin: 8px;
+  padding: 9px;
+  border: 1px solid rgba(113,212,209,.15);
+  border-radius: 9px;
+}
+.depth-verdict {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.depth-verdict.fail { color: #ef8b84; }
 .interop-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .interop-actions button { display: inline-flex; align-items: center; gap: 5px; }
 .visually-hidden {

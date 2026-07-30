@@ -112,6 +112,16 @@ It is a state snapshot, not a substitute for the behavioral evidence matrix:
 retain it alongside screenshots/video, peer versions, TAK Server log intervals,
 and measured depth results.
 
+Create a separate **Team → Device validation session** for every physical
+release-candidate device. The session is bound to the installed version, build,
+source revision, device, OS, and physical/virtual state. It persists the
+non-TAK behavioral matrix: enrollment replacement, offline relaunch and ordered
+sync, conflict recovery, camera/video and media integrity, depth accuracy and
+artifact export, unsupported-hardware fallback, screen-lock tracking,
+permission revocation, airplane mode, and low storage. The known-dimension
+depth result is calculated from the recorded distances and accepted tolerance;
+it is not a manual pass/fail field.
+
 For released-client validation, create a durable session under **Team → iTAK /
 ATAK test session**. It records every direction separately for PLI, screen-lock
 background PLI, GeoChat, markers, routes, open and closed shapes, emergencies,

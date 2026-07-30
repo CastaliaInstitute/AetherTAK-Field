@@ -13,6 +13,7 @@ import {
 import { CapturePanel } from './components/CapturePanel'
 import { DeviceReadinessPanel } from './components/DeviceReadinessPanel'
 import { InteroperabilityEvidencePanel } from './components/InteroperabilityEvidencePanel'
+import { PhysicalReleaseEvidencePanel } from './components/PhysicalReleaseEvidencePanel'
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
 import { OfflineMapManager } from './components/OfflineMapManager'
@@ -754,6 +755,7 @@ export default function App() {
             onToggle={toggleBackgroundTracking}
           />
           <DeviceReadinessPanel contactCount={contacts.length} />
+          <PhysicalReleaseEvidencePanel />
           <InteroperabilityEvidencePanel
             defaultSenderCallsign={identity.callsign}
           />

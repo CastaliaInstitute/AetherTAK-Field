@@ -80,6 +80,8 @@ For each beta, retain:
 - generated AAB/IPA artifact checksums;
 - Google Play/TestFlight processing result and tester group;
 - the in-app Device readiness JSON from every physical test device; and
+- one completed Device validation session JSON from every release-candidate
+  physical device, with its controlled screenshot/video/log evidence set;
 - one exported iTAK/ATAK interoperability-session JSON per peer device and
   released-client version, with controlled screenshot and server-log
   references;
@@ -88,4 +90,5 @@ For each beta, retain:
 
 Store upload success proves delivery to the store, not physical-device
 correctness. Do not promote a beta until the physical evidence matrix in
-`docs/tak-interoperability.md` is complete for the release candidate.
+`docs/physical-release-validation.md` and the bidirectional matrix in
+`docs/tak-interoperability.md` are complete for the release candidate.
