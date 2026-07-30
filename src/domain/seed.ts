@@ -4,6 +4,7 @@ import type {
   DashboardSnapshot,
   EcologicalSite,
   Field,
+  GuardianParticipantState,
   Property,
   Season,
   SensorReading,
@@ -250,6 +251,38 @@ export const demoContacts: TakContact[] = [
   },
 ]
 
+export const demoGuardianParticipants: GuardianParticipantState[] = [
+  {
+    id: '88be2f51-6e6d-4a0a-85bf-0fa42d25a0de',
+    displayName: 'Participant 7',
+    mode: 'child',
+    team: 'Green',
+    state: 'normal',
+    zone: 'North Market Beds',
+    alertState: 'none',
+    checkIn: 'current',
+    location: {
+      coordinate: {
+        latitude: 39.7412,
+        longitude: -104.9942,
+        altitudeMeters: 1608,
+        horizontalAccuracyMeters: 8,
+        verticalAccuracyMeters: 15,
+        headingDegrees: 184,
+      },
+      source: 'watch_gnss',
+      confidence: 'good',
+      observedAt: minutesAgo(1),
+    },
+    device: {
+      connectivity: 'watch_phone_wifi',
+      lastContactAt: minutesAgo(1),
+      batteryPercent: 72,
+    },
+    updatedAt: minutesAgo(1),
+  },
+]
+
 export const demoSnapshot: DashboardSnapshot = {
   properties: demoProperties,
   seasons: demoSeasons,
@@ -259,5 +292,6 @@ export const demoSnapshot: DashboardSnapshot = {
   observations: [],
   alerts: demoAlerts,
   insights: demoInsights,
+  guardianParticipants: demoGuardianParticipants,
   contacts: demoContacts,
 }

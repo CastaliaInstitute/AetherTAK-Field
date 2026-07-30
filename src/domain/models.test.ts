@@ -4,6 +4,7 @@ import {
   depthCapabilitySchema,
   depthScanResultSchema,
   fieldSchema,
+  guardianParticipantStateSchema,
   mediaCaptureSchema,
   sensorReadingSchema,
   takContactSchema,
@@ -139,6 +140,31 @@ describe('field data contracts', () => {
     )
     expect(
       demoSnapshot.contacts.some((contact) => contact.callsign === 'al'),
+    ).toBe(false)
+  })
+
+  it('accepts bounded Guardian state and rejects biometric leakage', () => {
+    const participant = demoSnapshot.guardianParticipants[0]
+    expect(guardianParticipantStateSchema.parse(participant)).toEqual(
+      participant,
+    )
+    expect(
+      guardianParticipantStateSchema.safeParse({
+        ...participant,
+        heartRate: 82,
+      }).success,
+    ).toBe(false)
+    expect(
+      guardianParticipantStateSchema.safeParse({
+        ...participant,
+        location: {
+          ...participant.location,
+          coordinate: {
+            ...participant.location.coordinate,
+            heartRate: 82,
+          },
+        },
+      }).success,
     ).toBe(false)
   })
 })

@@ -23,6 +23,7 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
       db.observations,
       db.alerts,
       db.insights,
+      db.guardianParticipants,
     ],
     async () => {
       await Promise.all([
@@ -34,6 +35,7 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
         db.observations.bulkPut(snapshot.observations),
         db.alerts.bulkPut(snapshot.alerts),
         db.insights.bulkPut(snapshot.insights),
+        db.guardianParticipants.bulkPut(snapshot.guardianParticipants),
       ])
     },
   )
@@ -54,6 +56,7 @@ export async function initializeFieldDatabase(
       db.observations,
       db.alerts,
       db.insights,
+      db.guardianParticipants,
     ],
     async () => {
       if (await db.appMetadata.get('initial-seed')) return false
@@ -66,6 +69,7 @@ export async function initializeFieldDatabase(
         db.observations.count(),
         db.alerts.count(),
         db.insights.count(),
+        db.guardianParticipants.count(),
       ])
       const empty = counts.every((count) => count === 0)
       if (empty && snapshot) {
@@ -78,6 +82,7 @@ export async function initializeFieldDatabase(
           db.observations.bulkPut(snapshot.observations),
           db.alerts.bulkPut(snapshot.alerts),
           db.insights.bulkPut(snapshot.insights),
+          db.guardianParticipants.bulkPut(snapshot.guardianParticipants),
         ])
       }
       await db.appMetadata.put({
@@ -159,6 +164,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     media,
     alerts,
     insights,
+    guardianParticipants,
     conflicts,
     offlineMapRegions,
   ] = await Promise.all([
@@ -171,6 +177,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     db.media.orderBy('capturedAt').reverse().toArray(),
     db.alerts.orderBy('createdAt').reverse().toArray(),
     db.insights.orderBy('generatedAt').reverse().toArray(),
+    db.guardianParticipants.orderBy('updatedAt').reverse().toArray(),
     db.outbox.filter((item) => item.conflict !== null).toArray(),
     db.offlineMapRegions.orderBy('updatedAt').reverse().toArray(),
   ])
@@ -187,6 +194,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     insights: insights.filter(
       (insight) => new Date(insight.expiresAt).getTime() > Date.now(),
     ),
+    guardianParticipants,
     conflicts,
     offlineMapRegions,
   }

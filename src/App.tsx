@@ -18,6 +18,7 @@ import { InteroperabilityEvidencePanel } from './components/InteroperabilityEvid
 import { PhysicalReleaseEvidencePanel } from './components/PhysicalReleaseEvidencePanel'
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
+import { GuardianRoster } from './components/GuardianRoster'
 import { OfflineMapManager } from './components/OfflineMapManager'
 import { SensorMonitor } from './components/SensorMonitor'
 import {
@@ -150,6 +151,7 @@ export default function App() {
     observations,
     alerts,
     insights,
+    guardianParticipants,
     offlineMapRegions,
   } = dashboard
 
@@ -690,10 +692,15 @@ export default function App() {
             observations={observations}
             alerts={alerts}
             insights={liveInsights}
+            guardianParticipants={guardianParticipants}
             contacts={contacts}
             activity={takActivity}
             draft={mapDraft}
             onMapPress={mapDraft ? addDraftPoint : null}
+          />
+          <GuardianRoster
+            participants={guardianParticipants}
+            now={monitoringNow}
           />
           <TakMapComposer
             draft={

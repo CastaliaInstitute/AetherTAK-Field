@@ -8,6 +8,7 @@ import type {
   AlInsight,
   EcologicalSite,
   Field,
+  GuardianParticipantState,
   Observation,
   SensorReading,
 } from '../domain/models'
@@ -242,6 +243,107 @@ export function insightCollection(
         detail: insight.summary,
         severity: insight.severity,
       })]
+    }),
+  }
+}
+
+function guardianAccuracyMeters(participant: GuardianParticipantState) {
+  const reported = participant.location.coordinate.horizontalAccuracyMeters
+  if (reported !== null) return Math.min(5_000, Math.max(3, reported))
+  switch (participant.location.source) {
+    case 'watch_gnss':
+      return 25
+    case 'ble_estimate':
+      return 50
+    case 'ble_presence':
+      return 100
+    case 'meshtastic':
+      return 50
+    case 'last_known':
+      return 250
+  }
+}
+
+function guardianSourceLabel(source: GuardianParticipantState['location']['source']) {
+  switch (source) {
+    case 'watch_gnss':
+      return 'Watch GPS'
+    case 'ble_estimate':
+      return 'BLE estimate'
+    case 'ble_presence':
+      return 'BLE zone presence'
+    case 'meshtastic':
+      return 'Meshtastic'
+    case 'last_known':
+      return 'Last known'
+  }
+}
+
+export function guardianParticipantCollection(
+  participants: GuardianParticipantState[],
+): FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: participants.map((participant) => {
+      const { coordinate } = participant.location
+      const accuracy = guardianAccuracyMeters(participant)
+      return pointFeature(coordinate.longitude, coordinate.latitude, {
+        id: participant.id,
+        title: participant.displayName,
+        eyebrow: `Guardian · ${participant.state}`,
+        detail: [
+          guardianSourceLabel(participant.location.source),
+          `${Math.round(accuracy)} m uncertainty`,
+          participant.zone,
+          participant.alertState === 'none'
+            ? null
+            : `${participant.alertState} alert`,
+          participant.checkIn === 'not_required'
+            ? null
+            : `${participant.checkIn.replaceAll('_', ' ')} check-in`,
+        ].filter(Boolean).join(' · '),
+        state: participant.state,
+        alertState: participant.alertState,
+        confidence: participant.location.confidence,
+        source: participant.location.source,
+        accuracyMeters: accuracy,
+      })
+    }),
+  }
+}
+
+export function guardianUncertaintyCollection(
+  participants: GuardianParticipantState[],
+): FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: participants.map((participant) => {
+      const { latitude, longitude } = participant.location.coordinate
+      const radius = guardianAccuracyMeters(participant)
+      const latitudeDegrees = radius / 111_320
+      const longitudeDegrees =
+        radius / Math.max(1, 111_320 * Math.cos(latitude * Math.PI / 180))
+      const ring = Array.from({ length: 33 }, (_, index) => {
+        const angle = 2 * Math.PI * index / 32
+        return [
+          longitude + Math.cos(angle) * longitudeDegrees,
+          latitude + Math.sin(angle) * latitudeDegrees,
+        ]
+      })
+      return {
+        type: 'Feature' as const,
+        properties: {
+          id: participant.id,
+          state: participant.state,
+          confidence: participant.location.confidence,
+          source: participant.location.source,
+          accuracyMeters: radius,
+        },
+        geometry: {
+          type: 'Polygon' as const,
+          coordinates: [ring],
+        },
+      }
     }),
   }
 }

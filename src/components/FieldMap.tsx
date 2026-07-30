@@ -12,6 +12,7 @@ import type {
   Coordinate,
   EcologicalSite,
   Field,
+  GuardianParticipantState,
   Observation,
   SensorReading,
   TakContact,
@@ -27,6 +28,8 @@ import {
   alertCollection,
   ecologicalSiteCollection,
   fieldCollection,
+  guardianParticipantCollection,
+  guardianUncertaintyCollection,
   insightCollection,
   observationCollection,
   readingCollection,
@@ -39,6 +42,7 @@ interface FieldMapProps {
   observations: Observation[]
   alerts: Alert[]
   insights: AlInsight[]
+  guardianParticipants?: GuardianParticipantState[]
   contacts: TakContact[]
   activity: TakActivity[]
   draft: {
@@ -166,6 +170,7 @@ function draftCollection(
 }
 
 const detailLayerIds = [
+  'guardian-participants',
   'monitoring-alerts',
   'al-insights',
   'observations',
@@ -198,6 +203,7 @@ export function FieldMap({
   observations,
   alerts,
   insights,
+  guardianParticipants = [],
   contacts,
   activity,
   draft,
@@ -216,6 +222,7 @@ export function FieldMap({
   const observationsRef = useRef(observations)
   const alertsRef = useRef(alerts)
   const insightsRef = useRef(insights)
+  const guardianParticipantsRef = useRef(guardianParticipants)
   const activityRef = useRef(activity)
   const draftRef = useRef(draft)
   onMapPressRef.current = onMapPress
@@ -225,6 +232,7 @@ export function FieldMap({
   observationsRef.current = observations
   alertsRef.current = alerts
   insightsRef.current = insights
+  guardianParticipantsRef.current = guardianParticipants
   activityRef.current = activity
   activityClockRef.current = activityClock
   draftRef.current = draft
@@ -489,6 +497,93 @@ export function FieldMap({
           'text-color': '#17231d',
         },
       })
+      nextMap.addSource('guardian-uncertainty', {
+        type: 'geojson',
+        data: guardianUncertaintyCollection(
+          guardianParticipantsRef.current,
+        ),
+      })
+      nextMap.addLayer({
+        id: 'guardian-uncertainty',
+        type: 'fill',
+        source: 'guardian-uncertainty',
+        paint: {
+          'fill-color': [
+            'match',
+            ['get', 'state'],
+            'critical',
+            '#ef6b63',
+            'caution',
+            '#efb75e',
+            'offline',
+            '#9eada4',
+            '#89cf78',
+          ],
+          'fill-opacity': 0.16,
+        },
+      })
+      nextMap.addLayer({
+        id: 'guardian-uncertainty-outline',
+        type: 'line',
+        source: 'guardian-uncertainty',
+        paint: {
+          'line-color': [
+            'match',
+            ['get', 'state'],
+            'critical',
+            '#ef6b63',
+            'caution',
+            '#efb75e',
+            'offline',
+            '#9eada4',
+            '#89cf78',
+          ],
+          'line-width': 1.5,
+          'line-dasharray': [2, 1.5],
+        },
+      })
+      nextMap.addSource('guardian-participants', {
+        type: 'geojson',
+        data: guardianParticipantCollection(
+          guardianParticipantsRef.current,
+        ),
+      })
+      nextMap.addLayer({
+        id: 'guardian-participants',
+        type: 'circle',
+        source: 'guardian-participants',
+        paint: {
+          'circle-radius': 10,
+          'circle-color': [
+            'match',
+            ['get', 'alertState'],
+            'sos',
+            '#ff3b30',
+            'critical',
+            '#ef6b63',
+            'warning',
+            '#efb75e',
+            '#89cf78',
+          ],
+          'circle-stroke-color': '#f8f6ed',
+          'circle-stroke-width': 2,
+        },
+      })
+      nextMap.addLayer({
+        id: 'guardian-participant-labels',
+        type: 'symbol',
+        source: 'guardian-participants',
+        layout: {
+          'text-field': ['get', 'title'],
+          'text-size': 11,
+          'text-offset': [0, 1.6],
+        },
+        paint: {
+          'text-color': '#f8f6ed',
+          'text-halo-color': '#13201a',
+          'text-halo-width': 1.5,
+        },
+      })
       nextMap.addSource('tak-activity-points', {
         type: 'geojson',
         data: activityPointCollection(
@@ -654,10 +749,21 @@ export function FieldMap({
     ;(
       currentMap.getSource('al-insights') as GeoJSONSource | undefined
     )?.setData(insightCollection(insights, fields, ecologicalSites))
+    ;(
+      currentMap.getSource('guardian-participants') as
+        | GeoJSONSource
+        | undefined
+    )?.setData(guardianParticipantCollection(guardianParticipants))
+    ;(
+      currentMap.getSource('guardian-uncertainty') as
+        | GeoJSONSource
+        | undefined
+    )?.setData(guardianUncertaintyCollection(guardianParticipants))
   }, [
     alerts,
     ecologicalSites,
     fields,
+    guardianParticipants,
     insights,
     observations,
     readings,
@@ -709,7 +815,7 @@ export function FieldMap({
       <div
         ref={container}
         className="field-map"
-        aria-label="Map of crop fields, ecological sites, sensor data, field evidence, alerts, Al insights, and TAK contacts"
+        aria-label="Map of crop fields, ecological sites, sensors, Guardian participants, field evidence, alerts, Al insights, and TAK contacts"
       />
       <div className="map-legend" aria-label="Map legend">
         <span><i className="legend-field" /> Field</span>
@@ -718,6 +824,7 @@ export function FieldMap({
         <span><i className="legend-evidence" /> Evidence</span>
         <span><i className="legend-alert" /> Alert</span>
         <span><i className="legend-al" /> Al</span>
+        <span><i className="legend-guardian" /> Guardian</span>
         <span><i className="legend-team" /> Team</span>
         <span><i className="legend-tak" /> TAK</span>
       </div>

@@ -332,6 +332,15 @@ The Guardian dashboard adds roster, alert queue, gateway health, last-contact
 age, uncertainty, check-ins, and incident playback. Exact history and
 biometrics require explicit permissions.
 
+The first AetherTAK Field vertical slice is implemented for participant state.
+`guardian_participant` changes are validated as strict, server-managed records
+inside the existing ordered mTLS field change feed, stored in IndexedDB for
+offline use, and rendered as an urgency-ordered roster, participant point, and
+meter-based uncertainty polygon. Missing accuracy uses conservative
+source-specific defaults. Undeclared fields—including biometric values—fail
+validation without advancing the durable change cursor. Mobile mutation of
+participant state is intentionally unavailable.
+
 ## 7. Canonical protobuf contract
 
 The initial source file is `proto/castalia/guardian/v1/telemetry.proto`.

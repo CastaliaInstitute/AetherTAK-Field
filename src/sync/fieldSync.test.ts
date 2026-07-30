@@ -577,6 +577,85 @@ describe('Aether Field durable synchronization', () => {
     ).toBe(1)
   })
 
+  it('persists server-authoritative Guardian state for offline rendering', async () => {
+    const participant = {
+      ...demoSnapshot.guardianParticipants[0],
+      state: 'caution' as const,
+      zone: 'Creek',
+      updatedAt: '2026-07-30T07:12:00.000Z',
+    }
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [{
+            cursor: 12,
+            entityType: 'guardian_participant',
+            entityId: participant.id,
+            revision: 3,
+            operation: 'update',
+            payload: participant,
+            serverUpdatedAt: '2026-07-30T07:12:01.000Z',
+            author: 'Guardian Fusion',
+          }],
+          nextCursor: 12,
+          hasMore: false,
+        },
+      })),
+    }
+
+    expect(await pullFieldChanges(transport)).toMatchObject({
+      applied: 1,
+      cursor: 12,
+    })
+    expect(await db.guardianParticipants.get(participant.id)).toMatchObject({
+      state: 'caution',
+      zone: 'Creek',
+      alertState: 'none',
+    })
+    expect(
+      (await db.syncMetadata.get(
+        `guardian_participant:${participant.id}`,
+      ))?.revision,
+    ).toBe(3)
+  })
+
+  it('rejects Guardian payloads that leak undeclared biometric fields', async () => {
+    const participant = {
+      ...demoSnapshot.guardianParticipants[0],
+      heartRate: 82,
+    }
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [{
+            cursor: 13,
+            entityType: 'guardian_participant',
+            entityId: participant.id,
+            revision: 1,
+            operation: 'create',
+            payload: participant,
+            serverUpdatedAt: '2026-07-30T07:13:01.000Z',
+            author: 'Guardian Fusion',
+          }],
+          nextCursor: 13,
+          hasMore: false,
+        },
+      })),
+    }
+
+    await expect(pullFieldChanges(transport)).rejects.toThrow()
+    expect(await db.guardianParticipants.get(participant.id)).toBeUndefined()
+    expect(await db.syncControl.get('field')).toBeUndefined()
+  })
+
   it('turns a pull collision into a preserved local/server conflict', async () => {
     const queued = await queueMutation({
       entityType: 'property',

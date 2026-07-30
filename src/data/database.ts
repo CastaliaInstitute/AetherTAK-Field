@@ -4,6 +4,7 @@ import type {
   AlInsight,
   EcologicalSite,
   Field,
+  GuardianParticipantState,
   MediaCapture,
   Observation,
   OfflineMapRegion,
@@ -42,6 +43,7 @@ export type SyncedEntityType =
   | MutableEntityType
   | 'sensor_reading'
   | 'al_insight'
+  | 'guardian_participant'
 
 export interface ServerEntity {
   entityType: SyncedEntityType
@@ -83,6 +85,7 @@ class AetherFieldDatabase extends Dexie {
   media!: EntityTable<MediaCapture, 'id'>
   alerts!: EntityTable<Alert, 'id'>
   insights!: EntityTable<AlInsight, 'id'>
+  guardianParticipants!: EntityTable<GuardianParticipantState, 'id'>
   offlineMapRegions!: EntityTable<OfflineMapRegion, 'id'>
   outbox!: EntityTable<OutboxItem, 'id'>
   takOutbox!: EntityTable<QueuedTakEvent, 'id'>
@@ -262,6 +265,29 @@ class AetherFieldDatabase extends Dexie {
           await outbox.update(item.id, { clientSequence: index + 1 })
         }
       })
+    this.version(9).stores({
+      properties: 'id, name, updatedAt, syncState',
+      seasons: 'id, propertyId, status, startsOn, endsOn, updatedAt, syncState',
+      fields: 'id, propertyId, seasonId, status, updatedAt, syncState',
+      ecologicalSites: 'id, propertyId, siteType, updatedAt, syncState',
+      readings: 'id, deviceId, fieldId, siteId, measurement, recordedAt',
+      observations: 'id, fieldId, siteId, category, observedAt, syncState',
+      media: 'id, observationId, kind, capturedAt, syncState',
+      alerts:
+        'id, severity, fieldId, deviceId, createdAt, acknowledgedAt, syncState',
+      insights: 'id, fieldId, siteId, severity, generatedAt, expiresAt',
+      guardianParticipants:
+        'id, state, alertState, checkIn, location.observedAt, device.lastContactAt, updatedAt',
+      offlineMapRegions: 'id, tileSourceId, status, updatedAt',
+      outbox:
+        'id, entityType, entityId, operation, createdAt, clientSequence, attempts, nextAttemptAt',
+      takOutbox: 'id, createdAt, attempts, operation.kind',
+      takActivity:
+        'id, uid, direction, kind, createdAt, deliveryStatus, outboxId',
+      syncMetadata: 'key, entityType, entityId, revision',
+      syncControl: 'id',
+      appMetadata: 'key',
+    })
   }
 }
 

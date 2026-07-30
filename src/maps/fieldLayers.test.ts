@@ -3,6 +3,7 @@ import type { Alert, AlInsight, Observation } from '../domain/models'
 import {
   demoEcologicalSites,
   demoFields,
+  demoGuardianParticipants,
   demoInsights,
   demoReadings,
 } from '../domain/seed'
@@ -11,6 +12,8 @@ import {
   ecologicalSiteCollection,
   fieldCollection,
   formatSensorValue,
+  guardianParticipantCollection,
+  guardianUncertaintyCollection,
   insightCollection,
   observationCollection,
   readingCollection,
@@ -151,5 +154,49 @@ describe('operational field map layers', () => {
         demoEcologicalSites[0].center.latitude,
       ],
     })
+  })
+
+  it('maps Guardian participants with explicit source and uncertainty', () => {
+    const participant = demoGuardianParticipants[0]
+    const points = guardianParticipantCollection([participant])
+    const uncertainty = guardianUncertaintyCollection([participant])
+
+    expect(points.features[0].properties).toMatchObject({
+      title: participant.displayName,
+      source: 'watch_gnss',
+      confidence: 'good',
+      accuracyMeters: 8,
+    })
+    expect(points.features[0].properties?.detail).toContain('Watch GPS')
+    expect(points.features[0].properties?.detail).toContain('8 m uncertainty')
+    expect(uncertainty.features[0].geometry.type).toBe('Polygon')
+    const ring =
+      uncertainty.features[0].geometry.type === 'Polygon'
+        ? uncertainty.features[0].geometry.coordinates[0]
+        : []
+    expect(ring).toHaveLength(33)
+    expect(ring[0]).toEqual(ring.at(-1))
+  })
+
+  it('uses conservative uncertainty when a Guardian source has no accuracy', () => {
+    const participant = {
+      ...demoGuardianParticipants[0],
+      location: {
+        ...demoGuardianParticipants[0].location,
+        source: 'ble_presence' as const,
+        confidence: 'estimated' as const,
+        coordinate: {
+          ...demoGuardianParticipants[0].location.coordinate,
+          horizontalAccuracyMeters: null,
+        },
+      },
+    }
+    const point = guardianParticipantCollection([participant]).features[0]
+
+    expect(point.properties).toMatchObject({
+      source: 'ble_presence',
+      accuracyMeters: 100,
+    })
+    expect(point.properties?.detail).toContain('BLE zone presence')
   })
 })

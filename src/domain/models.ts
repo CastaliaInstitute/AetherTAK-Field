@@ -210,6 +210,52 @@ export const alInsightSchema = z.object({
 
 export type AlInsight = z.infer<typeof alInsightSchema>
 
+export const guardianParticipantStateSchema = z
+  .object({
+    id: z.string().uuid(),
+    displayName: z.string().min(1).max(120),
+    mode: z.enum(['child', 'guest', 'supervisor', 'medical']),
+    team: z.string().min(1).max(64),
+    state: z.enum(['normal', 'caution', 'critical', 'offline']),
+    zone: z.string().max(120).nullable(),
+    alertState: z.enum(['none', 'warning', 'critical', 'sos']),
+    checkIn: z.enum(['current', 'due', 'missed', 'not_required']),
+    location: z
+      .object({
+        coordinate: coordinateSchema.strict(),
+        source: z.enum([
+          'watch_gnss',
+          'ble_estimate',
+          'ble_presence',
+          'meshtastic',
+          'last_known',
+        ]),
+        confidence: z.enum(['good', 'estimated', 'poor', 'stale']),
+        observedAt: z.string().datetime(),
+      })
+      .strict(),
+    device: z
+      .object({
+        connectivity: z.enum([
+          'watch_phone_wifi',
+          'watch_phone_cellular',
+          'guardian_ble',
+          'wifi',
+          'meshtastic',
+          'offline',
+        ]),
+        lastContactAt: z.string().datetime(),
+        batteryPercent: z.number().min(0).max(100).nullable(),
+      })
+      .strict(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict()
+
+export type GuardianParticipantState = z.infer<
+  typeof guardianParticipantStateSchema
+>
+
 export const tileSourceIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 export const offlineMapRegionSchema = z.object({
@@ -301,5 +347,6 @@ export interface DashboardSnapshot {
   observations: Observation[]
   alerts: Alert[]
   insights: AlInsight[]
+  guardianParticipants: GuardianParticipantState[]
   contacts: TakContact[]
 }

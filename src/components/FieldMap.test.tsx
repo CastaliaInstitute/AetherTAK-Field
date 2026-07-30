@@ -144,6 +144,7 @@ describe('FieldMap operational layers', () => {
       observations: demoSnapshot.observations,
       alerts: demoSnapshot.alerts,
       insights: demoSnapshot.insights,
+      guardianParticipants: demoSnapshot.guardianParticipants,
       contacts: demoSnapshot.contacts,
       activity: [],
       draft: null,
@@ -161,6 +162,8 @@ describe('FieldMap operational layers', () => {
       'observations',
       'monitoring-alerts',
       'al-insights',
+      'guardian-participants',
+      'guardian-uncertainty',
     ]))
     expect([...instance.layers.keys()]).toEqual(expect.arrayContaining([
       'field-label',
@@ -169,6 +172,8 @@ describe('FieldMap operational layers', () => {
       'observations',
       'monitoring-alerts',
       'al-insights',
+      'guardian-participants',
+      'guardian-uncertainty',
     ]))
 
     const updatedReadings = [{
@@ -179,6 +184,9 @@ describe('FieldMap operational layers', () => {
 
     expect(mapState.instances).toHaveLength(1)
     expect(instance.sources.get('readings')?.setData).toHaveBeenCalled()
+    expect(
+      instance.sources.get('guardian-participants')?.setData,
+    ).toHaveBeenCalled()
     expect(
       instance.sources.get('monitoring-alerts')?.setData,
     ).toHaveBeenCalled()

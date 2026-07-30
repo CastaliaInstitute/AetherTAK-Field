@@ -67,6 +67,10 @@ client and inside Capacitor shells for iOS and Android.
 - Live-expiring, read-only Al field insights with priority ordering, rationale,
   synchronized ChirpStack source-reading provenance, explicit missing-evidence
   warnings, and no field, alert, or TAK command authority.
+- Server-authoritative Guardian participant snapshots delivered through the
+  ordered mTLS field change feed, retained for offline safety awareness, and
+  rendered as a prioritized roster plus map markers with source-specific
+  uncertainty. Strict client schemas reject undeclared biometric fields.
 - Versioned, privacy-safe physical-device readiness reports with native
   app/build, hardware, TAK, certificate-authenticated Aether Field API health,
   depth, sync, offline-map, and media-integrity evidence export through the

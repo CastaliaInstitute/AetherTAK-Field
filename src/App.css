@@ -241,8 +241,72 @@ h3 { margin: 0; font: 650 15px/1.3 var(--font-sans); }
 .legend-evidence { background: #f3e8ae; }
 .legend-alert { background: #ef6b63; }
 .legend-al { background: #d9c887; }
+.legend-guardian { background: var(--green); border: 2px solid #f8f6ed; }
 .legend-team { background: #f1e0a3; }
 .legend-tak { background: var(--amber); }
+.guardian-roster { margin-top: 16px; }
+.guardian-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+  font-weight: 700;
+}
+.guardian-list { display: grid; gap: 10px; }
+.guardian-person {
+  padding: 13px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 12px;
+}
+.guardian-person.caution { border-left-color: var(--amber); }
+.guardian-person.critical { border-left-color: #ef6b63; }
+.guardian-person.offline { border-left-color: var(--muted); }
+.guardian-person-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.guardian-person h3 { margin: 2px 0 6px; font-size: 16px; }
+.guardian-state {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.guardian-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.guardian-alert.critical,
+.guardian-alert.sos { color: #ff8c85; }
+.guardian-person p {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.guardian-empty,
+.guardian-context {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.guardian-context {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
 .maplibregl-popup-content {
   padding: 0!important;
   color: var(--ink);
