@@ -4,6 +4,7 @@ import {
   depthCapabilitySchema,
   depthScanResultSchema,
   fieldSchema,
+  mediaCaptureSchema,
   sensorReadingSchema,
 } from './models'
 import { demoFields, demoReadings, demoSnapshot } from './seed'
@@ -71,6 +72,31 @@ describe('field data contracts', () => {
         verticalAccuracyMeters: null,
         headingDegrees: null,
       }),
+    ).toThrow()
+  })
+
+  it('rejects malformed or non-canonical media digests', () => {
+    const media = {
+      id: 'cd89c88b-85d5-47a1-8d79-bd1081d172b7',
+      observationId: null,
+      kind: 'video',
+      localUri: 'file:///private/video.mp4',
+      previewUri: null,
+      mimeType: 'video/mp4',
+      coordinate: demoSnapshot.properties[0].center,
+      capturedAt: '2026-07-30T12:00:00.000Z',
+      deviceModel: null,
+      depthMetadata: null,
+      syncState: 'queued',
+    }
+    expect(
+      mediaCaptureSchema.parse({ ...media, sha256: 'a'.repeat(64) }).sha256,
+    ).toBe('a'.repeat(64))
+    expect(() =>
+      mediaCaptureSchema.parse({ ...media, sha256: 'A'.repeat(64) }),
+    ).toThrow()
+    expect(() =>
+      mediaCaptureSchema.parse({ ...media, sha256: 'not-a-digest' }),
     ).toThrow()
   })
 

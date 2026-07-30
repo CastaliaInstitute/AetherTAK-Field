@@ -96,6 +96,13 @@ jobs:
             ios/App/Tests/CotAttribute/main.swift \
             -o "$RUNNER_TEMP/cot-attribute-tests"
           "$RUNNER_TEMP/cot-attribute-tests"
+      - name: Test iOS streaming media integrity
+        run: |
+          swiftc \
+            ios/App/App/MediaIntegrity.swift \
+            ios/App/Tests/MediaIntegrity/main.swift \
+            -o "$RUNNER_TEMP/media-integrity-tests"
+          "$RUNNER_TEMP/media-integrity-tests"
       - run: >-
           xcodebuild
           -project ios/App/App.xcodeproj

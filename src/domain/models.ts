@@ -165,7 +165,7 @@ export const mediaCaptureSchema = z.object({
   coordinate: coordinateSchema,
   capturedAt: z.string().datetime(),
   deviceModel: z.string().nullable(),
-  sha256: z.string().nullable(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
   depthMetadata: z
     .object({
       scanId: z.string().uuid(),

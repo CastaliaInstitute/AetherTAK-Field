@@ -34,7 +34,7 @@ function dependencies(
       uri: `file:///data/evidence.${kind === 'photo' ? 'jpg' : 'mp4'}`,
       previewUri: null,
       mimeType: kind === 'photo' ? 'image/jpeg' : 'video/mp4',
-      sha256: kind === 'photo' ? 'a'.repeat(64) : null,
+      sha256: 'a'.repeat(64),
       cleanup: async () => undefined,
     }),
   }
@@ -67,7 +67,7 @@ describe('offline observation media capture', () => {
 
       expect(result.media.kind).toBe(kind)
       expect(result.media.coordinate).toEqual(coordinate)
-      if (kind === 'photo') expect(result.media.sha256).toHaveLength(64)
+      expect(result.media.sha256).toHaveLength(64)
       expect(result.observation.syncState).toBe('queued')
       expect(await db.media.count()).toBe(1)
       expect(await db.observations.count()).toBe(1)

@@ -59,6 +59,18 @@ background-location indicator. The shared foreground watcher is disabled while
 the native publisher is active so the same identity does not emit duplicate
 PLI.
 
+## AetherMediaIntegrity
+
+Native video capture requests persistent application storage from the Capacitor
+camera implementation. Before a video observation is committed to IndexedDB or
+its offline outbox, `inspect({ uri })` streams the app-private file through
+SHA-256 and returns its digest and byte count. Swift accepts only files within
+the application sandbox; Kotlin accepts only regular files beneath the
+application files, cache, or no-backup directories. Empty media and paths
+outside those roots fail closed. This avoids loading a potentially large video
+through the JavaScript bridge while ensuring both photo and video evidence have
+integrity metadata before synchronization.
+
 ## AetherDepthScanner
 
 The plugin reports capabilities before presenting a capture UI:

@@ -20,7 +20,7 @@ client and inside Capacitor shells for iOS and Android.
   MapLibre raster protocol for authorized tile sources.
 - Structured field/ecology observation capture with category, title, notes,
   geotagged native photo/video, selectable depth output, app-private media,
-  SHA-256 photo integrity, and an atomic sync outbox.
+  streaming SHA-256 photo/video integrity, and an atomic sync outbox.
 - Bidirectional field-record and media synchronization with durable revisions,
   conflict preservation, paginated cursors, mTLS uploads/downloads, checksum
   verification, and atomic app-private file hydration.
@@ -105,8 +105,8 @@ npm run cap:sync
 npm run android
 ```
 
-The native implementations provide the `AetherTakTransport` and
-`AetherDepthScanner` Capacitor plugins described in
+The native implementations provide the `AetherTakTransport`,
+`AetherDepthScanner`, and `AetherMediaIntegrity` Capacitor plugins described in
 [docs/native-plugins.md](docs/native-plugins.md).
 
 Offline map source requirements and remaining runtime integration gates are in

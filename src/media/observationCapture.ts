@@ -6,6 +6,7 @@ import {
   captureGeotaggedVideo,
   type GeotaggedMedia,
 } from '../platform/capture'
+import { mediaIntegrity } from '../platform/mediaIntegrity'
 import { db, queueMutation } from '../data/database'
 
 export interface ObservationCaptureInput {
@@ -50,7 +51,7 @@ async function sha256(bytes: ArrayBuffer) {
     .join('')
 }
 
-async function persistMedia(
+export async function persistCapturedMedia(
   capture: GeotaggedMedia,
   observationId: string,
   mediaId: string,
@@ -66,16 +67,24 @@ async function persistMedia(
     Capacitor.isNativePlatform() &&
     capture.media.uri
   ) {
-    return {
-      uri: capture.media.uri,
-      previewUri: capture.media.thumbnail
-        ? `data:image/jpeg;base64,${capture.media.thumbnail}`
-        : null,
-      mimeType,
-      sha256: null,
-      cleanup: async () => {
-        await Filesystem.deleteFile({ path: capture.media.uri! })
-      },
+    const uri = capture.media.uri
+    const cleanup = async () => {
+      await Filesystem.deleteFile({ path: uri })
+    }
+    try {
+      const integrity = await mediaIntegrity.inspect(uri)
+      return {
+        uri,
+        previewUri: capture.media.thumbnail
+          ? `data:image/jpeg;base64,${capture.media.thumbnail}`
+          : null,
+        mimeType,
+        sha256: integrity.sha256,
+        cleanup,
+      }
+    } catch (error) {
+      await cleanup().catch(() => undefined)
+      throw error
     }
   }
 
@@ -121,12 +130,12 @@ async function persistMedia(
 
 const photoDependencies: ObservationCaptureDependencies = {
   capture: captureGeotaggedPhoto,
-  persist: persistMedia,
+  persist: persistCapturedMedia,
 }
 
 const videoDependencies: ObservationCaptureDependencies = {
   capture: captureGeotaggedVideo,
-  persist: persistMedia,
+  persist: persistCapturedMedia,
 }
 
 export async function captureObservationMedia(
