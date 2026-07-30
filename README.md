@@ -94,6 +94,9 @@ The native implementations provide the `AetherTakTransport` and
 Offline map source requirements and remaining runtime integration gates are in
 [docs/offline-maps.md](docs/offline-maps.md).
 
+Secret-gated TestFlight and Google Play internal-testing setup is documented in
+[docs/beta-distribution.md](docs/beta-distribution.md).
+
 ## Server endpoints
 
 The Pi deployment currently advertises the `192.168.86.0/24` subnet through

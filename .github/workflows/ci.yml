@@ -26,7 +26,7 @@ jobs:
       - run: npm audit --omit=dev
 
   android:
-    name: Android debug build
+    name: Android debug and release builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -42,8 +42,25 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android
-      - run: ./gradlew test assembleDebug
+      - name: Create disposable CI release key
+        run: >-
+          keytool -genkeypair
+          -keystore "$RUNNER_TEMP/ci-release.jks"
+          -storepass ci-release-only
+          -keypass ci-release-only
+          -alias ci-release
+          -dname "CN=AetherTAK Field CI"
+          -keyalg RSA
+          -validity 1
+          -noprompt
+      - name: Test and build debug APK plus CI-signed release AAB
         working-directory: android
+        env:
+          AETHER_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/ci-release.jks
+          AETHER_ANDROID_KEYSTORE_PASSWORD: ci-release-only
+          AETHER_ANDROID_KEY_ALIAS: ci-release
+          AETHER_ANDROID_KEY_PASSWORD: ci-release-only
+        run: ./gradlew test assembleDebug bundleRelease
       - uses: actions/upload-artifact@v7
         with:
           name: aethertak-field-android-debug
