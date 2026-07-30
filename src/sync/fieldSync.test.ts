@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db, queueMutation } from '../data/database'
 import type { Property } from '../domain/models'
 import type { NativeFieldResponse } from '../platform/tak'
-import { flushFieldOutbox } from './fieldSync'
+import { flushFieldOutbox, pullFieldChanges } from './fieldSync'
 
 const property: Property = {
   id: '7280b290-7607-4904-9004-ee767ac3cf84',
@@ -65,6 +65,7 @@ describe('Aether Field durable synchronization', () => {
     const transport = {
       upload: vi.fn(),
       mutate: vi.fn(async () => accepted(queued.id)),
+      changes: vi.fn(),
     }
 
     expect(await flushFieldOutbox(100, transport)).toEqual({
@@ -92,6 +93,7 @@ describe('Aether Field durable synchronization', () => {
       mutate: vi.fn(async () => {
         throw new Error('offline')
       }),
+      changes: vi.fn(),
     }
 
     const result = await flushFieldOutbox(100, transport, now)
@@ -128,11 +130,120 @@ describe('Aether Field durable synchronization', () => {
           },
         },
       })),
+      changes: vi.fn(),
     }
 
     const result = await flushFieldOutbox(100, transport)
     expect(result.conflicts).toBe(1)
     expect((await db.outbox.get(queued.id))?.conflict?.revision).toBe(2)
     expect((await db.properties.get(property.id))?.syncState).toBe('conflict')
+  })
+
+  it('hydrates a remote property and advances the durable cursor', async () => {
+    const remote = { ...property, name: 'Remote Farm', syncState: 'synced' }
+    const transport = {
+      upload: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [
+            {
+              cursor: 7,
+              entityType: 'property',
+              entityId: property.id,
+              revision: 3,
+              operation: 'update',
+              payload: remote,
+              serverUpdatedAt: '2026-07-30T07:00:00.000Z',
+              author: 'Al',
+            },
+          ],
+          nextCursor: 7,
+          hasMore: false,
+        },
+      })),
+    }
+
+    expect(await pullFieldChanges(transport)).toEqual({
+      applied: 1,
+      conflicts: 0,
+      pages: 1,
+      cursor: 7,
+    })
+    expect((await db.properties.get(property.id))?.name).toBe('Remote Farm')
+    expect((await db.syncControl.get('field'))?.cursor).toBe(7)
+    expect(
+      (await db.syncMetadata.get(`property:${property.id}`))?.revision,
+    ).toBe(3)
+  })
+
+  it('turns a pull collision into a preserved local/server conflict', async () => {
+    const queued = await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'create',
+      payload: property,
+    })
+    const transport = {
+      upload: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [
+            {
+              cursor: 2,
+              entityType: 'property',
+              entityId: property.id,
+              revision: 1,
+              operation: 'create',
+              payload: { ...property, name: 'Other Device Farm' },
+              serverUpdatedAt: '2026-07-30T07:00:00.000Z',
+              author: 'Field Two',
+            },
+          ],
+          nextCursor: 2,
+          hasMore: false,
+        },
+      })),
+    }
+
+    const result = await pullFieldChanges(transport)
+    expect(result.conflicts).toBe(1)
+    expect((await db.properties.get(property.id))?.name).toBe('Test Farm')
+    expect((await db.outbox.get(queued.id))?.conflict?.author).toBe('Field Two')
+  })
+
+  it('applies remote tombstones without resurrecting deleted records', async () => {
+    const transport = {
+      upload: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [
+            {
+              cursor: 4,
+              entityType: 'property',
+              entityId: property.id,
+              revision: 2,
+              operation: 'delete',
+              payload: null,
+              serverUpdatedAt: '2026-07-30T07:00:00.000Z',
+              author: 'Field Two',
+            },
+          ],
+          nextCursor: 4,
+          hasMore: false,
+        },
+      })),
+    }
+
+    await pullFieldChanges(transport)
+    expect(await db.properties.get(property.id)).toBeUndefined()
+    expect(
+      (await db.syncMetadata.get(`property:${property.id}`))?.revision,
+    ).toBe(2)
   })
 })

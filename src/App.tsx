@@ -25,7 +25,7 @@ import {
 import { captureDepthObservation } from './media/depthObservation'
 import { depthScanner } from './platform/depth'
 import { takTransport } from './platform/tak'
-import { flushFieldOutbox } from './sync/fieldSync'
+import { synchronizeFieldData } from './sync/fieldSync'
 import { flushTakOutbox } from './tak/outbox'
 import {
   createOfflineMapRegion,
@@ -83,7 +83,7 @@ export default function App() {
   useEffect(() => {
     const synchronize = () => {
       if (connection !== 'connected' || !navigator.onLine) return
-      void Promise.allSettled([flushTakOutbox(), flushFieldOutbox()])
+      void Promise.allSettled([flushTakOutbox(), synchronizeFieldData()])
     }
     synchronize()
     window.addEventListener('online', synchronize)
