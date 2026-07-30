@@ -46,6 +46,17 @@ const capturedVideo = {
     headingDegrees: null,
   },
   capturedAt: '2026-07-30T06:00:00.000Z',
+  cameraCaptureEvidence: {
+    captureRequestedAt: '2026-07-30T05:59:50.000Z',
+    captureCompletedAt: '2026-07-30T06:00:00.000Z',
+    locationObservedAt: '2026-07-30T05:59:51.000Z',
+    metadataCreatedAt: null,
+    sizeBytes: 8_192,
+    durationSeconds: 8.5,
+    widthPixels: 1920,
+    heightPixels: 1080,
+    format: 'mp4',
+  },
 }
 
 const capturedPhoto = {

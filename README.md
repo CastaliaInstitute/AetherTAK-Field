@@ -32,7 +32,9 @@ client and inside Capacitor shells for iOS and Android.
   geotagged native photo/video, selectable depth output, app-private media,
   streaming SHA-256 integrity for photo, video, depth, confidence, point-cloud,
   and model evidence, visible hardware provenance, verified native open/share,
-  and an atomic sync outbox.
+  and an atomic sync outbox. Camera evidence records capture request/completion
+  and location-fix times plus normalized size, duration, resolution, and
+  format; raw EXIF is intentionally excluded.
 - Cloud/device-transfer backup exclusion for operational databases, evidence,
   and mission packages; iOS protected-file enforcement; Android no-backup
   extraction rules; and scoped FileProvider roots for explicit operator shares.

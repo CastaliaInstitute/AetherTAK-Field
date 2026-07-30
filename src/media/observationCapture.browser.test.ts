@@ -44,6 +44,17 @@ const capturedPhoto = {
     headingDegrees: null,
   },
   capturedAt: '2026-07-30T06:00:00.000Z',
+  cameraCaptureEvidence: {
+    captureRequestedAt: '2026-07-30T05:59:59.000Z',
+    captureCompletedAt: '2026-07-30T06:00:00.000Z',
+    locationObservedAt: '2026-07-30T05:59:59.000Z',
+    metadataCreatedAt: null,
+    sizeBytes: null,
+    durationSeconds: null,
+    widthPixels: null,
+    heightPixels: null,
+    format: 'jpeg',
+  },
 }
 
 describe('browser media persistence', () => {

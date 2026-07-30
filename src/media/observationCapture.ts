@@ -186,6 +186,7 @@ export async function captureObservationMedia(
     capturedAt: captured.capturedAt,
     deviceModel,
     sha256: stored.sha256,
+    cameraCaptureEvidence: captured.cameraCaptureEvidence,
     depthMetadata: null,
     syncState: 'queued',
   }

@@ -29,6 +29,17 @@ function dependencies(
       },
       coordinate,
       capturedAt: '2026-07-30T06:00:00.000Z',
+      cameraCaptureEvidence: {
+        captureRequestedAt: '2026-07-30T05:59:50.000Z',
+        captureCompletedAt: '2026-07-30T06:00:00.000Z',
+        locationObservedAt: '2026-07-30T05:59:51.000Z',
+        metadataCreatedAt: '2026-07-30T05:59:52.000Z',
+        sizeBytes: kind === 'photo' ? 2_048 : 8_192,
+        durationSeconds: kind === 'video' ? 8.5 : null,
+        widthPixels: 1920,
+        heightPixels: 1080,
+        format: kind === 'photo' ? 'jpeg' : 'mp4',
+      },
     }),
     deviceModel: async () => 'Pixel 10 Pro',
     persist: async () => ({
@@ -70,6 +81,11 @@ describe('offline observation media capture', () => {
       expect(result.media.coordinate).toEqual(coordinate)
       expect(result.media.deviceModel).toBe('Pixel 10 Pro')
       expect(result.media.sha256).toHaveLength(64)
+      expect(result.media.cameraCaptureEvidence).toMatchObject({
+        locationObservedAt: '2026-07-30T05:59:51.000Z',
+        widthPixels: 1920,
+        heightPixels: 1080,
+      })
       expect(result.observation.syncState).toBe('queued')
       expect(await db.media.count()).toBe(1)
       expect(await db.observations.count()).toBe(1)

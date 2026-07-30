@@ -93,6 +93,13 @@ confidence, point-cloud, and model records also retain the native hardware
 model when the operating system reports it; unavailable model metadata remains
 optional and never discards otherwise valid field evidence.
 
+Photo and video records retain a portable, privacy-bounded capture evidence
+object with capture request/completion, the actual location-fix timestamp,
+normalized size, duration, resolution, format, and a valid camera-reported
+creation time when present. Raw EXIF is deliberately neither retained nor
+synchronized; the validated observation coordinate remains the authoritative
+geotag.
+
 The observation evidence viewer passes an artifact to the native open/share
 sheet only when it has a valid SHA-256 digest and a local `file:`, `content:`,
 or `capacitor:` URI. Browser records, remote URLs, inline previews, and

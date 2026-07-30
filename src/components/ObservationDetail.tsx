@@ -205,6 +205,33 @@ export function ObservationDetail({
                     ))}
                   </div>
                 )}
+                {artifact.cameraCaptureEvidence && (
+                  <div className="artifact-integrity">
+                    {artifact.cameraCaptureEvidence.durationSeconds !== null && (
+                      <span>
+                        {artifact.cameraCaptureEvidence.durationSeconds.toFixed(1)} s
+                      </span>
+                    )}
+                    {artifact.cameraCaptureEvidence.widthPixels !== null &&
+                      artifact.cameraCaptureEvidence.heightPixels !== null && (
+                        <span>
+                          {artifact.cameraCaptureEvidence.widthPixels}×
+                          {artifact.cameraCaptureEvidence.heightPixels}
+                        </span>
+                      )}
+                    {artifact.cameraCaptureEvidence.sizeBytes !== null && (
+                      <span>
+                        {(artifact.cameraCaptureEvidence.sizeBytes / 1_048_576).toFixed(1)} MB
+                      </span>
+                    )}
+                    <span>
+                      Location fix{' '}
+                      {new Date(
+                        artifact.cameraCaptureEvidence.locationObservedAt,
+                      ).toLocaleTimeString()}
+                    </span>
+                  </div>
+                )}
                 <div className="artifact-integrity">
                   <span>{artifact.mimeType}</span>
                   <span>{artifact.deviceModel ?? 'Hardware not reported'}</span>

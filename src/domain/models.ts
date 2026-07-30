@@ -148,6 +148,32 @@ export const depthMeasurementSchema = z.object({
   uncertainty: z.number().finite().nonnegative().nullable(),
 })
 
+export const cameraCaptureEvidenceSchema = z
+  .object({
+    captureRequestedAt: z.string().datetime(),
+    captureCompletedAt: z.string().datetime(),
+    locationObservedAt: z.string().datetime(),
+    metadataCreatedAt: z.string().datetime().nullable(),
+    sizeBytes: z.number().int().positive().nullable(),
+    durationSeconds: z.number().finite().nonnegative().nullable(),
+    widthPixels: z.number().int().positive().nullable(),
+    heightPixels: z.number().int().positive().nullable(),
+    format: z.string().regex(/^[a-z0-9][a-z0-9.+-]{0,31}$/).nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      new Date(value.captureCompletedAt).getTime() <
+      new Date(value.captureRequestedAt).getTime()
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['captureCompletedAt'],
+        message: 'Capture completion must not precede its request.',
+      })
+    }
+  })
+
 export const mediaCaptureSchema = z.object({
   id: z.string().uuid(),
   observationId: z.string().uuid().nullable(),
@@ -166,6 +192,7 @@ export const mediaCaptureSchema = z.object({
   capturedAt: z.string().datetime(),
   deviceModel: z.string().nullable(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+  cameraCaptureEvidence: cameraCaptureEvidenceSchema.nullable().optional(),
   depthMetadata: z
     .object({
       scanId: z.string().uuid(),

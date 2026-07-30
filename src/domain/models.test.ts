@@ -57,6 +57,61 @@ describe('field data contracts', () => {
     ).toThrow()
   })
 
+  it('validates privacy-bounded camera capture evidence', () => {
+    const media = mediaCaptureSchema.parse({
+      id: '69af92d3-5197-4c17-bde8-58f1437a1975',
+      observationId: '767d72a2-4f20-4c03-ab5d-dbe3451e9e87',
+      kind: 'video',
+      localUri: 'file:///private/capture.mp4',
+      previewUri: null,
+      mimeType: 'video/mp4',
+      coordinate: {
+        latitude: 40,
+        longitude: -105,
+        altitudeMeters: 1600,
+        horizontalAccuracyMeters: 4,
+        verticalAccuracyMeters: 8,
+        headingDegrees: 180,
+      },
+      capturedAt: '2026-07-30T12:00:00.000Z',
+      deviceModel: 'Pixel 10 Pro',
+      sha256: 'a'.repeat(64),
+      cameraCaptureEvidence: {
+        captureRequestedAt: '2026-07-30T11:59:50.000Z',
+        captureCompletedAt: '2026-07-30T12:00:00.000Z',
+        locationObservedAt: '2026-07-30T11:59:51.000Z',
+        metadataCreatedAt: '2026-07-30T11:59:52.000Z',
+        sizeBytes: 12_345_678,
+        durationSeconds: 7.25,
+        widthPixels: 1920,
+        heightPixels: 1080,
+        format: 'mp4',
+      },
+      depthMetadata: null,
+      syncState: 'queued',
+    })
+
+    expect(media.cameraCaptureEvidence?.durationSeconds).toBe(7.25)
+    expect(() =>
+      mediaCaptureSchema.parse({
+        ...media,
+        cameraCaptureEvidence: {
+          ...media.cameraCaptureEvidence,
+          captureCompletedAt: '2026-07-30T11:59:49.000Z',
+        },
+      }),
+    ).toThrow('precede')
+    expect(() =>
+      mediaCaptureSchema.parse({
+        ...media,
+        cameraCaptureEvidence: {
+          ...media.cameraCaptureEvidence,
+          exif: '{"MakerNote":"must not sync"}',
+        },
+      }),
+    ).toThrow()
+  })
+
   it('validates seeded crop fields and closed map boundaries', () => {
     for (const field of demoFields) {
       expect(fieldSchema.parse(field)).toEqual(field)
