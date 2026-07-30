@@ -1,4 +1,8 @@
-import { Capacitor, registerPlugin } from '@capacitor/core'
+import {
+  Capacitor,
+  registerPlugin,
+  type PluginListenerHandle,
+} from '@capacitor/core'
 import type { TakConnectionState, TakContact } from '../domain/models'
 import { operationToCot } from '../tak/cot'
 import type { TakOperation } from '../tak/operations'
@@ -61,6 +65,10 @@ interface AetherTakTransportPlugin {
     expectedSha256?: string
     expectedContentType?: string
   }): Promise<NativeFieldResponse>
+  addListener(
+    eventName: 'cotEvent',
+    listener: (event: { xml: string }) => void,
+  ): Promise<PluginListenerHandle>
 }
 
 export interface NativeFieldResponse {
@@ -160,6 +168,13 @@ export const takTransport = {
       staleSeconds: message.staleSeconds,
     }
     return this.sendOperation(operation)
+  },
+
+  async onCotEvent(
+    listener: (xml: string) => void,
+  ): Promise<PluginListenerHandle | null> {
+    if (!Capacitor.isNativePlatform()) return null
+    return nativeTak.addListener('cotEvent', (event) => listener(event.xml))
   },
 }
 

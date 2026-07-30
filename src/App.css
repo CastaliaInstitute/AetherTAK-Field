@@ -107,6 +107,7 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
 .legend-field { background: var(--green); }
 .legend-sensor { background: var(--cyan); }
 .legend-team { background: #f1e0a3; }
+.legend-tak { background: var(--amber); }
 .tak-contact-marker {
   display: grid;
   place-items: center;
@@ -119,6 +120,102 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
   font-size: 9px;
   font-weight: 800;
   box-shadow: 0 3px 12px rgba(0,0,0,.35);
+}
+
+.tak-map-composer {
+  margin: 10px 20px 0;
+}
+.tak-map-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.tak-map-actions button,
+.tak-draft-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  color: #c8d4cd;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  font-size: 11px;
+}
+.tak-map-composer form {
+  padding: 13px;
+  background: var(--surface);
+  border: 1px solid rgba(137,207,120,.25);
+  border-radius: 14px;
+}
+.tak-draft-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.tak-draft-heading > div { display: grid; gap: 2px; }
+.tak-draft-heading strong { text-transform: capitalize; font-size: 13px; }
+.tak-draft-heading span { color: var(--muted); font-size: 10px; }
+.tak-draft-heading > button,
+.tak-contact-row > button,
+.tak-chat-composer > div button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+}
+.tak-map-composer label,
+.tak-emergency-confirm label {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+.tak-map-composer label > span,
+.tak-emergency-confirm label > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.tak-map-composer input,
+.tak-emergency-confirm select,
+.tak-chat-composer textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 11px;
+  color: var(--ink);
+  background: #111a16;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: none;
+}
+.tak-map-composer input:focus,
+.tak-emergency-confirm select:focus,
+.tak-chat-composer textarea:focus {
+  border-color: var(--green);
+}
+.tak-draft-actions {
+  display: grid;
+  grid-template-columns: .7fr 1.3fr;
+  gap: 8px;
+  margin-top: 11px;
+}
+.tak-draft-actions button.send {
+  color: #142018;
+  background: var(--green);
+  border-color: transparent;
+  font-weight: 700;
+}
+.tak-draft-actions button:disabled { opacity: .45; }
+.tak-form-error {
+  margin: 9px 0 0!important;
+  color: #ef8b84!important;
+  font-size: 10px!important;
+  line-height: 1.4;
 }
 
 .section-block { padding: 26px 20px 8px; }
@@ -216,6 +313,154 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
 .record-row p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .record-row svg { color: var(--muted); }
 .team-avatar { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: #18231d; background: #f0e4ae; font-size: 11px!important; font-weight: 700; text-transform: uppercase; }
+.tak-team-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -10px 0 14px;
+  padding: 11px 12px;
+  color: var(--muted);
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 10px;
+}
+.tak-team-summary > div { display: flex; align-items: center; gap: 7px; }
+.tak-team-summary strong { color: var(--ink); }
+.tak-emergency-panel {
+  margin-bottom: 24px;
+  padding: 14px;
+  background: rgba(122,42,37,.2);
+  border: 1px solid rgba(239,107,99,.28);
+  border-radius: 14px;
+}
+.tak-emergency-panel > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tak-emergency-panel > div:first-child > svg { color: #ef6b63; }
+.tak-emergency-panel > div:first-child > div {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+}
+.tak-emergency-panel strong { font-size: 12px; }
+.tak-emergency-panel span,
+.tak-emergency-panel p { color: #b9a09b; font-size: 10px; }
+.tak-emergency-entry {
+  display: grid!important;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px!important;
+  margin-top: 12px;
+}
+.tak-emergency-entry button,
+.tak-emergency-confirm button {
+  min-height: 40px;
+  padding: 8px 10px;
+  color: #f4d4cf;
+  background: rgba(239,107,99,.08);
+  border: 1px solid rgba(239,107,99,.28);
+  border-radius: 10px;
+  font-size: 10px;
+}
+.tak-emergency-confirm { margin-top: 12px; }
+.tak-emergency-confirm select { color-scheme: dark; }
+.tak-emergency-confirm p { margin: 9px 0; line-height: 1.45; }
+.tak-emergency-confirm > div {
+  display: grid;
+  grid-template-columns: .7fr 1.3fr;
+  gap: 8px;
+}
+.tak-emergency-confirm button.emergency-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: white;
+  background: #b5453e;
+  border-color: #d15c55;
+  font-weight: 700;
+}
+.tak-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin: 20px 0 8px;
+}
+.tak-section-heading h3 { font-size: 17px; }
+.tak-contact-row > button {
+  color: var(--green);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+.tak-chat-composer {
+  position: sticky;
+  z-index: 3;
+  bottom: calc(74px + env(safe-area-inset-bottom));
+  margin: 14px 0;
+  padding: 14px;
+  background: #223129;
+  border: 1px solid rgba(137,207,120,.25);
+  border-radius: 14px;
+  box-shadow: 0 15px 35px rgba(0,0,0,.35);
+}
+.tak-chat-composer > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tak-chat-composer textarea { resize: vertical; margin: 6px 0 9px; }
+.tak-chat-composer > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 43px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.tak-chat-composer > button:disabled { opacity: .5; }
+.tak-empty {
+  margin: 10px 0 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.tak-activity { margin-top: 25px; }
+.tak-activity-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tak-activity-row > div { min-width: 0; }
+.tak-activity-row strong { font-size: 11px; }
+.tak-activity-row p {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tak-kind {
+  min-width: 47px;
+  padding: 4px 6px;
+  color: #b8c6be;
+  background: rgba(255,255,255,.05);
+  border-radius: 99px;
+  font-size: 8px;
+  text-align: center;
+  text-transform: uppercase;
+}
+.tak-kind.chat { color: var(--cyan); }
+.tak-kind.emergency { color: #ef8b84; }
+.delivery { color: var(--muted); font-size: 8px; text-transform: uppercase; }
+.delivery.sent, .delivery.received { color: var(--green); }
+.delivery.failed { color: var(--amber); }
 .capture-page .primary-action, .capture-page .secondary-action {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; min-height: 52px; margin-top: 20px; border-radius: 13px; font-weight: 700;

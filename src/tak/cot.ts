@@ -195,12 +195,40 @@ export function operationToCot(operation: TakOperation): string {
 export interface ParsedCotEvent {
   uid: string
   type: string
+  kind: TakOperation['kind']
   time: string
   stale: string
   coordinate: Coordinate
+  points: Coordinate[]
   callsign: string | null
   remarks: string | null
+  emergencyType: string | null
   raw: string
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function values(value: unknown) {
+  return Array.isArray(value) ? value : value === undefined ? [] : [value]
+}
+
+function text(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  const content = record(value)['#text']
+  return typeof content === 'string' ? content : null
+}
+
+function operationKind(type: string): TakOperation['kind'] {
+  if (type === 'b-t-f') return 'chat'
+  if (type === 'b-m-r') return 'route'
+  if (type === 'u-d-f') return 'shape'
+  if (type.startsWith('b-a-o-')) return 'emergency'
+  if (type.startsWith('a-f-')) return 'position'
+  return 'marker'
 }
 
 export function parseCotEvent(xml: string): ParsedCotEvent {
@@ -211,10 +239,7 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
       time?: unknown
       stale?: unknown
       point?: Record<string, unknown>
-      detail?: {
-        contact?: Record<string, unknown>
-        remarks?: unknown
-      }
+      detail?: Record<string, unknown>
     }
   }
   const value = result.event
@@ -227,25 +252,74 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
   }
   const pointValue = value.point ?? {}
   const detail = value.detail ?? {}
-  const contact = detail.contact ?? {}
+  const contact = record(detail.contact)
+  const chat = record(detail.__chat)
+  const emergency = record(detail.emergency)
+  const coordinate: Coordinate = {
+    latitude: numeric(pointValue.lat, 0),
+    longitude: numeric(pointValue.lon, 0),
+    altitudeMeters: numeric(pointValue.hae, 0),
+    horizontalAccuracyMeters: numeric(pointValue.ce, 9999999),
+    verticalAccuracyMeters: numeric(pointValue.le, 9999999),
+    headingDegrees: null,
+  }
+  const kind = operationKind(value.type)
+  let points: Coordinate[] = [coordinate]
+  if (kind === 'route') {
+    points = values(detail.link).flatMap((linkValue) => {
+      const rawPoint = record(linkValue).point
+      if (typeof rawPoint !== 'string') return []
+      const [latitude, longitude, altitude] = rawPoint
+        .split(',')
+        .map(Number)
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return []
+      return [{
+        latitude,
+        longitude,
+        altitudeMeters: Number.isFinite(altitude) ? altitude : null,
+        horizontalAccuracyMeters: null,
+        verticalAccuracyMeters: null,
+        headingDegrees: null,
+      }]
+    })
+  }
+  if (kind === 'shape') {
+    const shape = record(detail.shape)
+    const polyline = record(shape.polyline)
+    points = values(polyline.vertex).flatMap((vertexValue) => {
+      const vertex = record(vertexValue)
+      const latitude = Number(vertex.lat)
+      const longitude = Number(vertex.lon)
+      const altitude = Number(vertex.hae)
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return []
+      return [{
+        latitude,
+        longitude,
+        altitudeMeters: Number.isFinite(altitude) ? altitude : null,
+        horizontalAccuracyMeters: null,
+        verticalAccuracyMeters: null,
+        headingDegrees: null,
+      }]
+    })
+  }
 
   return {
     uid: value.uid,
     type: value.type,
+    kind,
     time: String(value.time ?? ''),
     stale: String(value.stale ?? ''),
-    coordinate: {
-      latitude: numeric(pointValue.lat, 0),
-      longitude: numeric(pointValue.lon, 0),
-      altitudeMeters: numeric(pointValue.hae, 0),
-      horizontalAccuracyMeters: numeric(pointValue.ce, 9999999),
-      verticalAccuracyMeters: numeric(pointValue.le, 9999999),
-      headingDegrees: null,
-    },
+    coordinate,
+    points,
     callsign:
-      typeof contact.callsign === 'string' ? contact.callsign : null,
-    remarks:
-      typeof detail.remarks === 'string' ? detail.remarks : null,
+      typeof contact.callsign === 'string'
+        ? contact.callsign
+        : typeof chat.senderCallsign === 'string'
+          ? chat.senderCallsign
+          : null,
+    remarks: text(detail.remarks),
+    emergencyType:
+      typeof emergency.type === 'string' ? emergency.type : null,
     raw: xml,
   }
 }

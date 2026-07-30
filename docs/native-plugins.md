@@ -61,8 +61,10 @@ Before beta distribution, verify on physical devices:
 
 ## Implementation status
 
-The shared CoT codec, offline TAK outbox, and bidirectional domain/media sync are
-implemented and unit tested.
+The shared CoT codec, offline TAK outbox, durable inbound/outbound activity,
+interactive map tools, GeoChat composer, foreground PLI publishing, emergency
+confirmation/cancellation, and bidirectional domain/media sync are implemented
+and unit tested.
 The Swift and Kotlin plugins are registered in their native projects. Both TAK
 plugins parse the issued mission package, enforce archive-size and XML safety
 limits, import the client identity into Keychain/Android KeyStore, retain only

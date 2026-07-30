@@ -2,6 +2,7 @@ import { db } from '../data/database'
 import { takTransport } from '../platform/tak'
 import type { TakOperation } from './operations'
 import { operationToCot } from './cot'
+import { activityFromOperation } from './activity'
 
 export interface QueuedTakEvent {
   id: string
@@ -13,15 +14,28 @@ export interface QueuedTakEvent {
 }
 
 export async function queueTakOperation(operation: TakOperation) {
+  const id = crypto.randomUUID()
+  const xml = operationToCot(operation)
   const queued: QueuedTakEvent = {
-    id: crypto.randomUUID(),
+    id,
     operation,
-    xml: operationToCot(operation),
+    xml,
     createdAt: new Date().toISOString(),
     attempts: 0,
     lastError: null,
   }
-  await db.takOutbox.add(queued)
+  await db.transaction('rw', [db.takOutbox, db.takActivity], async () => {
+    if (operation.kind === 'position') {
+      const superseded = await db.takOutbox
+        .where('operation.kind')
+        .equals('position')
+        .filter((item) => item.operation.uid === operation.uid)
+        .primaryKeys()
+      await db.takOutbox.bulkDelete(superseded)
+    }
+    await db.takOutbox.add(queued)
+    await db.takActivity.put(activityFromOperation(operation, xml, id))
+  })
   return queued
 }
 
@@ -30,15 +44,26 @@ export async function pendingTakEvents(limit = 100) {
 }
 
 export async function markTakEventSent(id: string) {
-  await db.takOutbox.delete(id)
+  await db.transaction('rw', [db.takOutbox, db.takActivity], async () => {
+    await db.takOutbox.delete(id)
+    await db.takActivity.where('outboxId').equals(id).modify({
+      deliveryStatus: 'sent',
+      outboxId: null,
+    })
+  })
 }
 
 export async function markTakEventFailed(id: string, error: string) {
   const queued = await db.takOutbox.get(id)
   if (!queued) return
-  await db.takOutbox.update(id, {
-    attempts: queued.attempts + 1,
-    lastError: error,
+  await db.transaction('rw', [db.takOutbox, db.takActivity], async () => {
+    await db.takOutbox.update(id, {
+      attempts: queued.attempts + 1,
+      lastError: error,
+    })
+    await db.takActivity.where('outboxId').equals(id).modify({
+      deliveryStatus: 'failed',
+    })
   })
 }
 

@@ -21,7 +21,11 @@ client and inside Capacitor shells for iOS and Android.
 - Native plugin contracts for certificate-backed TAK transport and
   capability-detected ARKit LiDAR / ARCore Depth.
 - CoT 2.0 encoding and parsing for PLI, GeoChat, markers, routes, shapes, and
-  emergency events, backed by a durable offline TAK event outbox.
+  emergency events, backed by a durable offline TAK event outbox and activity
+  history.
+- Live native contacts, foreground PLI publishing, addressed GeoChat,
+  tap-to-compose markers/routes/areas, rendered TAK geometry, and explicitly
+  confirmed emergency signaling with cancellation.
 - Read-only Al field insight surface.
 
 The browser provides a safe preview. Certificate enrollment, CoT transport, and

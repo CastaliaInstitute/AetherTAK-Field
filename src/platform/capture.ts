@@ -32,6 +32,36 @@ export async function currentCoordinate(): Promise<Coordinate> {
   }
 }
 
+export async function watchCurrentCoordinate(
+  listener: (coordinate: Coordinate) => void,
+  onError?: (message: string) => void,
+) {
+  const id = await Geolocation.watchPosition(
+    {
+      enableHighAccuracy: true,
+      timeout: 15_000,
+      maximumAge: 5_000,
+      minimumUpdateInterval: 5_000,
+    },
+    (position, error) => {
+      if (error) {
+        onError?.(error.message)
+        return
+      }
+      if (!position) return
+      listener({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        altitudeMeters: position.coords.altitude ?? null,
+        horizontalAccuracyMeters: position.coords.accuracy,
+        verticalAccuracyMeters: position.coords.altitudeAccuracy ?? null,
+        headingDegrees: position.coords.heading ?? null,
+      })
+    },
+  )
+  return () => Geolocation.clearWatch({ id })
+}
+
 export async function captureGeotaggedPhoto(): Promise<GeotaggedMedia> {
   const [media, coordinate] = await Promise.all([
     Camera.takePhoto({

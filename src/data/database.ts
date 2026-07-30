@@ -12,6 +12,7 @@ import type {
   SensorReading,
 } from '../domain/models'
 import type { QueuedTakEvent } from '../tak/outbox'
+import type { TakActivity } from '../tak/activity'
 
 export interface OutboxItem {
   id: string
@@ -71,6 +72,7 @@ class AetherFieldDatabase extends Dexie {
   offlineMapRegions!: EntityTable<OfflineMapRegion, 'id'>
   outbox!: EntityTable<OutboxItem, 'id'>
   takOutbox!: EntityTable<QueuedTakEvent, 'id'>
+  takActivity!: EntityTable<TakActivity, 'id'>
   syncMetadata!: EntityTable<SyncMetadata, 'key'>
   syncControl!: EntityTable<SyncControl, 'id'>
 
@@ -122,6 +124,25 @@ class AetherFieldDatabase extends Dexie {
       outbox:
         'id, entityType, entityId, operation, createdAt, attempts, nextAttemptAt',
       takOutbox: 'id, createdAt, attempts, operation.kind',
+      syncMetadata: 'key, entityType, entityId, revision',
+      syncControl: 'id',
+    })
+    this.version(5).stores({
+      properties: 'id, name, updatedAt, syncState',
+      seasons: 'id, propertyId, status, startsOn, endsOn, updatedAt, syncState',
+      fields: 'id, propertyId, seasonId, status, updatedAt',
+      ecologicalSites: 'id, propertyId, siteType, updatedAt, syncState',
+      readings: 'id, deviceId, fieldId, siteId, measurement, recordedAt',
+      observations: 'id, fieldId, siteId, category, observedAt, syncState',
+      media: 'id, observationId, kind, capturedAt, syncState',
+      alerts: 'id, severity, fieldId, deviceId, createdAt, acknowledgedAt',
+      insights: 'id, fieldId, siteId, severity, generatedAt, expiresAt',
+      offlineMapRegions: 'id, tileSourceId, status, updatedAt',
+      outbox:
+        'id, entityType, entityId, operation, createdAt, attempts, nextAttemptAt',
+      takOutbox: 'id, createdAt, attempts, operation.kind',
+      takActivity:
+        'id, uid, direction, kind, createdAt, deliveryStatus, outboxId',
       syncMetadata: 'key, entityType, entityId, revision',
       syncControl: 'id',
     })

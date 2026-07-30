@@ -57,6 +57,12 @@ describe('TAK Cursor-on-Target codec', () => {
     expect(xml).toContain('type="b-t-f"')
     expect(xml).toContain('uid1="team-1"')
     expect(xml).toContain('Creek &lt; 0.5m &amp; falling')
+    const parsed = parseCotEvent(xml)
+    expect(parsed).toMatchObject({
+      kind: 'chat',
+      callsign: 'Field One',
+      remarks: 'Creek < 0.5m & falling',
+    })
   })
 
   it.each([
@@ -106,6 +112,10 @@ describe('TAK Cursor-on-Target codec', () => {
     ({ expectedType, ...operation }) => {
       const parsed = parseCotEvent(operationToCot(operation as TakOperation))
       expect(parsed.type).toBe(expectedType)
+      expect(parsed.kind).toBe(operation.kind)
+      if (operation.kind === 'route' || operation.kind === 'shape') {
+        expect(parsed.points).toHaveLength(operation.points.length)
+      }
     },
   )
 

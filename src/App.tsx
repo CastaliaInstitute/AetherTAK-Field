@@ -6,7 +6,6 @@ import {
   Download,
   Leaf,
   Map,
-  MessageCircle,
   Radio,
   ScanLine,
   Sprout,
@@ -16,17 +15,46 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { FieldMap } from './components/FieldMap'
+import {
+  TakMapComposer,
+  TakTeamPanel,
+} from './components/TakCollaboration'
 import { demoSnapshot } from './domain/seed'
-import type { DepthCapability, TakConnectionState } from './domain/models'
+import type {
+  Coordinate,
+  DepthCapability,
+  TakConnectionState,
+  TakContact,
+} from './domain/models'
 import {
   captureObservationPhoto,
   captureObservationVideo,
 } from './media/observationCapture'
 import { captureDepthObservation } from './media/depthObservation'
 import { depthScanner } from './platform/depth'
-import { takTransport } from './platform/tak'
+import {
+  takTransport,
+  type TakServerProfile,
+} from './platform/tak'
+import {
+  currentCoordinate,
+  watchCurrentCoordinate,
+} from './platform/capture'
 import { synchronizeFieldData } from './sync/fieldSync'
-import { flushTakOutbox } from './tak/outbox'
+import {
+  flushTakOutbox,
+  queueTakOperation,
+} from './tak/outbox'
+import {
+  recentTakActivity,
+  recordInboundCot,
+  type TakActivity,
+} from './tak/activity'
+import type {
+  EmergencyOperation,
+  TakIdentity,
+  TakOperation,
+} from './tak/operations'
 import {
   createOfflineMapRegion,
   downloadOfflineMapRegion,
@@ -36,6 +64,10 @@ import { importTakDataPackage } from './tak/enrollmentImport'
 import './App.css'
 
 type Tab = 'map' | 'fields' | 'capture' | 'team'
+type MapDraft = {
+  kind: 'marker' | 'route' | 'shape'
+  points: Coordinate[]
+}
 
 const initialDepth: DepthCapability = {
   supported: false,
@@ -58,6 +90,12 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('map')
   const [connection, setConnection] =
     useState<TakConnectionState>('disconnected')
+  const [profile, setProfile] = useState<TakServerProfile | null>(null)
+  const [contacts, setContacts] = useState<TakContact[]>(
+    takTransport.isNative() ? [] : demoSnapshot.contacts,
+  )
+  const [takActivity, setTakActivity] = useState<TakActivity[]>([])
+  const [mapDraft, setMapDraft] = useState<MapDraft | null>(null)
   const [depth, setDepth] = useState<DepthCapability>(initialDepth)
   const [notice, setNotice] = useState<string | null>(null)
   const [offlineMapState, setOfflineMapState] = useState<
@@ -72,12 +110,54 @@ export default function App() {
     readings,
     alerts,
     insights,
-    contacts,
   } = demoSnapshot
 
   useEffect(() => {
-    void takTransport.status().then((status) => setConnection(status.state))
+    void takTransport.status().then((status) => {
+      setConnection(status.state)
+      setProfile(status.profile)
+    })
     void depthScanner.capability().then(setDepth)
+    void recentTakActivity().then(setTakActivity)
+  }, [])
+
+  useEffect(() => {
+    if (!takTransport.isNative() || connection !== 'connected') return
+    let cancelled = false
+    const refreshContacts = async () => {
+      const next = await takTransport.contacts()
+      if (!cancelled) setContacts(next)
+    }
+    void refreshContacts()
+    const timer = window.setInterval(() => void refreshContacts(), 5_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [connection])
+
+  useEffect(() => {
+    let disposed = false
+    let remove: (() => Promise<void>) | undefined
+    void takTransport.onCotEvent((xml) => {
+      void recordInboundCot(xml)
+        .then(() => recentTakActivity())
+        .then((items) => {
+          if (!disposed) setTakActivity(items)
+        })
+        .catch(() => undefined)
+    }).then((handle) => {
+      if (!handle) return
+      if (disposed) {
+        void handle.remove()
+      } else {
+        remove = handle.remove
+      }
+    })
+    return () => {
+      disposed = true
+      if (remove) void remove()
+    }
   }, [])
 
   useEffect(() => {
@@ -96,6 +176,159 @@ export default function App() {
     )
     return Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length)
   }, [fields])
+
+  const identity = useMemo<TakIdentity>(() => ({
+    uid: profile ? `AETHER-${profile.id}` : 'AETHER-FIELD-PREVIEW',
+    callsign: profile?.callsign ?? 'Field Preview',
+    team: profile?.team ?? 'Green',
+    role: 'Team Member',
+  }), [profile])
+
+  useEffect(() => {
+    if (connection !== 'connected' || !takTransport.isNative()) return
+    let disposed = false
+    let publishing = false
+    let lastPublishedAt = 0
+    let stop: (() => Promise<void>) | undefined
+    void watchCurrentCoordinate((coordinate) => {
+      const now = Date.now()
+      if (
+        disposed ||
+        publishing ||
+        now - lastPublishedAt < 15_000
+      ) return
+      publishing = true
+      lastPublishedAt = now
+      void queueTakOperation({
+        kind: 'position',
+        uid: identity.uid,
+        identity,
+        coordinate,
+        createdAt: new Date(now).toISOString(),
+        staleSeconds: 45,
+      })
+        .then(() => flushTakOutbox())
+        .then(() => recentTakActivity())
+        .then((items) => {
+          if (!disposed) setTakActivity(items)
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          publishing = false
+        })
+    }).then((cleanup) => {
+      if (disposed) {
+        void cleanup()
+      } else {
+        stop = cleanup
+      }
+    }).catch(() => undefined)
+    return () => {
+      disposed = true
+      if (stop) void stop()
+    }
+  }, [connection, identity])
+
+  async function refreshTakActivity() {
+    setTakActivity(await recentTakActivity())
+  }
+
+  async function dispatchTakOperation(operation: TakOperation) {
+    await queueTakOperation(operation)
+    await refreshTakActivity()
+    if (connection === 'connected' && navigator.onLine) {
+      const result = await flushTakOutbox()
+      await refreshTakActivity()
+      setNotice(
+        result.failed
+          ? `TAK event retained offline after a delivery error.`
+          : `${result.sent} TAK event${result.sent === 1 ? '' : 's'} delivered.`,
+      )
+    } else {
+      setNotice('TAK event queued offline and will send after reconnection.')
+    }
+  }
+
+  function addDraftPoint(coordinate: Coordinate) {
+    setMapDraft((current) => {
+      if (!current) return null
+      return {
+        ...current,
+        points:
+          current.kind === 'marker'
+            ? [coordinate]
+            : [...current.points, coordinate].slice(0, 100),
+      }
+    })
+  }
+
+  async function sendMapDraft(title: string, remarks: string) {
+    if (!mapDraft) return
+    const createdAt = new Date().toISOString()
+    const uid = `AetherTAK-Field.${mapDraft.kind}.${crypto.randomUUID()}`
+    let operation: TakOperation
+    if (mapDraft.kind === 'marker') {
+      operation = {
+        kind: 'marker',
+        uid,
+        callsign: title,
+        coordinate: mapDraft.points[0],
+        remarks: remarks || undefined,
+        cotType: 'a-u-G',
+        createdAt,
+      }
+    } else if (mapDraft.kind === 'route') {
+      operation = {
+        kind: 'route',
+        uid,
+        title,
+        colorArgb: 0xff71d4d1 | 0,
+        points: mapDraft.points,
+        createdAt,
+      }
+    } else {
+      operation = {
+        kind: 'shape',
+        uid,
+        title,
+        colorArgb: 0xffefb75e | 0,
+        closed: true,
+        points: mapDraft.points,
+        createdAt,
+      }
+    }
+    await dispatchTakOperation(operation)
+    setMapDraft(null)
+  }
+
+  async function sendChat(contact: TakContact, message: string) {
+    await dispatchTakOperation({
+      kind: 'chat',
+      uid: `GeoChat.${identity.uid}.${contact.uid}.${crypto.randomUUID()}`,
+      sender: identity,
+      recipientUid: contact.uid,
+      conversationId: contact.uid,
+      conversationName: contact.callsign,
+      message,
+      createdAt: new Date().toISOString(),
+    })
+  }
+
+  async function sendEmergency(
+    emergencyType: EmergencyOperation['emergencyType'],
+  ) {
+    setNotice('Acquiring a precise location for the emergency signal…')
+    const coordinate = await currentCoordinate()
+    await dispatchTakOperation({
+      kind: 'emergency',
+      uid: `AetherTAK-Field.emergency.${identity.uid}`,
+      identity,
+      coordinate,
+      emergencyType,
+      createdAt: new Date().toISOString(),
+      staleSeconds: emergencyType === 'Cancel' ? 60 : 600,
+    })
+  }
 
   async function takePhoto() {
     setNotice('Opening camera and acquiring a precise location…')
@@ -236,7 +469,10 @@ export default function App() {
           className={`connection ${connection}`}
           type="button"
           aria-label={`TAK status: ${connection}`}
-          onClick={() => void takTransport.connect().then((value) => setConnection(value.state))}
+          onClick={() => void takTransport.connect().then((value) => {
+            setConnection(value.state)
+            setProfile(value.profile)
+          })}
         >
           {connection === 'connected' ? <Wifi size={17} /> : <WifiOff size={17} />}
           <span>{connection === 'connected' ? 'TAK live' : 'TAK preview'}</span>
@@ -267,7 +503,31 @@ export default function App() {
                   : 'Preview basemap · online'}
           </button>
 
-          <FieldMap fields={fields} readings={readings} contacts={contacts} />
+          <FieldMap
+            fields={fields}
+            readings={readings}
+            contacts={contacts}
+            activity={takActivity}
+            draft={mapDraft}
+            onMapPress={mapDraft ? addDraftPoint : null}
+          />
+          <TakMapComposer
+            draft={
+              mapDraft
+                ? { kind: mapDraft.kind, pointCount: mapDraft.points.length }
+                : null
+            }
+            onStart={(kind) => setMapDraft({ kind, points: [] })}
+            onUndo={() =>
+              setMapDraft((current) =>
+                current
+                  ? { ...current, points: current.points.slice(0, -1) }
+                  : null,
+              )
+            }
+            onCancel={() => setMapDraft(null)}
+            onSubmit={sendMapDraft}
+          />
 
           <section className="section-block">
             <div className="section-title">
@@ -410,13 +670,20 @@ export default function App() {
               </button>
             </>
           ) : null}
-          {contacts.map((contact) => (
-            <article className="record-row" key={contact.uid}>
-              <span className="team-avatar">{contact.callsign.slice(0, 2)}</span>
-              <div><strong>{contact.callsign}</strong><p>{contact.team ?? 'No team'} · active</p></div>
-              <MessageCircle size={19} />
-            </article>
-          ))}
+          <TakTeamPanel
+            callsign={identity.callsign}
+            contacts={contacts}
+            activity={takActivity}
+            queuedCount={
+              takActivity.filter(
+                (item) =>
+                  item.deliveryStatus === 'queued' ||
+                  item.deliveryStatus === 'failed',
+              ).length
+            }
+            onSendChat={sendChat}
+            onSendEmergency={sendEmergency}
+          />
         </section>
       )}
 
