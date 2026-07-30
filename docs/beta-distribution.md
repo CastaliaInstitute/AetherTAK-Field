@@ -79,6 +79,7 @@ For each beta, retain:
 - store version and build number;
 - generated AAB/IPA artifact checksums;
 - Google Play/TestFlight processing result and tester group;
+- the in-app Device readiness JSON from every physical test device; and
 - physical-device smoke-test evidence for enrollment, TAK transport, offline
   recovery, background PLI, camera/video, and supported depth hardware.
 

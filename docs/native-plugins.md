@@ -74,6 +74,30 @@ Before beta distribution, verify on physical devices:
 5. LiDAR/Depth accuracy against known dimensions, including confidence and
    unsupported-device fallback.
 
+## In-app physical-device evidence
+
+Open **Team → Device readiness** on each release-candidate installation and run
+the readiness check after enrollment and the required field exercises. Share
+the generated JSON report into the controlled release-evidence location. The
+versioned report records:
+
+- native app version/build, source revision, and physical-versus-virtual device
+  state;
+- device model, operating-system version, and WebView version;
+- sanitized TAK enrollment, connection, contact-count, and background-tracking
+  state;
+- ARKit LiDAR or ARCore Depth capability and supported artifact types;
+- field and TAK queue state, conflicts, sync cursor, and last synchronization;
+- ready/partial offline-map counts and downloaded tile totals; and
+- media counts, queue state, and photo/video SHA-256 coverage.
+
+The export deliberately excludes private keys, certificates, enrollment
+passwords, server addresses, profile/device identifiers, personal device
+names, coordinates, chat/event content, observation notes, and media content.
+It is a state snapshot, not a substitute for the behavioral evidence matrix:
+retain it alongside screenshots/video, peer versions, TAK Server log intervals,
+and measured depth results.
+
 ## Implementation status
 
 The shared CoT codec, offline TAK outbox, durable inbound/outbound activity,

@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  VITE_AETHER_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   shared:
     name: Shared app

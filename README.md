@@ -35,6 +35,9 @@ client and inside Capacitor shells for iOS and Android.
 - Opt-in native background PLI with a visible iOS location indicator or Android
   location foreground-service notification and an in-app stop control.
 - Read-only Al field insight surface.
+- Versioned, privacy-safe physical-device readiness reports with native
+  app/build, hardware, TAK, depth, sync, offline-map, and media-integrity
+  evidence export through the platform share sheet.
 
 The browser provides a safe preview. Certificate enrollment, CoT transport, and
 depth capture are intentionally native-only so private key material does not

@@ -11,6 +11,7 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { CapturePanel } from './components/CapturePanel'
+import { DeviceReadinessPanel } from './components/DeviceReadinessPanel'
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
 import { OfflineMapManager } from './components/OfflineMapManager'
@@ -651,6 +652,7 @@ export default function App() {
             connected={connection === 'connected'}
             onToggle={toggleBackgroundTracking}
           />
+          <DeviceReadinessPanel contactCount={contacts.length} />
           <TakTeamPanel
             callsign={identity.callsign}
             contacts={contacts}

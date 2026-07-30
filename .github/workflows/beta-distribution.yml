@@ -28,6 +28,9 @@ on:
 permissions:
   contents: read
 
+env:
+  VITE_AETHER_SOURCE_REVISION: ${{ github.sha }}
+
 concurrency:
   group: aethertak-field-beta-${{ inputs.platform }}
   cancel-in-progress: false
