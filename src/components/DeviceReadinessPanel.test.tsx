@@ -20,9 +20,12 @@ const database: DatabaseMetrics = {
     observations: 1,
     alerts: 0,
     insights: 1,
+    guardianParticipants: 1,
+    guardianAlerts: 1,
   },
   fieldQueue: { pending: 0, conflicts: 0, attemptedFailures: 0 },
   takQueue: { pending: 0, attemptedFailures: 0 },
+  guardianQueue: { pending: 0, attemptedFailures: 0 },
   offlineMaps: {
     total: 1,
     ready: 1,

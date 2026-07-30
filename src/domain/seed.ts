@@ -5,6 +5,7 @@ import type {
   EcologicalSite,
   Field,
   GuardianParticipantState,
+  GuardianAlert,
   Property,
   Season,
   SensorReading,
@@ -283,6 +284,24 @@ export const demoGuardianParticipants: GuardianParticipantState[] = [
   },
 ]
 
+export const demoGuardianAlerts: GuardianAlert[] = [
+  {
+    id: '2ef8e548-27f6-4faf-9c35-b536b4d30599',
+    participantId: demoGuardianParticipants[0].id,
+    ruleId: 'yellow-zone-entry',
+    severity: 'warning',
+    status: 'active',
+    reasonCode: 'yellow_zone_entry',
+    title: 'Participant entered a caution zone',
+    detail: 'Confirm awareness and continue monitoring.',
+    openedAt: minutesAgo(2),
+    acknowledgedAt: null,
+    resolvedAt: null,
+    resolutionReason: null,
+    updatedAt: minutesAgo(2),
+  },
+]
+
 export const demoSnapshot: DashboardSnapshot = {
   properties: demoProperties,
   seasons: demoSeasons,
@@ -293,5 +312,6 @@ export const demoSnapshot: DashboardSnapshot = {
   alerts: demoAlerts,
   insights: demoInsights,
   guardianParticipants: demoGuardianParticipants,
+  guardianAlerts: demoGuardianAlerts,
   contacts: demoContacts,
 }

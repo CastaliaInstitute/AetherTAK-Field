@@ -26,6 +26,9 @@ Methods exposed to the shared layer:
 - `fieldHealth({ port })`: perform a certificate-authenticated readiness probe
   without reading or mutating field records.
 - `fieldMutation({ port, mutation })`
+- `guardianAction({ port, action })`: submit a bounded check-in, alert
+  acknowledgement, or reasoned resolution to a fixed Guardian API route with
+  a UUID `Idempotency-Key`.
 - `fieldChanges({ port, cursor, limit })`
 - `fieldUpload({ port, mediaId, uri, contentType, ... })`
 - `fieldDownload({ port, mediaId, expectedSha256?, expectedContentType? })`

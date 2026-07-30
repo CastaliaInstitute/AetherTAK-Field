@@ -656,6 +656,46 @@ describe('Aether Field durable synchronization', () => {
     expect(await db.syncControl.get('field')).toBeUndefined()
   })
 
+  it('persists strict Guardian alert lifecycle projections', async () => {
+    const alert = {
+      ...demoSnapshot.guardianAlerts[0],
+      status: 'acknowledged' as const,
+      acknowledgedAt: '2026-07-30T07:14:00.000Z',
+      updatedAt: '2026-07-30T07:14:00.000Z',
+    }
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [{
+            cursor: 14,
+            entityType: 'guardian_alert',
+            entityId: alert.id,
+            revision: 2,
+            operation: 'update',
+            payload: alert,
+            serverUpdatedAt: '2026-07-30T07:14:01.000Z',
+            author: 'Guardian Rule Engine',
+          }],
+          nextCursor: 14,
+          hasMore: false,
+        },
+      })),
+    }
+
+    expect(await pullFieldChanges(transport)).toMatchObject({
+      applied: 1,
+      cursor: 14,
+    })
+    expect(await db.guardianAlerts.get(alert.id)).toMatchObject({
+      status: 'acknowledged',
+      acknowledgedAt: '2026-07-30T07:14:00.000Z',
+    })
+  })
+
   it('turns a pull collision into a preserved local/server conflict', async () => {
     const queued = await queueMutation({
       entityType: 'property',

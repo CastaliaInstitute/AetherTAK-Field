@@ -25,6 +25,8 @@ const database: DatabaseMetrics = {
     observations: 2,
     alerts: 1,
     insights: 1,
+    guardianParticipants: 1,
+    guardianAlerts: 1,
   },
   fieldQueue: {
     pending: 0,
@@ -32,6 +34,10 @@ const database: DatabaseMetrics = {
     attemptedFailures: 0,
   },
   takQueue: {
+    pending: 0,
+    attemptedFailures: 0,
+  },
+  guardianQueue: {
     pending: 0,
     attemptedFailures: 0,
   },

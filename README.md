@@ -71,6 +71,10 @@ client and inside Capacitor shells for iOS and Android.
   ordered mTLS field change feed, retained for offline safety awareness, and
   rendered as a prioritized roster plus map markers with source-specific
   uncertainty. Strict client schemas reject undeclared biometric fields.
+- Durable Guardian check-in, acknowledgement, and reasoned-resolution actions
+  with stable UUID idempotency keys, offline retry/discard controls, fixed
+  native API routes, and certificate-authenticated delivery. Alert projections
+  remain server-authoritative and distinguish acknowledgement from resolution.
 - Versioned, privacy-safe physical-device readiness reports with native
   app/build, hardware, TAK, certificate-authenticated Aether Field API health,
   depth, sync, offline-map, and media-integrity evidence export through the

@@ -9,7 +9,12 @@ import type {
   Property,
   Season,
 } from '../domain/models'
-import { db, queueMutation, type OutboxItem } from './database'
+import {
+  db,
+  queueMutation,
+  type GuardianActionOutbox,
+  type OutboxItem,
+} from './database'
 
 export async function seedDatabase(snapshot: DashboardSnapshot) {
   await db.transaction(
@@ -24,6 +29,7 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
       db.alerts,
       db.insights,
       db.guardianParticipants,
+      db.guardianAlerts,
     ],
     async () => {
       await Promise.all([
@@ -36,6 +42,7 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
         db.alerts.bulkPut(snapshot.alerts),
         db.insights.bulkPut(snapshot.insights),
         db.guardianParticipants.bulkPut(snapshot.guardianParticipants),
+        db.guardianAlerts.bulkPut(snapshot.guardianAlerts),
       ])
     },
   )
@@ -57,6 +64,7 @@ export async function initializeFieldDatabase(
       db.alerts,
       db.insights,
       db.guardianParticipants,
+      db.guardianAlerts,
     ],
     async () => {
       if (await db.appMetadata.get('initial-seed')) return false
@@ -70,6 +78,7 @@ export async function initializeFieldDatabase(
         db.alerts.count(),
         db.insights.count(),
         db.guardianParticipants.count(),
+        db.guardianAlerts.count(),
       ])
       const empty = counts.every((count) => count === 0)
       if (empty && snapshot) {
@@ -83,6 +92,7 @@ export async function initializeFieldDatabase(
           db.alerts.bulkPut(snapshot.alerts),
           db.insights.bulkPut(snapshot.insights),
           db.guardianParticipants.bulkPut(snapshot.guardianParticipants),
+          db.guardianAlerts.bulkPut(snapshot.guardianAlerts),
         ])
       }
       await db.appMetadata.put({
@@ -149,6 +159,7 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
 
 export type FieldDashboardData = Omit<DashboardSnapshot, 'contacts'> & {
   media: MediaCapture[]
+  guardianActions: GuardianActionOutbox[]
   conflicts: OutboxItem[]
   offlineMapRegions: OfflineMapRegion[]
 }
@@ -165,6 +176,8 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     alerts,
     insights,
     guardianParticipants,
+    guardianAlerts,
+    guardianActions,
     conflicts,
     offlineMapRegions,
   ] = await Promise.all([
@@ -178,6 +191,8 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     db.alerts.orderBy('createdAt').reverse().toArray(),
     db.insights.orderBy('generatedAt').reverse().toArray(),
     db.guardianParticipants.orderBy('updatedAt').reverse().toArray(),
+    db.guardianAlerts.orderBy('openedAt').reverse().toArray(),
+    db.guardianActions.orderBy('createdAt').toArray(),
     db.outbox.filter((item) => item.conflict !== null).toArray(),
     db.offlineMapRegions.orderBy('updatedAt').reverse().toArray(),
   ])
@@ -195,6 +210,8 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
       (insight) => new Date(insight.expiresAt).getTime() > Date.now(),
     ),
     guardianParticipants,
+    guardianAlerts,
+    guardianActions,
     conflicts,
     offlineMapRegions,
   }

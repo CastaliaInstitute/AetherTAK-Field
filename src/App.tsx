@@ -19,6 +19,7 @@ import { PhysicalReleaseEvidencePanel } from './components/PhysicalReleaseEviden
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
 import { GuardianRoster } from './components/GuardianRoster'
+import { GuardianAlertQueue } from './components/GuardianAlertQueue'
 import { OfflineMapManager } from './components/OfflineMapManager'
 import { SensorMonitor } from './components/SensorMonitor'
 import {
@@ -88,6 +89,12 @@ import {
 } from './domain/alInsights'
 import { importTakDataPackage } from './tak/enrollmentImport'
 import { startTakSessionRecovery } from './tak/sessionRecovery'
+import {
+  discardGuardianAction,
+  flushGuardianActions,
+  queueGuardianAction,
+  retryGuardianAction,
+} from './guardian/actions'
 import './App.css'
 
 type Tab = 'map' | 'fields' | 'capture' | 'team'
@@ -152,6 +159,8 @@ export default function App() {
     alerts,
     insights,
     guardianParticipants,
+    guardianAlerts,
+    guardianActions,
     offlineMapRegions,
   } = dashboard
 
@@ -268,7 +277,11 @@ export default function App() {
   useEffect(() => {
     if (connection !== 'connected' || !takTransport.isNative()) return
     return startSyncScheduler(() =>
-      Promise.allSettled([flushTakOutbox(), synchronizeFieldData()]),
+      Promise.allSettled([
+        flushTakOutbox(),
+        flushGuardianActions(),
+        synchronizeFieldData(),
+      ]),
     )
   }, [connection])
 
@@ -546,6 +559,59 @@ export default function App() {
     })
   }
 
+  async function submitGuardianAction(
+    kind: 'check_in' | 'acknowledge' | 'resolve',
+    targetId: string,
+    reason: string | null = null,
+  ) {
+    await queueGuardianAction({ kind, targetId, reason })
+    setNotice('Guardian safety action queued for authenticated delivery.')
+    if (
+      connection === 'connected' &&
+      takTransport.isNative() &&
+      navigator.onLine
+    ) {
+      const result = await flushGuardianActions()
+      if (result.sent > 0) {
+        await synchronizeFieldData()
+        setNotice('Guardian safety action delivered and synchronized.')
+      } else if (result.failed > 0) {
+        setNotice('Guardian action remains queued after a delivery error.')
+      }
+    }
+  }
+
+  async function resolveGuardianAlert(alertId: string, reason: string) {
+    if (
+      !window.confirm(
+        'Resolve this alert as safe? Acknowledgement alone does not resolve a safety condition.',
+      )
+    ) return
+    await submitGuardianAction('resolve', alertId, reason)
+  }
+
+  async function retryPendingGuardianAction(actionId: string) {
+    await retryGuardianAction(actionId)
+    const result =
+      connection === 'connected' && navigator.onLine
+        ? await flushGuardianActions()
+        : null
+    if (result?.sent) await synchronizeFieldData()
+    setNotice(
+      result?.sent
+        ? 'Guardian action delivered and synchronized.'
+        : 'Guardian action queued for another delivery attempt.',
+    )
+  }
+
+  async function discardPendingGuardianAction(actionId: string) {
+    if (!window.confirm('Discard this undelivered Guardian safety action?')) {
+      return
+    }
+    await discardGuardianAction(actionId)
+    setNotice('Undelivered Guardian action discarded.')
+  }
+
   async function takePhoto(input: ObservationCaptureInput) {
     const capture = await captureObservationPhoto(input)
     setNotice(
@@ -701,6 +767,22 @@ export default function App() {
           <GuardianRoster
             participants={guardianParticipants}
             now={monitoringNow}
+          />
+          <GuardianAlertQueue
+            alerts={guardianAlerts}
+            participants={guardianParticipants}
+            pendingActions={guardianActions}
+            actionsEnabled={takTransport.isNative()}
+            onCheckIn={(participantId) =>
+              void submitGuardianAction('check_in', participantId)}
+            onAcknowledge={(alertId) =>
+              void submitGuardianAction('acknowledge', alertId)}
+            onResolve={(alertId, reason) =>
+              void resolveGuardianAlert(alertId, reason)}
+            onRetry={(actionId) =>
+              void retryPendingGuardianAction(actionId)}
+            onDiscard={(actionId) =>
+              void discardPendingGuardianAction(actionId)}
           />
           <TakMapComposer
             draft={

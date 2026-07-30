@@ -68,6 +68,10 @@ interface AetherTakTransportPlugin {
     cursor: number
     limit: number
   }): Promise<NativeFieldResponse>
+  guardianAction(options: {
+    port: number
+    action: Record<string, unknown>
+  }): Promise<NativeFieldResponse>
   fieldUpload(options: {
     port: number
     mediaId: string
@@ -326,6 +330,13 @@ export const fieldApiTransport = {
   async changes(cursor: number, limit = 100): Promise<NativeFieldResponse> {
     requireNativeFieldApi()
     return nativeTak.fieldChanges({ port: fieldPort(), cursor, limit })
+  },
+
+  async guardianAction(
+    action: Record<string, unknown>,
+  ): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.guardianAction({ port: fieldPort(), action })
   },
 
   async upload(options: {

@@ -82,6 +82,7 @@ test("TAK bridge methods remain aligned across TypeScript Kotlin and Swift", asy
     "sendCot",
     "fieldHealth",
     "fieldMutation",
+    "guardianAction",
     "fieldChanges",
     "fieldUpload",
     "fieldDownload",
@@ -100,4 +101,9 @@ test("TAK bridge methods remain aligned across TypeScript Kotlin and Swift", asy
   }
   assert.match(androidClient, /path\s*=\s*"\/healthz"/);
   assert.match(iosClient, /path:\s*"\/healthz"/);
+  for (const client of [androidClient, iosClient]) {
+    assert.match(client, /\/guardian\/v1\/participants\//);
+    assert.match(client, /\/guardian\/v1\/alerts\//);
+    assert.match(client, /Idempotency-Key/);
+  }
 });

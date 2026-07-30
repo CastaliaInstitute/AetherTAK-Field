@@ -64,6 +64,7 @@ const readinessCheckIds = [
   'depth-capability',
   'field-sync',
   'tak-outbox',
+  'guardian-actions',
   'offline-maps',
   'media-integrity',
   'network',

@@ -19,6 +19,7 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         CAPPluginMethod(name: "sendCot", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldHealth", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldMutation", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "guardianAction", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldChanges", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldUpload", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "fieldDownload", returnType: CAPPluginReturnPromise),
@@ -258,6 +259,23 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
                 profile: profile,
                 port: port,
                 mutation: mutation
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    @objc func guardianAction(_ call: CAPPluginCall) {
+        guard let action = call.getObject("action") else {
+            call.reject(
+                "A Guardian action object is required.",
+                "INVALID_GUARDIAN_ACTION"
+            )
+            return
+        }
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.guardianAction(
+                profile: profile,
+                port: port,
+                action: action
             ) { result in self.resolveField(call, result) }
         }
     }

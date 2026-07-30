@@ -5,6 +5,7 @@ import {
   depthScanResultSchema,
   fieldSchema,
   guardianParticipantStateSchema,
+  guardianAlertSchema,
   mediaCaptureSchema,
   sensorReadingSchema,
   takContactSchema,
@@ -164,6 +165,32 @@ describe('field data contracts', () => {
             heartRate: 82,
           },
         },
+      }).success,
+    ).toBe(false)
+  })
+
+  it('enforces Guardian alert lifecycle evidence', () => {
+    const alert = demoSnapshot.guardianAlerts[0]
+    expect(guardianAlertSchema.parse(alert)).toEqual(alert)
+    expect(
+      guardianAlertSchema.safeParse({
+        ...alert,
+        status: 'acknowledged',
+        acknowledgedAt: null,
+      }).success,
+    ).toBe(false)
+    expect(
+      guardianAlertSchema.safeParse({
+        ...alert,
+        status: 'resolved',
+        resolvedAt: '2026-07-30T18:30:00.000Z',
+        resolutionReason: '',
+      }).success,
+    ).toBe(false)
+    expect(
+      guardianAlertSchema.safeParse({
+        ...alert,
+        context: { heartRate: 82 },
       }).success,
     ).toBe(false)
   })

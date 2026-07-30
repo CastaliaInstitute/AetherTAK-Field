@@ -341,6 +341,16 @@ source-specific defaults. Undeclared fields—including biometric values—fail
 validation without advancing the durable change cursor. Mobile mutation of
 participant state is intentionally unavailable.
 
+The mobile safety workflow persists strict `guardian_alert` projections and a
+separate local action outbox. Check-in, acknowledgement, and resolution use a
+stable UUID as `Idempotency-Key`; retries reuse that key. Swift and Kotlin map
+the bounded action enum to fixed `/guardian/v1` routes inside the native mTLS
+boundary, so JavaScript cannot supply an arbitrary path or header. A resolution
+requires an explicit 3–500 character reason. Failed actions remain visible for
+operator retry or deliberate discard, and successful actions disappear only
+after an exact matching receipt. Acknowledgement remains distinct from
+resolution in both the schema and interface.
+
 ## 7. Canonical protobuf contract
 
 The initial source file is `proto/castalia/guardian/v1/telemetry.proto`.

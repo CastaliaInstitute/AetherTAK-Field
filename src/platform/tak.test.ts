@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const native = vi.hoisted(() => ({
   fieldHealth: vi.fn(),
+  guardianAction: vi.fn(),
   getContacts: vi.fn(),
 }))
 
@@ -32,6 +33,7 @@ const validContact = {
 describe('native TAK boundary', () => {
   beforeEach(() => {
     native.fieldHealth.mockReset()
+    native.guardianAction.mockReset()
     native.getContacts.mockReset()
   })
 
@@ -66,5 +68,27 @@ describe('native TAK boundary', () => {
       body: { status: 'ok' },
     })
     expect(native.fieldHealth).toHaveBeenCalledWith({ port: 9443 })
+  })
+
+  it('keeps Guardian actions inside the certificate-backed native boundary', async () => {
+    const action = {
+      idempotencyKey: '592e64a5-a090-4f3c-a2bb-cd72862d92eb',
+      kind: 'acknowledge',
+      targetId: '2ef8e548-27f6-4faf-9c35-b536b4d30599',
+      reason: null,
+      occurredAt: '2026-07-30T18:30:00.000Z',
+    }
+    native.guardianAction.mockResolvedValue({
+      status: 200,
+      body: { accepted: true },
+    })
+
+    await expect(fieldApiTransport.guardianAction(action)).resolves.toMatchObject({
+      status: 200,
+    })
+    expect(native.guardianAction).toHaveBeenCalledWith({
+      port: 9443,
+      action,
+    })
   })
 })

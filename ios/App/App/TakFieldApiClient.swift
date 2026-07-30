@@ -72,6 +72,89 @@ final class TakFieldApiClient {
         }
     }
 
+    func guardianAction(
+        profile: TakProfile,
+        port: Int,
+        action: [String: Any],
+        completion: @escaping (Result<FieldApiResponse, Error>) -> Void
+    ) {
+        do {
+            let allowed = Set([
+                "idempotencyKey",
+                "kind",
+                "targetId",
+                "reason",
+                "occurredAt",
+            ])
+            guard
+                Set(action.keys) == allowed,
+                let idempotencyKey = action["idempotencyKey"] as? String,
+                let targetId = action["targetId"] as? String,
+                let kind = action["kind"] as? String,
+                let occurredAt = action["occurredAt"] as? String,
+                let idempotencyUUID = UUID(uuidString: idempotencyKey),
+                idempotencyUUID.uuidString.lowercased() == idempotencyKey.lowercased(),
+                let targetUUID = UUID(uuidString: targetId),
+                targetUUID.uuidString.lowercased() == targetId.lowercased(),
+                Self.guardianTimestamp(occurredAt)
+            else {
+                throw FieldApiError.invalidRequest(
+                    "Guardian action does not match the native contract."
+                )
+            }
+            let reason = (action["reason"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let path: String
+            let payload: [String: Any]
+            switch kind {
+            case "check_in":
+                guard reason == nil else {
+                    throw FieldApiError.invalidRequest(
+                        "Check-in does not accept a resolution reason."
+                    )
+                }
+                path = "/guardian/v1/participants/\(targetId)/check-ins"
+                payload = ["observedAt": occurredAt]
+            case "acknowledge":
+                guard reason == nil else {
+                    throw FieldApiError.invalidRequest(
+                        "Acknowledgement does not accept a reason."
+                    )
+                }
+                path = "/guardian/v1/alerts/\(targetId):acknowledge"
+                payload = [:]
+            case "resolve":
+                guard let reason, (3...500).contains(reason.count) else {
+                    throw FieldApiError.invalidRequest(
+                        "Resolution reason must contain 3 to 500 characters."
+                    )
+                }
+                path = "/guardian/v1/alerts/\(targetId):resolve"
+                payload = ["reason": reason]
+            default:
+                throw FieldApiError.invalidRequest(
+                    "Unsupported Guardian action."
+                )
+            }
+            let body = try JSONSerialization.data(
+                withJSONObject: payload,
+                options: [.sortedKeys]
+            )
+            try perform(
+                profile: profile,
+                port: port,
+                method: "POST",
+                path: path,
+                body: body,
+                contentType: "application/json",
+                headers: ["Idempotency-Key": idempotencyKey],
+                completion: completion
+            )
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
     func changes(
         profile: TakProfile,
         port: Int,
@@ -841,6 +924,7 @@ final class TakFieldApiClient {
         path: String,
         body: Data? = nil,
         contentType: String? = nil,
+        headers: [String: String] = [:],
         completion: @escaping (Result<FieldApiResponse, Error>) -> Void
     ) throws {
         var request = URLRequest(url: try endpoint(profile, port: port, path: path))
@@ -852,11 +936,25 @@ final class TakFieldApiClient {
         if let contentType {
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         }
+        for (name, value) in headers {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         let session = try authenticatedSession(profile)
         session.dataTask(with: request) { data, response, error in
             defer { session.finishTasksAndInvalidate() }
             Self.complete(data: data, response: response, error: error, completion: completion)
         }.resume()
+    }
+
+    private static func guardianTimestamp(_ value: String) -> Bool {
+        guard value.count <= 64 else { return false }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [
+            .withInternetDateTime,
+            .withFractionalSeconds,
+        ]
+        return fractional.date(from: value) != nil ||
+            ISO8601DateFormatter().date(from: value) != nil
     }
 
     private func performUpload(

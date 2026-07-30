@@ -294,6 +294,15 @@ class AetherTakTransportPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun guardianAction(call: PluginCall) {
+        val action = call.getObject("action")
+        executeFieldRequest(call) { profile, port ->
+            requireNotNull(action) { "A Guardian action object is required." }
+            fieldApi.guardianAction(profile, port, action.toString())
+        }
+    }
+
+    @PluginMethod
     fun fieldChanges(call: PluginCall) {
         val cursor = call.getLong("cursor", 0L) ?: 0L
         val limit = call.getInt("limit", 100) ?: 100

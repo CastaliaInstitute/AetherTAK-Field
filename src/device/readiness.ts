@@ -31,6 +31,8 @@ const databaseMetricsSchema = z.object({
     observations: z.number().int().nonnegative(),
     alerts: z.number().int().nonnegative(),
     insights: z.number().int().nonnegative(),
+    guardianParticipants: z.number().int().nonnegative(),
+    guardianAlerts: z.number().int().nonnegative(),
   }),
   fieldQueue: z.object({
     pending: z.number().int().nonnegative(),
@@ -38,6 +40,10 @@ const databaseMetricsSchema = z.object({
     attemptedFailures: z.number().int().nonnegative(),
   }),
   takQueue: z.object({
+    pending: z.number().int().nonnegative(),
+    attemptedFailures: z.number().int().nonnegative(),
+  }),
+  guardianQueue: z.object({
     pending: z.number().int().nonnegative(),
     attemptedFailures: z.number().int().nonnegative(),
   }),
@@ -176,8 +182,11 @@ async function collectDatabaseMetrics(): Promise<DatabaseMetrics> {
     observations,
     alerts,
     insights,
+    guardianParticipants,
+    guardianAlerts,
     fieldQueue,
     takQueue,
+    guardianQueue,
     offlineMaps,
     media,
     sync,
@@ -190,8 +199,11 @@ async function collectDatabaseMetrics(): Promise<DatabaseMetrics> {
     db.observations.count(),
     db.alerts.count(),
     db.insights.count(),
+    db.guardianParticipants.count(),
+    db.guardianAlerts.count(),
     db.outbox.toArray(),
     db.takOutbox.toArray(),
+    db.guardianActions.toArray(),
     db.offlineMapRegions.toArray(),
     db.media.toArray(),
     db.syncControl.get('field'),
@@ -211,6 +223,8 @@ async function collectDatabaseMetrics(): Promise<DatabaseMetrics> {
       observations,
       alerts,
       insights,
+      guardianParticipants,
+      guardianAlerts,
     },
     fieldQueue: {
       pending: fieldQueue.length,
@@ -220,6 +234,11 @@ async function collectDatabaseMetrics(): Promise<DatabaseMetrics> {
     takQueue: {
       pending: takQueue.length,
       attemptedFailures: takQueue.filter((item) => item.attempts > 0).length,
+    },
+    guardianQueue: {
+      pending: guardianQueue.length,
+      attemptedFailures: guardianQueue.filter((item) => item.attempts > 0)
+        .length,
     },
     offlineMaps: {
       total: offlineMaps.length,
@@ -413,6 +432,12 @@ export function buildDeviceReadinessReport(
       'TAK event delivery',
       database.takQueue.pending,
       database.takQueue.attemptedFailures,
+    ),
+    queueCheck(
+      'guardian-actions',
+      'Guardian safety action delivery',
+      database.guardianQueue.pending,
+      database.guardianQueue.attemptedFailures,
     ),
     {
       id: 'offline-maps',

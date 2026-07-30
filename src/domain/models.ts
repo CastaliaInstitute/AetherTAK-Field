@@ -256,6 +256,52 @@ export type GuardianParticipantState = z.infer<
   typeof guardianParticipantStateSchema
 >
 
+export const guardianAlertSchema = z
+  .object({
+    id: z.string().uuid(),
+    participantId: z.string().uuid(),
+    ruleId: z.string().min(1).max(120),
+    severity: z.enum(['info', 'warning', 'critical']),
+    status: z.enum(['active', 'acknowledged', 'resolved']),
+    reasonCode: z.string().min(1).max(120),
+    title: z.string().min(1).max(160),
+    detail: z.string().max(500),
+    openedAt: z.string().datetime(),
+    acknowledgedAt: z.string().datetime().nullable(),
+    resolvedAt: z.string().datetime().nullable(),
+    resolutionReason: z.string().max(500).nullable(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict()
+  .superRefine((alert, context) => {
+    if (alert.status === 'active' && (alert.acknowledgedAt || alert.resolvedAt)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'An active Guardian alert cannot have completion timestamps.',
+        path: ['status'],
+      })
+    }
+    if (alert.status === 'acknowledged' && !alert.acknowledgedAt) {
+      context.addIssue({
+        code: 'custom',
+        message: 'An acknowledged Guardian alert requires acknowledgedAt.',
+        path: ['acknowledgedAt'],
+      })
+    }
+    if (
+      alert.status === 'resolved' &&
+      (!alert.resolvedAt || !alert.resolutionReason?.trim())
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'A resolved Guardian alert requires time and reason.',
+        path: ['resolvedAt'],
+      })
+    }
+  })
+
+export type GuardianAlert = z.infer<typeof guardianAlertSchema>
+
 export const tileSourceIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
 export const offlineMapRegionSchema = z.object({
@@ -348,5 +394,6 @@ export interface DashboardSnapshot {
   alerts: Alert[]
   insights: AlInsight[]
   guardianParticipants: GuardianParticipantState[]
+  guardianAlerts: GuardianAlert[]
   contacts: TakContact[]
 }

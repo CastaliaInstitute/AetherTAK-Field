@@ -10,6 +10,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.security.MessageDigest
+import java.time.Instant
 import java.util.UUID
 import javax.net.ssl.HttpsURLConnection
 import org.json.JSONObject
@@ -44,6 +45,67 @@ class TakFieldApiClient(
         contentType = "application/json",
         body = mutationJson.toByteArray(Charsets.UTF_8),
     )
+
+    fun guardianAction(
+        profile: TakProfile,
+        port: Int,
+        actionJson: String,
+    ): FieldApiResponse {
+        val action = JSONObject(actionJson)
+        val allowed = setOf(
+            "idempotencyKey",
+            "kind",
+            "targetId",
+            "reason",
+            "occurredAt",
+        )
+        require(action.keys().asSequence().toSet() == allowed) {
+            "Guardian action does not match the native contract."
+        }
+        val idempotencyKey = action.getString("idempotencyKey")
+        val targetId = action.getString("targetId")
+        require(UUID.fromString(idempotencyKey).toString() == idempotencyKey.lowercase()) {
+            "Guardian idempotency key must be a UUID."
+        }
+        require(UUID.fromString(targetId).toString() == targetId.lowercase()) {
+            "Guardian target ID must be a UUID."
+        }
+        val occurredAt = action.getString("occurredAt")
+        Instant.parse(occurredAt)
+        val kind = action.getString("kind")
+        val reason = if (action.isNull("reason")) null else action.getString("reason").trim()
+        val path: String
+        val body: JSONObject
+        when (kind) {
+            "check_in" -> {
+                require(reason == null) { "Check-in does not accept a resolution reason." }
+                path = "/guardian/v1/participants/$targetId/check-ins"
+                body = JSONObject().put("observedAt", occurredAt)
+            }
+            "acknowledge" -> {
+                require(reason == null) { "Acknowledgement does not accept a reason." }
+                path = "/guardian/v1/alerts/$targetId:acknowledge"
+                body = JSONObject()
+            }
+            "resolve" -> {
+                require(reason != null && reason.length in 3..500) {
+                    "Resolution reason must contain 3 to 500 characters."
+                }
+                path = "/guardian/v1/alerts/$targetId:resolve"
+                body = JSONObject().put("reason", reason)
+            }
+            else -> throw IllegalArgumentException("Unsupported Guardian action.")
+        }
+        return request(
+            profile = profile,
+            port = port,
+            method = "POST",
+            path = path,
+            contentType = "application/json",
+            body = body.toString().toByteArray(Charsets.UTF_8),
+            headers = mapOf("Idempotency-Key" to idempotencyKey),
+        )
+    }
 
     fun changes(
         profile: TakProfile,
@@ -377,6 +439,7 @@ class TakFieldApiClient(
         path: String,
         contentType: String? = null,
         body: ByteArray? = null,
+        headers: Map<String, String> = emptyMap(),
     ): FieldApiResponse {
         val connection = connection(profile, port, path).apply {
             requestMethod = method
@@ -384,6 +447,9 @@ class TakFieldApiClient(
                 doOutput = true
                 setFixedLengthStreamingMode(body.size)
                 contentType?.let { setRequestProperty("Content-Type", it) }
+            }
+            headers.forEach { (name, value) ->
+                setRequestProperty(name, value)
             }
         }
         try {

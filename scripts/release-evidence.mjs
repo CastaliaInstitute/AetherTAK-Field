@@ -51,6 +51,7 @@ const requiredReadinessChecks = [
   'background-tracking',
   'field-sync',
   'tak-outbox',
+  'guardian-actions',
   'offline-maps',
   'media-integrity',
 ]
