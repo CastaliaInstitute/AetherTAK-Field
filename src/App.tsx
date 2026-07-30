@@ -46,7 +46,16 @@ export default function App() {
     useState<TakConnectionState>('disconnected')
   const [depth, setDepth] = useState<DepthCapability>(initialDepth)
   const [notice, setNotice] = useState<string | null>(null)
-  const { fields, readings, alerts, contacts } = demoSnapshot
+  const {
+    properties,
+    seasons,
+    fields,
+    ecologicalSites,
+    readings,
+    alerts,
+    insights,
+    contacts,
+  } = demoSnapshot
 
   useEffect(() => {
     void takTransport.status().then((status) => setConnection(status.state))
@@ -95,7 +104,7 @@ export default function App() {
       {tab === 'map' && (
         <>
           <section className="status-strip" aria-label="Field status">
-            <div><strong>{fields.length}</strong><span>Active sites</span></div>
+            <div><strong>{fields.length + ecologicalSites.length}</strong><span>Active sites</span></div>
             <div><strong>{readings.length}</strong><span>Sensors live</span></div>
             <div><strong>{averageHealth}%</strong><span>Field health</span></div>
           </section>
@@ -153,8 +162,8 @@ export default function App() {
             <div className="al-mark">Al</div>
             <div>
               <p className="eyebrow">READ-ONLY FIELD INSIGHT</p>
-              <strong>Irrigate North Market Beds after sunset</strong>
-              <p>Moisture remains adequate now; evening timing reduces evaporative loss.</p>
+              <strong>{insights[0]?.title ?? 'No current insight'}</strong>
+              <p>{insights[0]?.summary ?? 'Al insights will appear when fresh field evidence is available.'}</p>
             </div>
           </aside>
         </>
@@ -165,10 +174,28 @@ export default function App() {
           <Sprout size={30} />
           <p className="eyebrow">PROPERTIES · SEASONS · ECOLOGY</p>
           <h2>Field records</h2>
+          <article className="record-row">
+            <span>🏡</span>
+            <div>
+              <strong>{properties[0]?.name}</strong>
+              <p>{seasons.find((season) => season.status === 'active')?.name} · active season</p>
+            </div>
+            <ChevronRight />
+          </article>
           {fields.map((field) => (
             <article className="record-row" key={field.id}>
               <span>{field.cropIcon}</span>
               <div><strong>{field.name}</strong><p>{field.seasonLabel} · {field.crop}</p></div>
+              <ChevronRight />
+            </article>
+          ))}
+          {ecologicalSites.map((site) => (
+            <article className="record-row" key={site.id}>
+              <span>🌿</span>
+              <div>
+                <strong>{site.name}</strong>
+                <p>{site.siteType} · {site.conditionScore ?? '—'} condition</p>
+              </div>
               <ChevronRight />
             </article>
           ))}

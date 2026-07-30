@@ -11,9 +11,37 @@ export const coordinateSchema = z.object({
 
 export type Coordinate = z.infer<typeof coordinateSchema>
 
+export const propertySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  description: z.string(),
+  center: coordinateSchema,
+  boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
+  timezone: z.string().min(1),
+  updatedAt: z.string().datetime(),
+  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+})
+
+export type Property = z.infer<typeof propertySchema>
+
+export const seasonSchema = z.object({
+  id: z.string().uuid(),
+  propertyId: z.string().uuid(),
+  name: z.string().min(1),
+  startsOn: z.string().date(),
+  endsOn: z.string().date(),
+  status: z.enum(['planned', 'active', 'closed']),
+  notes: z.string(),
+  updatedAt: z.string().datetime(),
+  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+})
+
+export type Season = z.infer<typeof seasonSchema>
+
 export const fieldSchema = z.object({
   id: z.string().uuid(),
   propertyId: z.string().uuid(),
+  seasonId: z.string().uuid(),
   name: z.string().min(1),
   crop: z.string().min(1),
   cropIcon: z.string().min(1),
@@ -26,6 +54,31 @@ export const fieldSchema = z.object({
 })
 
 export type Field = z.infer<typeof fieldSchema>
+
+export const ecologicalSiteSchema = z.object({
+  id: z.string().uuid(),
+  propertyId: z.string().uuid(),
+  name: z.string().min(1),
+  siteType: z.enum([
+    'riparian',
+    'wetland',
+    'woodland',
+    'grassland',
+    'pollinator',
+    'water',
+    'soil',
+    'other',
+  ]),
+  targetCondition: z.string(),
+  conditionScore: z.number().min(0).max(100).nullable(),
+  center: coordinateSchema,
+  boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
+  indicatorSpecies: z.array(z.string()),
+  updatedAt: z.string().datetime(),
+  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+})
+
+export type EcologicalSite = z.infer<typeof ecologicalSiteSchema>
 
 export const sensorReadingSchema = z.object({
   id: z.string().uuid(),
@@ -45,6 +98,20 @@ export const sensorReadingSchema = z.object({
   value: z.number(),
   unit: z.string().min(1),
   quality: z.enum(['good', 'estimated', 'suspect']),
+  lorawan: z
+    .object({
+      applicationId: z.string(),
+      devEui: z.string(),
+      fPort: z.number().int().min(0).max(255),
+      frameCounter: z.number().int().nonnegative(),
+      gatewayIds: z.array(z.string()),
+      rssi: z.number().nullable(),
+      snr: z.number().nullable(),
+      spreadingFactor: z.number().int().nullable(),
+      frequencyHz: z.number().int().positive().nullable(),
+    })
+    .nullable()
+    .default(null),
   coordinate: coordinateSchema,
   recordedAt: z.string().datetime(),
 })
@@ -95,6 +162,43 @@ export const alertSchema = z.object({
 
 export type Alert = z.infer<typeof alertSchema>
 
+export const alInsightSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  rationale: z.string(),
+  sourceReadingIds: z.array(z.string().uuid()),
+  fieldId: z.string().uuid().nullable(),
+  siteId: z.string().uuid().nullable(),
+  severity: z.enum(['info', 'attention']),
+  generatedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  readOnly: z.literal(true),
+})
+
+export type AlInsight = z.infer<typeof alInsightSchema>
+
+export const offlineMapRegionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  tileSourceId: z.string().min(1),
+  tileUrlTemplate: z.string().min(1),
+  bounds: z.object({
+    west: z.number().min(-180).max(180),
+    south: z.number().min(-85.051129).max(85.051129),
+    east: z.number().min(-180).max(180),
+    north: z.number().min(-85.051129).max(85.051129),
+  }),
+  minZoom: z.number().int().min(0).max(22),
+  maxZoom: z.number().int().min(0).max(22),
+  tileCount: z.number().int().nonnegative(),
+  downloadedTiles: z.number().int().nonnegative(),
+  status: z.enum(['planned', 'downloading', 'ready', 'partial', 'failed']),
+  updatedAt: z.string().datetime(),
+})
+
+export type OfflineMapRegion = z.infer<typeof offlineMapRegionSchema>
+
 export type TakConnectionState =
   | 'not_enrolled'
   | 'disconnected'
@@ -138,10 +242,13 @@ export interface DepthScanResult {
 }
 
 export interface DashboardSnapshot {
+  properties: Property[]
+  seasons: Season[]
   fields: Field[]
+  ecologicalSites: EcologicalSite[]
   readings: SensorReading[]
   observations: Observation[]
   alerts: Alert[]
+  insights: AlInsight[]
   contacts: TakContact[]
 }
-

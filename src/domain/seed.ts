@@ -1,7 +1,11 @@
 import type {
   Alert,
+  AlInsight,
   DashboardSnapshot,
+  EcologicalSite,
   Field,
+  Property,
+  Season,
   SensorReading,
   TakContact,
 } from './models'
@@ -10,10 +14,51 @@ const now = new Date()
 const minutesAgo = (minutes: number) =>
   new Date(now.getTime() - minutes * 60_000).toISOString()
 
+export const demoProperties: Property[] = [
+  {
+    id: 'c74e7ae2-e8cc-4f9a-82d2-df837b042ded',
+    name: 'Aether Urban Farm',
+    description: 'Production beds and creek restoration monitoring area.',
+    center: {
+      latitude: 39.7406,
+      longitude: -104.993,
+      altitudeMeters: 1608,
+      horizontalAccuracyMeters: null,
+      verticalAccuracyMeters: null,
+      headingDegrees: null,
+    },
+    boundary: [
+      [-104.9973, 39.743],
+      [-104.9882, 39.743],
+      [-104.9882, 39.7383],
+      [-104.9973, 39.7383],
+      [-104.9973, 39.743],
+    ],
+    timezone: 'America/Denver',
+    updatedAt: minutesAgo(20),
+    syncState: 'synced',
+  },
+]
+
+export const demoSeasons: Season[] = [
+  {
+    id: '46882450-d534-4544-ad60-5e9adcf66a99',
+    propertyId: demoProperties[0].id,
+    name: 'Summer 2026',
+    startsOn: '2026-05-15',
+    endsOn: '2026-10-15',
+    status: 'active',
+    notes: 'Market production and annual ecological monitoring.',
+    updatedAt: minutesAgo(15),
+    syncState: 'synced',
+  },
+]
+
 export const demoFields: Field[] = [
   {
     id: '28f77310-f12d-4fd5-8097-3387e83fd49f',
-    propertyId: 'c74e7ae2-e8cc-4f9a-82d2-df837b042ded',
+    propertyId: demoProperties[0].id,
+    seasonId: demoSeasons[0].id,
     name: 'North Market Beds',
     crop: 'Leaf lettuce',
     cropIcon: '🥬',
@@ -32,7 +77,8 @@ export const demoFields: Field[] = [
   },
   {
     id: 'd590ba20-76fa-46a0-a880-e1b3eb56569c',
-    propertyId: 'c74e7ae2-e8cc-4f9a-82d2-df837b042ded',
+    propertyId: demoProperties[0].id,
+    seasonId: demoSeasons[0].id,
     name: 'Creek Restoration',
     crop: 'Riparian habitat',
     cropIcon: '🌿',
@@ -51,6 +97,29 @@ export const demoFields: Field[] = [
   },
 ]
 
+export const demoEcologicalSites: EcologicalSite[] = [
+  {
+    id: '2572972e-5124-447c-bd70-3b601cbfa641',
+    propertyId: demoProperties[0].id,
+    name: 'Cherry Creek Bank',
+    siteType: 'riparian',
+    targetCondition: 'Continuous native cover and stable stream bank.',
+    conditionScore: 68,
+    center: {
+      latitude: 39.7401,
+      longitude: -104.9902,
+      altitudeMeters: 1606,
+      horizontalAccuracyMeters: 4,
+      verticalAccuracyMeters: 6,
+      headingDegrees: null,
+    },
+    boundary: demoFields[1].boundary,
+    indicatorSpecies: ['Baltic rush', 'Nebraska sedge', 'Plains cottonwood'],
+    updatedAt: minutesAgo(12),
+    syncState: 'synced',
+  },
+]
+
 export const demoReadings: SensorReading[] = [
   {
     id: 'd1ae25ec-429f-4072-a44d-a349475c57f0',
@@ -62,6 +131,17 @@ export const demoReadings: SensorReading[] = [
     value: 31.4,
     unit: '%',
     quality: 'good',
+    lorawan: {
+      applicationId: 'aether-field',
+      devEui: '0102030405060708',
+      fPort: 10,
+      frameCounter: 1432,
+      gatewayIds: ['aether-gw-01'],
+      rssi: -87,
+      snr: 7.5,
+      spreadingFactor: 7,
+      frequencyHz: 904300000,
+    },
     coordinate: {
       latitude: 39.7411,
       longitude: -104.9949,
@@ -82,6 +162,17 @@ export const demoReadings: SensorReading[] = [
     value: 0.42,
     unit: 'm',
     quality: 'good',
+    lorawan: {
+      applicationId: 'aether-field',
+      devEui: '0807060504030201',
+      fPort: 10,
+      frameCounter: 889,
+      gatewayIds: ['aether-gw-01'],
+      rssi: -96,
+      snr: 3.2,
+      spreadingFactor: 9,
+      frequencyHz: 904500000,
+    },
     coordinate: {
       latitude: 39.7401,
       longitude: -104.9902,
@@ -91,6 +182,24 @@ export const demoReadings: SensorReading[] = [
       headingDegrees: null,
     },
     recordedAt: minutesAgo(6),
+  },
+]
+
+export const demoInsights: AlInsight[] = [
+  {
+    id: '93cfd0ca-62a6-4d20-ad31-feaa8628b864',
+    title: 'Irrigate North Market Beds after sunset',
+    summary:
+      'Moisture remains adequate now; evening timing reduces evaporative loss.',
+    rationale:
+      'The current soil-moisture trend, crop stage, and air-temperature forecast favor evening irrigation.',
+    sourceReadingIds: [demoReadings[0].id],
+    fieldId: demoFields[0].id,
+    siteId: null,
+    severity: 'info',
+    generatedAt: minutesAgo(3),
+    expiresAt: new Date(now.getTime() + 12 * 60 * 60_000).toISOString(),
+    readOnly: true,
   },
 ]
 
@@ -139,10 +248,13 @@ export const demoContacts: TakContact[] = [
 ]
 
 export const demoSnapshot: DashboardSnapshot = {
+  properties: demoProperties,
+  seasons: demoSeasons,
   fields: demoFields,
+  ecologicalSites: demoEcologicalSites,
   readings: demoReadings,
   observations: [],
   alerts: demoAlerts,
+  insights: demoInsights,
   contacts: demoContacts,
 }
-

@@ -8,7 +8,11 @@ client and inside Capacitor shells for iOS and Android.
 
 - MapLibre field map with crop polygons, LoRaWAN sensor points, and TAK contacts.
 - Property/season crop records and ecological site status.
-- ChirpStack-normalized sensor data and alert presentation.
+- Persisted property, season, crop-field, ecological-site, observation, alert,
+  and read-only Al insight records.
+- ChirpStack v4 uplink normalization with LoRaWAN radio metadata.
+- Offline map-region planning and Cache Storage download manifests for
+  authorized tile sources.
 - Geotagged camera capture using native Camera and Geolocation plugins.
 - IndexedDB field records and durable mutation outbox for offline sync.
 - Native plugin contracts for certificate-backed TAK transport and
@@ -70,6 +74,9 @@ npm run android
 The production native implementations must provide the
 `AetherTakTransport` and `AetherDepthScanner` Capacitor plugins described in
 [docs/native-plugins.md](docs/native-plugins.md).
+
+Offline map source requirements and remaining runtime integration gates are in
+[docs/offline-maps.md](docs/offline-maps.md).
 
 ## Server endpoints
 
