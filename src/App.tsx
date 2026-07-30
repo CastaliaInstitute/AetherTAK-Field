@@ -22,6 +22,7 @@ import {
   captureObservationPhoto,
   captureObservationVideo,
 } from './media/observationCapture'
+import { captureDepthObservation } from './media/depthObservation'
 import { depthScanner } from './platform/depth'
 import { takTransport } from './platform/tak'
 import {
@@ -120,6 +121,35 @@ export default function App() {
     } catch (error) {
       setNotice(
         error instanceof Error ? error.message : 'Video recording was cancelled.',
+      )
+    }
+  }
+
+  async function captureDepth() {
+    const mode = depth.supportsMesh ? 'mesh' : 'point_cloud'
+    setNotice('Acquiring location and starting the native depth scanner…')
+    try {
+      const captured = await captureDepthObservation(
+        {
+          fieldId: fields[0]?.id ?? null,
+          siteId: null,
+          category: 'crop',
+          title: 'Field depth scan',
+          notes: 'Depth evidence captured in AetherTAK Field.',
+        },
+        mode,
+      )
+      const median = captured.scan.measurements.find(
+        (measurement) => measurement.label === 'Median range',
+      )
+      setNotice(
+        `${captured.media.length} depth artifacts queued offline${
+          median ? ` · median range ${median.value.toFixed(2)} m` : ''
+        }.`,
+      )
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : 'Depth capture was cancelled.',
       )
     }
   }
@@ -330,7 +360,12 @@ export default function App() {
           <button className="secondary-action" type="button" onClick={() => void recordVideo()}>
             <Video size={19} /> Record geotagged video
           </button>
-          <button className="secondary-action" type="button" disabled={!depth.supported}>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={!depth.supported}
+            onClick={() => void captureDepth()}
+          >
             <ScanLine size={19} />
             {depth.supported ? `Start ${depth.provider} scan` : 'Depth unavailable on this device'}
           </button>

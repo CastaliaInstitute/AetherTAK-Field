@@ -133,10 +133,24 @@ export const observationSchema = z.object({
 
 export type Observation = z.infer<typeof observationSchema>
 
+export const depthMeasurementSchema = z.object({
+  label: z.string().min(1),
+  value: z.number().finite().nonnegative(),
+  unit: z.enum(['m', 'm2', 'm3']),
+  uncertainty: z.number().finite().nonnegative().nullable(),
+})
+
 export const mediaCaptureSchema = z.object({
   id: z.string().uuid(),
   observationId: z.string().uuid().nullable(),
-  kind: z.enum(['photo', 'video', 'depth', 'point_cloud', 'model']),
+  kind: z.enum([
+    'photo',
+    'video',
+    'depth',
+    'depth_confidence',
+    'point_cloud',
+    'model',
+  ]),
   localUri: z.string().min(1),
   previewUri: z.string().nullable(),
   mimeType: z.string().min(1),
@@ -144,6 +158,15 @@ export const mediaCaptureSchema = z.object({
   capturedAt: z.string().datetime(),
   deviceModel: z.string().nullable(),
   sha256: z.string().nullable(),
+  depthMetadata: z
+    .object({
+      scanId: z.string().uuid(),
+      provider: z.enum(['arkit-lidar', 'arcore-depth']),
+      role: z.enum(['depth', 'confidence', 'point_cloud', 'model']),
+      measurements: z.array(depthMeasurementSchema),
+    })
+    .nullable()
+    .default(null),
   syncState: z.enum(['local', 'queued', 'synced']),
 })
 
@@ -241,13 +264,6 @@ export const depthCapabilitySchema = z
   })
 
 export type DepthCapability = z.infer<typeof depthCapabilitySchema>
-
-export const depthMeasurementSchema = z.object({
-  label: z.string().min(1),
-  value: z.number().finite().nonnegative(),
-  unit: z.enum(['m', 'm2', 'm3']),
-  uncertainty: z.number().finite().nonnegative().nullable(),
-})
 
 export const depthScanResultSchema = z.object({
   id: z.string().uuid(),
