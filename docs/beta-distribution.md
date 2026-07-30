@@ -2,7 +2,9 @@
 
 The manual `Beta Distribution` GitHub Actions workflow builds signed release
 artifacts and performs external uploads. It never runs for a push or pull
-request. Every run requires:
+request. Dispatch it only from `main`; the protected environment rejects other
+branches. A single global concurrency lock prevents Android, iOS, and combined
+requests from overlapping. Every run requires:
 
 1. a version such as `0.2.0`;
 2. a new positive build number/version code;
@@ -15,6 +17,14 @@ request. Every run requires:
 Both store jobs use the protected `beta-distribution` GitHub environment.
 Configure required reviewers on that environment before adding secrets so a
 workflow dispatch alone cannot publish a build.
+
+Before decoding signing files or starting a build, the workflow validates
+credential structure without printing secret values. It requires canonical
+base64, an Apple P-256 App Store Connect private key, bounded Apple identifiers
+and PKCS#12 material, a JKS/PKCS#12 Android keystore, and a bounded Google
+service-account document with an RSA key and the official OAuth token endpoint.
+Native signing tools still perform the definitive password, certificate-chain,
+entitlement, and store-side validation.
 
 The authorization job also uses that environment and fails closed unless the
 private `RELEASE_EVIDENCE_BUNDLE_BASE64` secret contains a complete, passing

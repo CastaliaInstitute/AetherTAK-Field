@@ -44,6 +44,27 @@ test("normal CI exercises release artifact paths before beta distribution", asyn
   }
 });
 
+test("beta distribution is main-only, globally single-flight, and preflights credentials", async () => {
+  const workflow = await fs.readFile(
+    path.join(repositoryRoot, ".github/workflows/beta-distribution.yml"),
+    "utf8",
+  );
+  assert.match(workflow, /group:\s*aethertak-field-beta\s*$/m);
+  assert.doesNotMatch(
+    workflow,
+    /group:\s*aethertak-field-beta-\$\{\{/,
+  );
+  for (const required of [
+    'test "$GITHUB_REF_NAME" = "main"',
+    "beta-credential-preflight.mjs android",
+    "beta-credential-preflight.mjs ios",
+  ]) {
+    assert.match(workflow, new RegExp(
+      required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+    ));
+  }
+});
+
 test("TAK bridge methods remain aligned across TypeScript Kotlin and Swift", async () => {
   const [typescript, kotlin, swift, androidClient, iosClient] = await Promise.all([
     fs.readFile(path.join(repositoryRoot, "src/platform/tak.ts"), "utf8"),

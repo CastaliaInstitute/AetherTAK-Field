@@ -44,7 +44,7 @@ env:
   VITE_AETHER_SOURCE_REVISION: ${{ github.sha }}
 
 concurrency:
-  group: aethertak-field-beta-${{ inputs.platform }}
+  group: aethertak-field-beta
   cancel-in-progress: false
 
 jobs:
@@ -63,6 +63,7 @@ jobs:
           ATAK_VERSION: ${{ inputs.atak_version }}
           TAK_SERVER_VERSION: ${{ inputs.tak_server_version }}
         run: |
+          test "$GITHUB_REF_NAME" = "main"
           test "$CONFIRM" = "BETA"
           [[ "$VERSION_NAME" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]
           [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]
@@ -156,6 +157,8 @@ jobs:
           test -n "$AETHER_ANDROID_KEY_ALIAS"
           test -n "$AETHER_ANDROID_KEY_PASSWORD"
           test -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON"
+          ANDROID_KEYSTORE_BASE64="$KEYSTORE_BASE64" \
+            node scripts/beta-credential-preflight.mjs android
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$AETHER_ANDROID_KEYSTORE_PATH"
       - run: npm ci
       - run: npm run test:run
@@ -235,6 +238,7 @@ jobs:
           test -n "$APP_STORE_CONNECT_PRIVATE_KEY_BASE64"
           test -n "$APPLE_DISTRIBUTION_CERTIFICATE_BASE64"
           test -n "$APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD"
+          node scripts/beta-credential-preflight.mjs ios
       - name: Install temporary signing identity and API key
         env:
           KEYCHAIN_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
