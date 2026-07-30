@@ -11,6 +11,9 @@ client and inside Capacitor shells for iOS and Android.
 - Persisted property, season, crop-field, ecological-site, observation, alert,
   and read-only Al insight records.
 - ChirpStack v4 uplink normalization with LoRaWAN radio metadata.
+- Publisher-managed ChirpStack readings and read-only Al insights delivered
+  through the ordered field change feed and refreshed every 30 seconds while
+  connected, without granting mobile clients mutation rights.
 - Offline map-region planning, Cache Storage downloads, and a cache-first
   MapLibre raster protocol for authorized tile sources.
 - Structured field/ecology observation capture with category, title, notes,

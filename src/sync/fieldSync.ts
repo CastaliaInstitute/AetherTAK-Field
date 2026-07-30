@@ -5,12 +5,14 @@ import {
   type ServerEntity,
 } from '../data/database'
 import {
+  alInsightSchema,
   alertSchema,
   ecologicalSiteSchema,
   fieldSchema,
   mediaCaptureSchema,
   observationSchema,
   propertySchema,
+  sensorReadingSchema,
   seasonSchema,
 } from '../domain/models'
 import {
@@ -29,16 +31,20 @@ const acceptedMutationSchema = z.object({
   idempotentReplay: z.boolean(),
 })
 
+const syncedEntityTypes = [
+  'property',
+  'season',
+  'field',
+  'ecological_site',
+  'observation',
+  'media',
+  'alert',
+  'sensor_reading',
+  'al_insight',
+] as const
+
 const serverEntitySchema = z.object({
-  entityType: z.enum([
-    'property',
-    'season',
-    'field',
-    'ecological_site',
-    'observation',
-    'media',
-    'alert',
-  ]),
+  entityType: z.enum(syncedEntityTypes),
   entityId: z.string(),
   revision: z.number().int().nonnegative(),
   deleted: z.boolean(),
@@ -74,15 +80,7 @@ export interface FieldFlushResult {
 
 const serverChangeSchema = z.object({
   cursor: z.number().int().positive(),
-  entityType: z.enum([
-    'property',
-    'season',
-    'field',
-    'ecological_site',
-    'observation',
-    'media',
-    'alert',
-  ]),
+  entityType: z.enum(syncedEntityTypes),
   entityId: z.string(),
   revision: z.number().int().positive(),
   operation: z.enum(['create', 'update', 'delete']),
@@ -274,6 +272,12 @@ async function deleteRemoteEntity(change: ServerChange) {
     case 'alert':
       await db.alerts.delete(change.entityId)
       break
+    case 'sensor_reading':
+      await db.readings.delete(change.entityId)
+      break
+    case 'al_insight':
+      await db.insights.delete(change.entityId)
+      break
   }
 }
 
@@ -358,6 +362,12 @@ async function putRemoteEntity(
     case 'alert':
       await db.alerts.put(alertSchema.parse(payload))
       break
+    case 'sensor_reading':
+      await db.readings.put(sensorReadingSchema.parse(payload))
+      break
+    case 'al_insight':
+      await db.insights.put(alInsightSchema.parse(payload))
+      break
   }
 }
 
@@ -395,6 +405,8 @@ async function applyRemoteChange(
       db.observations,
       db.media,
       db.alerts,
+      db.readings,
+      db.insights,
       db.syncMetadata,
     ],
     async () => {

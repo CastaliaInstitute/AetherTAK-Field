@@ -45,6 +45,7 @@ import {
   watchCurrentCoordinate,
 } from './platform/capture'
 import { synchronizeFieldData } from './sync/fieldSync'
+import { startSyncScheduler } from './sync/scheduler'
 import {
   flushTakOutbox,
   queueTakOperation,
@@ -169,13 +170,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const synchronize = () => {
-      if (connection !== 'connected' || !navigator.onLine) return
-      void Promise.allSettled([flushTakOutbox(), synchronizeFieldData()])
-    }
-    synchronize()
-    window.addEventListener('online', synchronize)
-    return () => window.removeEventListener('online', synchronize)
+    if (connection !== 'connected' || !takTransport.isNative()) return
+    return startSyncScheduler(() =>
+      Promise.allSettled([flushTakOutbox(), synchronizeFieldData()]),
+    )
   }, [connection])
 
   const averageHealth = useMemo(() => {

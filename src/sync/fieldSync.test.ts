@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db, queueMutation } from '../data/database'
 import type { Property } from '../domain/models'
+import { demoSnapshot } from '../domain/seed'
 import type { NativeFieldResponse } from '../platform/tak'
 import { flushFieldOutbox, pullFieldChanges } from './fieldSync'
 
@@ -182,6 +183,73 @@ describe('Aether Field durable synchronization', () => {
     ).toBe(3)
   })
 
+  it('hydrates publisher-managed sensor readings and read-only Al insights', async () => {
+    const reading = {
+      ...demoSnapshot.readings[0],
+      value: 31.7,
+      recordedAt: '2026-07-30T07:10:00.000Z',
+    }
+    const insight = {
+      ...demoSnapshot.insights[0],
+      title: 'Inspect irrigation pressure',
+      generatedAt: '2026-07-30T07:11:00.000Z',
+      expiresAt: '2026-07-31T07:11:00.000Z',
+    }
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [
+            {
+              cursor: 10,
+              entityType: 'sensor_reading',
+              entityId: reading.id,
+              revision: 1,
+              operation: 'create',
+              payload: reading,
+              serverUpdatedAt: '2026-07-30T07:10:01.000Z',
+              author: 'ChirpStack',
+            },
+            {
+              cursor: 11,
+              entityType: 'al_insight',
+              entityId: insight.id,
+              revision: 1,
+              operation: 'create',
+              payload: insight,
+              serverUpdatedAt: '2026-07-30T07:11:01.000Z',
+              author: 'Al',
+            },
+          ],
+          nextCursor: 11,
+          hasMore: false,
+        },
+      })),
+    }
+
+    expect(await pullFieldChanges(transport)).toMatchObject({
+      applied: 2,
+      cursor: 11,
+    })
+    expect(await db.readings.get(reading.id)).toMatchObject({
+      value: 31.7,
+      lorawan: reading.lorawan,
+    })
+    expect(await db.insights.get(insight.id)).toMatchObject({
+      title: 'Inspect irrigation pressure',
+      readOnly: true,
+    })
+    expect(
+      (await db.syncMetadata.get(`sensor_reading:${reading.id}`))?.revision,
+    ).toBe(1)
+    expect(
+      (await db.syncMetadata.get(`al_insight:${insight.id}`))?.revision,
+    ).toBe(1)
+  })
+
   it('turns a pull collision into a preserved local/server conflict', async () => {
     const queued = await queueMutation({
       entityType: 'property',
@@ -319,5 +387,50 @@ describe('Aether Field durable synchronization', () => {
     expect(
       (await db.syncMetadata.get(`property:${property.id}`))?.revision,
     ).toBe(2)
+  })
+
+  it('applies publisher tombstones to sensor and insight records', async () => {
+    const reading = demoSnapshot.readings[0]
+    const insight = demoSnapshot.insights[0]
+    await db.readings.put(reading)
+    await db.insights.put(insight)
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(async () => ({
+        status: 200,
+        body: {
+          changes: [
+            {
+              cursor: 12,
+              entityType: 'sensor_reading',
+              entityId: reading.id,
+              revision: 2,
+              operation: 'delete',
+              payload: null,
+              serverUpdatedAt: '2026-07-30T07:12:00.000Z',
+              author: 'ChirpStack',
+            },
+            {
+              cursor: 13,
+              entityType: 'al_insight',
+              entityId: insight.id,
+              revision: 2,
+              operation: 'delete',
+              payload: null,
+              serverUpdatedAt: '2026-07-30T07:12:01.000Z',
+              author: 'Al',
+            },
+          ],
+          nextCursor: 13,
+          hasMore: false,
+        },
+      })),
+    }
+
+    await pullFieldChanges(transport)
+    expect(await db.readings.get(reading.id)).toBeUndefined()
+    expect(await db.insights.get(insight.id)).toBeUndefined()
   })
 })

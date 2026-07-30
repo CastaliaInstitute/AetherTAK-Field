@@ -16,14 +16,7 @@ import type { TakActivity } from '../tak/activity'
 
 export interface OutboxItem {
   id: string
-  entityType:
-    | 'property'
-    | 'season'
-    | 'field'
-    | 'ecological_site'
-    | 'observation'
-    | 'media'
-    | 'alert'
+  entityType: MutableEntityType
   entityId: string
   operation: 'create' | 'update' | 'delete'
   payload: unknown
@@ -35,8 +28,22 @@ export interface OutboxItem {
   conflict: ServerEntity | null
 }
 
+export type MutableEntityType =
+  | 'property'
+  | 'season'
+  | 'field'
+  | 'ecological_site'
+  | 'observation'
+  | 'media'
+  | 'alert'
+
+export type SyncedEntityType =
+  | MutableEntityType
+  | 'sensor_reading'
+  | 'al_insight'
+
 export interface ServerEntity {
-  entityType: OutboxItem['entityType']
+  entityType: SyncedEntityType
   entityId: string
   revision: number
   deleted: boolean
@@ -47,7 +54,7 @@ export interface ServerEntity {
 
 export interface SyncMetadata {
   key: string
-  entityType: OutboxItem['entityType']
+  entityType: SyncedEntityType
   entityId: string
   revision: number
   serverUpdatedAt: string
