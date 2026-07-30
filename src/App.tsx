@@ -14,6 +14,7 @@ import {
 import { CapturePanel } from './components/CapturePanel'
 import { FieldMap } from './components/FieldMap'
 import { FieldRecords } from './components/FieldRecords'
+import { OfflineMapManager } from './components/OfflineMapManager'
 import {
   TakMapComposer,
   TakTeamPanel,
@@ -60,10 +61,6 @@ import type {
   TakIdentity,
   TakOperation,
 } from './tak/operations'
-import {
-  createOfflineMapRegion,
-  downloadOfflineMapRegion,
-} from './maps/offlineRegions'
 import { activeRasterSource } from './maps/tileSource'
 import { importTakDataPackage } from './tak/enrollmentImport'
 import './App.css'
@@ -103,9 +100,6 @@ export default function App() {
   const [mapDraft, setMapDraft] = useState<MapDraft | null>(null)
   const [depth, setDepth] = useState<DepthCapability>(initialDepth)
   const [notice, setNotice] = useState<string | null>(null)
-  const [offlineMapState, setOfflineMapState] = useState<
-    'idle' | 'downloading' | 'ready'
-  >('idle')
   const enrollmentInput = useRef<HTMLInputElement>(null)
   const {
     data: dashboard,
@@ -119,6 +113,7 @@ export default function App() {
     readings,
     alerts,
     insights,
+    offlineMapRegions,
   } = dashboard
 
   useEffect(() => {
@@ -367,48 +362,6 @@ export default function App() {
     )
   }
 
-  async function cachePropertyMap() {
-    if (!activeRasterSource.allowOfflineDownload) {
-      setNotice(
-        'Offline download is disabled for the preview basemap. Configure an authorized tile source first.',
-      )
-      return
-    }
-    const boundary = properties[0]?.boundary
-    if (!boundary) return
-    const longitudes = boundary.map(([longitude]) => longitude)
-    const latitudes = boundary.map(([, latitude]) => latitude)
-    const region = createOfflineMapRegion({
-      name: properties[0].name,
-      tileSourceId: activeRasterSource.id,
-      tileUrlTemplate: activeRasterSource.urlTemplate,
-      bounds: {
-        west: Math.min(...longitudes),
-        south: Math.min(...latitudes),
-        east: Math.max(...longitudes),
-        north: Math.max(...latitudes),
-      },
-      minZoom: 12,
-      maxZoom: 17,
-    })
-    setOfflineMapState('downloading')
-    setNotice(`Downloading ${region.tileCount} authorized map tiles…`)
-    try {
-      const downloaded = await downloadOfflineMapRegion(region, {
-        maxTiles: 5_000,
-      })
-      setOfflineMapState(downloaded.status === 'ready' ? 'ready' : 'idle')
-      setNotice(
-        `${downloaded.downloadedTiles}/${downloaded.tileCount} map tiles are available offline.`,
-      )
-    } catch (error) {
-      setOfflineMapState('idle')
-      setNotice(
-        error instanceof Error ? error.message : 'Offline map download failed.',
-      )
-    }
-  }
-
   async function enrollTak(file: File | undefined) {
     if (!file) return
     setNotice('Validating and importing the TAK certificate package…')
@@ -461,21 +414,12 @@ export default function App() {
             <div><strong>{averageHealth}%</strong><span>Field health</span></div>
           </section>
 
-          <button
-            className={`offline-map-button ${offlineMapState}`}
-            type="button"
-            disabled={offlineMapState === 'downloading'}
-            onClick={() => void cachePropertyMap()}
-          >
-            <Download size={14} />
-            {offlineMapState === 'ready'
-              ? 'Property map available offline'
-              : offlineMapState === 'downloading'
-                ? 'Downloading property map…'
-                : activeRasterSource.allowOfflineDownload
-                  ? 'Download property map'
-                  : 'Preview basemap · online'}
-          </button>
+          <OfflineMapManager
+            properties={properties}
+            regions={offlineMapRegions}
+            source={activeRasterSource}
+            onNotice={setNotice}
+          />
 
           <FieldMap
             fields={fields}

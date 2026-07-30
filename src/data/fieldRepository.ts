@@ -3,6 +3,7 @@ import type {
   Alert,
   EcologicalSite,
   Field,
+  OfflineMapRegion,
   Observation,
   Property,
   Season,
@@ -137,9 +138,11 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
   )
 }
 
-export async function loadDashboard(): Promise<
-  Omit<DashboardSnapshot, 'contacts'>
-> {
+export type FieldDashboardData = Omit<DashboardSnapshot, 'contacts'> & {
+  offlineMapRegions: OfflineMapRegion[]
+}
+
+export async function loadDashboard(): Promise<FieldDashboardData> {
   const [
     properties,
     seasons,
@@ -149,6 +152,7 @@ export async function loadDashboard(): Promise<
     observations,
     alerts,
     insights,
+    offlineMapRegions,
   ] = await Promise.all([
     db.properties.toArray(),
     db.seasons.toArray(),
@@ -158,6 +162,7 @@ export async function loadDashboard(): Promise<
     db.observations.orderBy('observedAt').reverse().toArray(),
     db.alerts.orderBy('createdAt').reverse().toArray(),
     db.insights.orderBy('generatedAt').reverse().toArray(),
+    db.offlineMapRegions.orderBy('updatedAt').reverse().toArray(),
   ])
 
   return {
@@ -171,5 +176,6 @@ export async function loadDashboard(): Promise<
     insights: insights.filter(
       (insight) => new Date(insight.expiresAt).getTime() > Date.now(),
     ),
+    offlineMapRegions,
   }
 }

@@ -17,6 +17,7 @@ const emptyDashboard: FieldDashboard = {
   observations: [],
   alerts: [],
   insights: [],
+  offlineMapRegions: [],
 }
 
 export function useDashboard() {

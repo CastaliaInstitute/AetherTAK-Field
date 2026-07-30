@@ -129,6 +129,7 @@ export async function downloadOfflineMapRegion(
   const cache = await caches.open(mapCacheName(region.tileSourceId))
   let completed = 0
   let failed = 0
+  let terminalError: unknown
   await db.offlineMapRegions.put({
     ...region,
     status: 'downloading',
@@ -154,11 +155,18 @@ export async function downloadOfflineMapRegion(
     } catch (error) {
       if (options.signal?.aborted) break
       failed += 1
-      if (failed >= 10) {
-        throw error
-      }
+      if (failed >= 10) terminalError = error
     }
     options.onProgress?.({ completed, total: tiles.length, failed })
+    if ((completed + failed) % 25 === 0) {
+      await db.offlineMapRegions.put({
+        ...region,
+        downloadedTiles: completed,
+        status: 'downloading',
+        updatedAt: new Date().toISOString(),
+      })
+    }
+    if (terminalError) break
   }
 
   const status: OfflineMapRegion['status'] =
@@ -174,18 +182,32 @@ export async function downloadOfflineMapRegion(
     updatedAt: new Date().toISOString(),
   }
   await db.offlineMapRegions.put(updated)
+  if (terminalError) throw terminalError
   return updated
 }
 
 export async function deleteOfflineMapRegion(region: OfflineMapRegion) {
   if ('caches' in globalThis) {
     const cache = await caches.open(mapCacheName(region.tileSourceId))
+    const otherRegions = await db.offlineMapRegions
+      .where('tileSourceId')
+      .equals(region.tileSourceId)
+      .filter((item) => item.id !== region.id)
+      .toArray()
+    const retainedUrls = new Set(
+      otherRegions.flatMap((item) =>
+        planRegionTiles(item.bounds, item.minZoom, item.maxZoom).map(
+          (coordinate) => tileUrl(item.tileUrlTemplate, coordinate),
+        ),
+      ),
+    )
     for (const coordinate of planRegionTiles(
       region.bounds,
       region.minZoom,
       region.maxZoom,
     )) {
-      await cache.delete(tileUrl(region.tileUrlTemplate, coordinate))
+      const url = tileUrl(region.tileUrlTemplate, coordinate)
+      if (!retainedUrls.has(url)) await cache.delete(url)
     }
   }
   await db.offlineMapRegions.delete(region.id)
