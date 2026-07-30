@@ -12,6 +12,7 @@ import {
   WifiOff,
 } from 'lucide-react'
 import { CapturePanel } from './components/CapturePanel'
+import { AlInsightsPanel } from './components/AlInsightsPanel'
 import { DeviceReadinessPanel } from './components/DeviceReadinessPanel'
 import { InteroperabilityEvidencePanel } from './components/InteroperabilityEvidencePanel'
 import { PhysicalReleaseEvidencePanel } from './components/PhysicalReleaseEvidencePanel'
@@ -80,6 +81,10 @@ import {
   buildSensorChannels,
   selectLatestSensorReadings,
 } from './domain/sensorMonitoring'
+import {
+  activeAlInsights,
+  nextAlInsightExpiry,
+} from './domain/alInsights'
 import { importTakDataPackage } from './tak/enrollmentImport'
 import { startTakSessionRecovery } from './tak/sessionRecovery'
 import './App.css'
@@ -188,11 +193,21 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    const refresh = () => setMonitoringNow(new Date())
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
     const timer = window.setInterval(
-      () => setMonitoringNow(new Date()),
+      refresh,
       60_000,
     )
-    return () => window.clearInterval(timer)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
   }, [])
 
   useEffect(() => {
@@ -274,6 +289,21 @@ export default function App() {
     () => selectLatestSensorReadings(readings),
     [readings],
   )
+  const liveInsights = useMemo(
+    () => activeAlInsights(insights, monitoringNow),
+    [insights, monitoringNow],
+  )
+
+  useEffect(() => {
+    const expiresAt = nextAlInsightExpiry(insights, monitoringNow)
+    if (expiresAt === null) return
+    const delay = Math.min(
+      Math.max(0, expiresAt - Date.now() + 25),
+      2_147_483_647,
+    )
+    const timer = window.setTimeout(() => setMonitoringNow(new Date()), delay)
+    return () => window.clearTimeout(timer)
+  }, [insights, monitoringNow])
 
   const identity = useMemo<TakIdentity>(() => ({
     uid: profile ? `AETHER-${profile.id}` : 'AETHER-FIELD-PREVIEW',
@@ -659,7 +689,7 @@ export default function App() {
             readings={latestSensorReadings}
             observations={observations}
             alerts={alerts}
-            insights={insights}
+            insights={liveInsights}
             contacts={contacts}
             activity={takActivity}
             draft={mapDraft}
@@ -721,14 +751,11 @@ export default function App() {
             </aside>
           ))}
 
-          <aside className="al-card">
-            <div className="al-mark">Al</div>
-            <div>
-              <p className="eyebrow">READ-ONLY FIELD INSIGHT</p>
-              <strong>{insights[0]?.title ?? 'No current insight'}</strong>
-              <p>{insights[0]?.summary ?? 'Al insights will appear when fresh field evidence is available.'}</p>
-            </div>
-          </aside>
+          <AlInsightsPanel
+            insights={liveInsights}
+            readings={readings}
+            now={monitoringNow}
+          />
         </>
       )}
 

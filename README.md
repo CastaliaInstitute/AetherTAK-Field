@@ -51,7 +51,9 @@ client and inside Capacitor shells for iOS and Android.
 - Single-flight TAK session recovery on native launch, foreground resume,
   connectivity restoration, and bounded retry, driven by native transport
   status events so contacts and offline queues resume without an operator tap.
-- Read-only Al field insight surface.
+- Live-expiring, read-only Al field insights with priority ordering, rationale,
+  synchronized ChirpStack source-reading provenance, explicit missing-evidence
+  warnings, and no field, alert, or TAK command authority.
 - Versioned, privacy-safe physical-device readiness reports with native
   app/build, hardware, TAK, depth, sync, offline-map, and media-integrity
   evidence export through the platform share sheet.
