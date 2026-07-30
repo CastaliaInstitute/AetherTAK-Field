@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { liveQuery } from 'dexie'
 import { useEffect, useState } from 'react'
 import { demoSnapshot } from '../domain/seed'
@@ -30,7 +31,9 @@ export function useDashboard() {
   useEffect(() => {
     let disposed = false
     let unsubscribe: (() => void) | undefined
-    void initializeFieldDatabase(demoSnapshot)
+    void initializeFieldDatabase(
+      Capacitor.isNativePlatform() ? null : demoSnapshot,
+    )
       .then(() => {
         if (disposed) return
         const subscription = liveQuery(loadDashboard).subscribe({

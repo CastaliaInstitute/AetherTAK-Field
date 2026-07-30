@@ -55,9 +55,11 @@ client and inside Capacitor shells for iOS and Android.
   to the exact version, build, commit, physical platform/depth coverage, and
   complete released-client interoperability results.
 
-The browser provides a safe preview. Certificate enrollment, CoT transport, and
-depth capture are intentionally native-only so private key material does not
-cross the JavaScript bridge.
+The browser provides a safe preview with clearly synthetic demonstration data.
+Fresh native installations start with an empty field database and display only
+locally created or server-synchronized operational records. Certificate
+enrollment, CoT transport, and depth capture are intentionally native-only so
+private key material does not cross the JavaScript bridge.
 
 The checked-in Swift and Kotlin native bridge classes provide real device
 capability detection and guided depth capture. Swift and Kotlin TAK bridges import the issued

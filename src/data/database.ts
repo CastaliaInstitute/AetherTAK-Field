@@ -70,6 +70,7 @@ export interface SyncControl {
 export interface AppMetadata {
   key: 'initial-seed'
   completedAt: string
+  mode?: 'preview' | 'empty'
 }
 
 class AetherFieldDatabase extends Dexie {

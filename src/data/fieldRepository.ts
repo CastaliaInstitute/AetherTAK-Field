@@ -39,7 +39,9 @@ export async function seedDatabase(snapshot: DashboardSnapshot) {
   )
 }
 
-export async function initializeFieldDatabase(snapshot: DashboardSnapshot) {
+export async function initializeFieldDatabase(
+  snapshot: DashboardSnapshot | null,
+) {
   return db.transaction(
     'rw',
     [
@@ -66,7 +68,7 @@ export async function initializeFieldDatabase(snapshot: DashboardSnapshot) {
         db.insights.count(),
       ])
       const empty = counts.every((count) => count === 0)
-      if (empty) {
+      if (empty && snapshot) {
         await Promise.all([
           db.properties.bulkPut(snapshot.properties),
           db.seasons.bulkPut(snapshot.seasons),
@@ -81,8 +83,9 @@ export async function initializeFieldDatabase(snapshot: DashboardSnapshot) {
       await db.appMetadata.put({
         key: 'initial-seed',
         completedAt: new Date().toISOString(),
+        mode: snapshot ? 'preview' : 'empty',
       })
-      return empty
+      return empty && snapshot !== null
     },
   )
 }

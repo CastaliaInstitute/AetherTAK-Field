@@ -25,6 +25,22 @@ describe('field database initialization', () => {
     expect((await loadDashboard()).fields).toEqual(demoSnapshot.fields)
     expect(await db.appMetadata.get('initial-seed')).toMatchObject({
       key: 'initial-seed',
+      mode: 'preview',
+    })
+  })
+
+  it('keeps a fresh native installation empty', async () => {
+    await expect(initializeFieldDatabase(null)).resolves.toBe(false)
+
+    const dashboard = await loadDashboard()
+    expect(dashboard.properties).toEqual([])
+    expect(dashboard.fields).toEqual([])
+    expect(dashboard.readings).toEqual([])
+    expect(dashboard.alerts).toEqual([])
+    expect(dashboard.insights).toEqual([])
+    expect(await db.appMetadata.get('initial-seed')).toMatchObject({
+      key: 'initial-seed',
+      mode: 'empty',
     })
   })
 
@@ -48,6 +64,14 @@ describe('field database initialization', () => {
     await db.fields.clear()
 
     await expect(initializeFieldDatabase(demoSnapshot)).resolves.toBe(false)
+    expect(await db.fields.count()).toBe(0)
+  })
+
+  it('does not add preview records after native initialization', async () => {
+    await initializeFieldDatabase(null)
+
+    await expect(initializeFieldDatabase(demoSnapshot)).resolves.toBe(false)
+    expect(await db.properties.count()).toBe(0)
     expect(await db.fields.count()).toBe(0)
   })
 
