@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   Download,
   HardDrive,
@@ -17,6 +23,7 @@ import {
   downloadOfflineMapRegion,
   offlineMapStorageReserveBytes,
   planRegionTiles,
+  reconcileOfflineMapRegions,
   type RegionDownloadProgress,
 } from '../maps/offlineRegions'
 import type { RasterTileSource } from '../maps/tileSource'
@@ -51,6 +58,21 @@ function bytes(value: number | undefined) {
   return `${(value / 1024 ** 3).toFixed(1)} GB`
 }
 
+function inventoryFingerprint(regions: OfflineMapRegion[]) {
+  return JSON.stringify(
+    [...regions]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((region) => ({
+        id: region.id,
+        tileSourceId: region.tileSourceId,
+        tileUrlTemplate: region.tileUrlTemplate,
+        bounds: region.bounds,
+        minZoom: region.minZoom,
+        maxZoom: region.maxZoom,
+      })),
+  )
+}
+
 export function OfflineMapManager({
   properties,
   regions,
@@ -67,7 +89,10 @@ export function OfflineMapManager({
   const [progress, setProgress] =
     useState<RegionDownloadProgress | null>(null)
   const [storage, setStorage] = useState<StorageEstimate | null>(null)
+  const [inventoryBusy, setInventoryBusy] = useState(false)
   const controller = useRef<AbortController | null>(null)
+  const reconciledFingerprint = useRef<string | null>(null)
+  const inventoryRunning = useRef(false)
   const property =
     properties.find((item) => item.id === propertyId) ?? properties[0]
   const validZoomRange =
@@ -92,6 +117,38 @@ export function OfflineMapManager({
       maxZoom,
     ).length
   }, [maxZoom, minZoom, property, validZoomRange])
+  const regionFingerprint = useMemo(
+    () => inventoryFingerprint(regions),
+    [regions],
+  )
+  const inventoryPending =
+    inventoryBusy ||
+    (
+      regions.length > 0 &&
+      reconciledFingerprint.current !== regionFingerprint
+    )
+
+  const reconcileInventory = useCallback(async () => {
+    if (
+      activeId !== null ||
+      regions.length === 0 ||
+      inventoryRunning.current
+    ) return
+    inventoryRunning.current = true
+    setInventoryBusy(true)
+    try {
+      const result = await reconcileOfflineMapRegions(regions)
+      if (result.changedRegions === 0) return
+      onNotice(
+        result.evictedTiles > 0
+          ? `${result.evictedTiles} offline map tile${result.evictedTiles === 1 ? ' was' : 's were'} evicted by the device. Affected regions are ready to resume.`
+          : `Recovered the cached tile inventory for ${result.changedRegions} offline map region${result.changedRegions === 1 ? '' : 's'}.`,
+      )
+    } finally {
+      inventoryRunning.current = false
+      setInventoryBusy(false)
+    }
+  }, [activeId, onNotice, regions])
 
   useEffect(() => {
     let disposed = false
@@ -104,6 +161,43 @@ export function OfflineMapManager({
       disposed = true
     }
   }, [estimateStorage, regions])
+
+  useEffect(() => {
+    if (
+      reconciledFingerprint.current === regionFingerprint ||
+      activeId !== null
+    ) return
+    reconciledFingerprint.current = regionFingerprint
+    let disposed = false
+    void reconcileInventory().catch(() => {
+      if (!disposed) {
+        onNotice('Offline map cache inventory could not be verified.')
+      }
+    })
+    return () => {
+      disposed = true
+    }
+  }, [
+    activeId,
+    onNotice,
+    reconcileInventory,
+    regionFingerprint,
+  ])
+
+  useEffect(() => {
+    const reconcileWhenVisible = () => {
+      if (
+        document.visibilityState !== 'visible' ||
+        activeId !== null
+      ) return
+      void reconcileInventory().catch(() => {
+        onNotice('Offline map cache inventory could not be verified.')
+      })
+    }
+    document.addEventListener('visibilitychange', reconcileWhenVisible)
+    return () =>
+      document.removeEventListener('visibilitychange', reconcileWhenVisible)
+  }, [activeId, onNotice, reconcileInventory])
 
   async function download(region: OfflineMapRegion) {
     const abort = new AbortController()
@@ -282,6 +376,11 @@ export function OfflineMapManager({
       )}
 
       <div className="offline-region-list">
+        {inventoryPending && (
+          <p className="offline-map-empty" role="status">
+            Verifying cached map tiles…
+          </p>
+        )}
         {regions.length === 0 && (
           <p className="offline-map-empty">No offline regions on this device.</p>
         )}
@@ -300,7 +399,11 @@ export function OfflineMapManager({
               {region.status !== 'ready' && activeId !== region.id && (
                 <button
                   type="button"
-                  disabled={activeId !== null || storageTooLow}
+                  disabled={
+                    activeId !== null ||
+                    inventoryPending ||
+                    storageTooLow
+                  }
                   aria-label={`Resume ${region.name}`}
                   onClick={() => void download(region)}
                 >
@@ -309,7 +412,7 @@ export function OfflineMapManager({
               )}
               <button
                 type="button"
-                disabled={activeId !== null}
+                disabled={activeId !== null || inventoryPending}
                 aria-label={`Delete ${region.name}`}
                 onClick={() => void remove(region)}
               >

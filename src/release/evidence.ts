@@ -78,8 +78,8 @@ export const physicalReleaseChecks = [
   ],
   [
     'low_storage',
-    'Low-storage behavior',
-    'Exercise capture or map download near the platform storage limit and confirm bounded, recoverable failure.',
+    'Low storage and map-cache eviction',
+    'Exercise capture or map download near the platform storage limit and confirm bounded, recoverable failure. Evict the WebView map cache, relaunch or foreground the app, and confirm affected ready regions become partial or failed with Resume available.',
   ],
 ] as const
 

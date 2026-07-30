@@ -163,6 +163,94 @@ export interface RegionDownloadProgress {
   failed: number
 }
 
+export interface OfflineMapReconciliation {
+  regions: OfflineMapRegion[]
+  changedRegions: number
+  evictedTiles: number
+}
+
+function normalizedCacheKey(url: string) {
+  try {
+    return new Request(url).url
+  } catch {
+    return url
+  }
+}
+
+export async function reconcileOfflineMapRegions(
+  regions: OfflineMapRegion[],
+): Promise<OfflineMapReconciliation> {
+  if (regions.length === 0) {
+    return { regions: [], changedRegions: 0, evictedTiles: 0 }
+  }
+  if (!('caches' in globalThis)) {
+    throw new Error(
+      'Offline map inventory cannot be verified because Cache Storage is unavailable.',
+    )
+  }
+
+  const cachedUrlsBySource = new Map<string, Set<string>>()
+  for (const sourceId of new Set(
+    regions.map((region) => region.tileSourceId),
+  )) {
+    const cache = await caches.open(mapCacheName(sourceId))
+    const keys = await cache.keys()
+    cachedUrlsBySource.set(
+      sourceId,
+      new Set(keys.map((request) => request.url)),
+    )
+  }
+
+  let changedRegions = 0
+  let evictedTiles = 0
+  const updates: OfflineMapRegion[] = []
+  const reconciled = regions.map((region) => {
+    const cachedUrls = cachedUrlsBySource.get(region.tileSourceId)
+    const expectedUrls = planRegionTiles(
+      region.bounds,
+      region.minZoom,
+      region.maxZoom,
+    ).map((coordinate) =>
+      normalizedCacheKey(tileUrl(region.tileUrlTemplate, coordinate)))
+    const downloadedTiles = expectedUrls.reduce(
+      (count, url) => count + (cachedUrls?.has(url) ? 1 : 0),
+      0,
+    )
+    const tileCount = expectedUrls.length
+    evictedTiles += Math.max(0, region.downloadedTiles - downloadedTiles)
+    const status: OfflineMapRegion['status'] =
+      downloadedTiles === tileCount
+        ? 'ready'
+        : downloadedTiles > 0
+          ? 'partial'
+          : region.status === 'planned'
+            ? 'planned'
+            : 'failed'
+    if (
+      region.downloadedTiles === downloadedTiles &&
+      region.tileCount === tileCount &&
+      region.status === status
+    ) {
+      return region
+    }
+    changedRegions += 1
+    const updated = offlineMapRegionSchema.parse({
+      ...region,
+      tileCount,
+      downloadedTiles,
+      status,
+      updatedAt: new Date().toISOString(),
+    })
+    updates.push(updated)
+    return updated
+  })
+
+  if (updates.length > 0) {
+    await db.offlineMapRegions.bulkPut(updates)
+  }
+  return { regions: reconciled, changedRegions, evictedTiles }
+}
+
 export async function downloadOfflineMapRegion(
   region: OfflineMapRegion,
   options: {

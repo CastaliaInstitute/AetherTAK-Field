@@ -18,7 +18,8 @@ client and inside Capacitor shells for iOS and Android.
   connected, without granting mobile clients mutation rights.
 - Offline map-region planning, Cache Storage downloads, and a cache-first
   MapLibre raster protocol for authorized tile sources, with a 100 MiB
-  free-space reserve and recoverable quota-exhaustion handling.
+  free-space reserve, recoverable quota-exhaustion handling, and startup/resume
+  reconciliation when the OS evicts cached tiles.
 - Installable web manifest and content-versioned offline application shell with
   generated 192/512/maskable icons, network-first navigation fallback, and
   cache rotation that preserves independently managed offline map regions.

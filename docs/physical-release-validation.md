@@ -43,7 +43,7 @@ companion-device session that covers the capability.
 | Screen-lock tracking and task-switcher privacy | PLI continues at the expected cadence with the iOS indicator or Android foreground notification. The task switcher shows only the privacy shield or non-sensitive theme background for both the main app and depth capture, while an intentional foreground validation screenshot still works. |
 | Permission revocation | Location/camera permission loss produces a safe, recoverable error. On Android, revoking notification visibility stops background PLI without leaving a stale sharing state. |
 | Airplane-mode recovery | Queued work survives relaunch and resumes automatically after the network returns. |
-| Low-storage behavior | Capture or map download fails within a bounded operation and remains recoverable. |
+| Low storage and map-cache eviction | Capture or map download fails within a bounded operation and remains recoverable. After WebView map-cache eviction, relaunch or foreground the app and confirm affected ready regions become partial/failed with an accurate count and Resume available. |
 
 For known-dimension depth accuracy, enter the known distance, measured
 distance, and accepted error percentage. The app derives absolute percentage

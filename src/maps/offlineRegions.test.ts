@@ -8,6 +8,7 @@ import {
   mapCacheName,
   offlineMapStorageReserveBytes,
   planRegionTiles,
+  reconcileOfflineMapRegions,
   tileUrl,
 } from './offlineRegions'
 
@@ -31,6 +32,10 @@ class MemoryCache {
 
   async delete(request: RequestInfo | URL) {
     return this.entries.delete(String(request))
+  }
+
+  async keys() {
+    return [...this.entries.keys()].map((url) => new Request(url))
   }
 }
 
@@ -263,6 +268,134 @@ describe('offline map regions', () => {
     expect(await db.offlineMapRegions.get(region.id)).toMatchObject({
       status: 'failed',
       downloadedTiles: 0,
+    })
+  })
+
+  it('downgrades a ready manifest after the device evicts cached tiles', async () => {
+    const region = createOfflineMapRegion({
+      name: 'Evicted field',
+      tileSourceId: 'authorized-field-basemap',
+      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
+      bounds,
+      minZoom: 12,
+      maxZoom: 14,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('tile', { status: 200 })),
+    )
+    const ready = await downloadOfflineMapRegion(region, {
+      minimumFreeBytes: 0,
+      storageEstimate: async () => null,
+    })
+    const cache = await cacheStorage.open(mapCacheName(region.tileSourceId))
+    const urls = planRegionTiles(
+      region.bounds,
+      region.minZoom,
+      region.maxZoom,
+    ).map((coordinate) => tileUrl(region.tileUrlTemplate, coordinate))
+
+    await cache.delete(urls[0])
+    const partial = await reconcileOfflineMapRegions([ready])
+
+    expect(partial.changedRegions).toBe(1)
+    expect(partial.evictedTiles).toBe(1)
+    expect(partial.regions[0]).toMatchObject({
+      status: 'partial',
+      downloadedTiles: ready.tileCount - 1,
+    })
+    expect(await db.offlineMapRegions.get(region.id)).toMatchObject({
+      status: 'partial',
+      downloadedTiles: ready.tileCount - 1,
+    })
+
+    for (const url of urls.slice(1)) await cache.delete(url)
+    const failed = await reconcileOfflineMapRegions(partial.regions)
+    expect(failed).toMatchObject({
+      changedRegions: 1,
+      evictedTiles: ready.tileCount - 1,
+    })
+    expect(failed.regions[0]).toMatchObject({
+      status: 'failed',
+      downloadedTiles: 0,
+    })
+  })
+
+  it('recovers cached progress written after the last manifest checkpoint', async () => {
+    const region = {
+      ...createOfflineMapRegion({
+        name: 'Recovered field',
+        tileSourceId: 'authorized-field-basemap',
+        tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
+        bounds,
+        minZoom: 12,
+        maxZoom: 14,
+      }),
+      status: 'partial' as const,
+      downloadedTiles: 1,
+    }
+    await db.offlineMapRegions.put(region)
+    const cache = await cacheStorage.open(mapCacheName(region.tileSourceId))
+    const urls = planRegionTiles(
+      region.bounds,
+      region.minZoom,
+      region.maxZoom,
+    ).map((coordinate) => tileUrl(region.tileUrlTemplate, coordinate))
+    for (const url of urls.slice(0, 3)) {
+      await cache.put(url, new Response('tile', { status: 200 }))
+    }
+
+    const result = await reconcileOfflineMapRegions([region])
+
+    expect(result).toMatchObject({
+      changedRegions: 1,
+      evictedTiles: 0,
+    })
+    expect(result.regions[0]).toMatchObject({
+      status: 'partial',
+      downloadedTiles: 3,
+    })
+  })
+
+  it('leaves an untouched planned region planned when its cache is empty', async () => {
+    const region = createOfflineMapRegion({
+      name: 'Planned field',
+      tileSourceId: 'authorized-field-basemap',
+      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
+      bounds,
+      minZoom: 12,
+      maxZoom: 13,
+    })
+
+    const result = await reconcileOfflineMapRegions([region])
+
+    expect(result).toEqual({
+      regions: [region],
+      changedRegions: 0,
+      evictedTiles: 0,
+    })
+  })
+
+  it('repairs a stale planned tile count without inventing cached progress', async () => {
+    const region = {
+      ...createOfflineMapRegion({
+        name: 'Migrated field',
+        tileSourceId: 'authorized-field-basemap',
+        tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
+        bounds,
+        minZoom: 12,
+        maxZoom: 13,
+      }),
+      tileCount: 999,
+    }
+
+    const result = await reconcileOfflineMapRegions([region])
+
+    expect(result.changedRegions).toBe(1)
+    expect(result.regions[0]).toMatchObject({
+      status: 'planned',
+      downloadedTiles: 0,
+      tileCount: planRegionTiles(bounds, 12, 13).length,
     })
   })
 
