@@ -6,6 +6,7 @@ import {
   deleteOfflineMapRegion,
   downloadOfflineMapRegion,
   mapCacheName,
+  offlineMapStorageReserveBytes,
   planRegionTiles,
   tileUrl,
 } from './offlineRegions'
@@ -159,6 +160,110 @@ describe('offline map regions', () => {
       downloadedTiles: 0,
     })
     expect(fetch).toHaveBeenCalledTimes(10)
+  })
+
+  it('refuses a new download when the device storage reserve is unavailable', async () => {
+    const region = createOfflineMapRegion({
+      name: 'Storage constrained field',
+      tileSourceId: 'authorized-field-basemap',
+      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
+      bounds,
+      minZoom: 12,
+      maxZoom: 13,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('tile', { status: 200 })),
+    )
+
+    await expect(
+      downloadOfflineMapRegion(region, {
+        storageEstimate: async () => ({
+          usage: 950 * 1024 * 1024,
+          quota: 1024 * 1024 * 1024,
+        }),
+      }),
+    ).rejects.toThrow('keep at least 100 MB')
+
+    expect(fetch).not.toHaveBeenCalled()
+    expect(await db.offlineMapRegions.get(region.id)).toMatchObject({
+      status: 'failed',
+      downloadedTiles: 0,
+    })
+  })
+
+  it('keeps downloaded tiles and a resumable manifest when storage falls below reserve', async () => {
+    const region = createOfflineMapRegion({
+      name: 'Growing cache',
+      tileSourceId: 'authorized-field-basemap',
+      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
+      bounds,
+      minZoom: 12,
+      maxZoom: 14,
+    })
+    const estimate = vi
+      .fn<() => Promise<{ usage: number; quota: number }>>()
+      .mockResolvedValueOnce({
+        usage: 0,
+        quota: 1024 * 1024 * 1024,
+      })
+      .mockResolvedValue({
+        usage: 950 * 1024 * 1024,
+        quota: 1024 * 1024 * 1024,
+      })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('tile', { status: 200 })),
+    )
+
+    await expect(
+      downloadOfflineMapRegion(region, {
+        minimumFreeBytes: offlineMapStorageReserveBytes,
+        storageCheckInterval: 1,
+        storageEstimate: estimate,
+      }),
+    ).rejects.toThrow('download paused')
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(await db.offlineMapRegions.get(region.id)).toMatchObject({
+      status: 'partial',
+      downloadedTiles: 1,
+    })
+  })
+
+  it('stops after the first cache quota error instead of retrying every tile', async () => {
+    const region = createOfflineMapRegion({
+      name: 'Full cache',
+      tileSourceId: 'authorized-field-basemap',
+      tileUrlTemplate: 'https://maps.example.test/{z}/{x}/{y}.png',
+      bounds,
+      minZoom: 12,
+      maxZoom: 14,
+    })
+    const fullCache = new MemoryCache()
+    fullCache.put = async () => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError')
+    }
+    vi.stubGlobal('caches', {
+      open: async () => fullCache,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('tile', { status: 200 })),
+    )
+
+    await expect(
+      downloadOfflineMapRegion(region, {
+        minimumFreeBytes: 0,
+        storageEstimate: async () => null,
+      }),
+    ).rejects.toThrow('device storage is full')
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(await db.offlineMapRegions.get(region.id)).toMatchObject({
+      status: 'failed',
+      downloadedTiles: 0,
+    })
   })
 
   it('preserves cached tiles still referenced by another region', async () => {

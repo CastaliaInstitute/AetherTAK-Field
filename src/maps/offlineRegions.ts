@@ -13,9 +13,65 @@ export interface TileCoordinate {
 export const mapCacheName = (tileSourceId: string) =>
   `aethertak-map-${tileSourceId}`
 
+export const offlineMapStorageReserveBytes = 100 * 1024 * 1024
+
 const maximumLatitude = 85.05112878
 const clampLatitude = (latitude: number) =>
   Math.min(maximumLatitude, Math.max(-maximumLatitude, latitude))
+
+interface StorageEstimateLike {
+  usage?: number
+  quota?: number
+}
+
+function defaultStorageEstimate(): Promise<StorageEstimateLike | null> {
+  if (
+    typeof navigator === 'undefined' ||
+    typeof navigator.storage?.estimate !== 'function'
+  ) {
+    return Promise.resolve(null)
+  }
+  return navigator.storage.estimate()
+}
+
+function availableStorageBytes(estimate: StorageEstimateLike | null) {
+  if (
+    !estimate ||
+    !Number.isFinite(estimate.usage) ||
+    !Number.isFinite(estimate.quota)
+  ) {
+    return null
+  }
+  return Math.max(0, (estimate.quota ?? 0) - (estimate.usage ?? 0))
+}
+
+function storageReserveError(reserveBytes: number) {
+  const reserveMiB = Math.ceil(reserveBytes / (1024 * 1024))
+  const error = new Error(
+    `Offline map download paused to keep at least ${reserveMiB} MB of device storage free.`,
+  )
+  error.name = 'OfflineMapStorageError'
+  return error
+}
+
+function isStorageQuotaError(error: unknown) {
+  if (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'QuotaExceededError'
+  ) {
+    return true
+  }
+  if (!(error instanceof Error)) return false
+  return (
+    error.name === 'QuotaExceededError' ||
+    /quota|storage (?:is )?full|no space left/i.test(error.message)
+  )
+}
+
+function isStorageReserveError(error: unknown) {
+  return error instanceof Error && error.name === 'OfflineMapStorageError'
+}
 
 function longitudeToTileX(longitude: number, zoom: number) {
   const count = 2 ** zoom
@@ -113,6 +169,9 @@ export async function downloadOfflineMapRegion(
     signal?: AbortSignal
     maxTiles?: number
     onProgress?: (progress: RegionDownloadProgress) => void
+    minimumFreeBytes?: number
+    storageCheckInterval?: number
+    storageEstimate?: () => Promise<StorageEstimateLike | null>
   } = {},
 ) {
   if (!('caches' in globalThis)) {
@@ -125,11 +184,25 @@ export async function downloadOfflineMapRegion(
       `Offline region contains ${tiles.length} tiles; limit is ${maxTiles}.`,
     )
   }
+  const minimumFreeBytes =
+    options.minimumFreeBytes ?? offlineMapStorageReserveBytes
+  const storageCheckInterval = options.storageCheckInterval ?? 25
+  if (!Number.isFinite(minimumFreeBytes) || minimumFreeBytes < 0) {
+    throw new Error('Offline map storage reserve must be non-negative.')
+  }
+  if (
+    !Number.isInteger(storageCheckInterval) ||
+    storageCheckInterval < 1
+  ) {
+    throw new Error('Offline map storage check interval must be positive.')
+  }
+  const estimateStorage = options.storageEstimate ?? defaultStorageEstimate
 
   const cache = await caches.open(mapCacheName(region.tileSourceId))
   let completed = 0
   let failed = 0
   let terminalError: unknown
+  let uncachedSinceStorageCheck = storageCheckInterval
   await db.offlineMapRegions.put({
     ...region,
     status: 'downloading',
@@ -142,6 +215,13 @@ export async function downloadOfflineMapRegion(
     try {
       const existing = await cache.match(url)
       if (!existing) {
+        if (uncachedSinceStorageCheck >= storageCheckInterval) {
+          const available = availableStorageBytes(await estimateStorage())
+          if (available !== null && available < minimumFreeBytes) {
+            throw storageReserveError(minimumFreeBytes)
+          }
+          uncachedSinceStorageCheck = 0
+        }
         const response = await fetch(url, {
           signal: options.signal,
           cache: 'no-store',
@@ -150,12 +230,24 @@ export async function downloadOfflineMapRegion(
           throw new Error(`Tile request returned HTTP ${response.status}.`)
         }
         await cache.put(url, response)
+        uncachedSinceStorageCheck += 1
       }
       completed += 1
     } catch (error) {
       if (options.signal?.aborted) break
       failed += 1
-      if (failed >= 10) terminalError = error
+      const quotaExceeded = isStorageQuotaError(error)
+      if (quotaExceeded || isStorageReserveError(error)) {
+        if (quotaExceeded) {
+          terminalError = new Error(
+            'Offline map download paused because device storage is full.',
+          )
+        } else {
+          terminalError = error
+        }
+      } else if (failed >= 10) {
+        terminalError = error
+      }
     }
     options.onProgress?.({ completed, total: tiles.length, failed })
     if ((completed + failed) % 25 === 0) {

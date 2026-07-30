@@ -6,6 +6,13 @@ Mercator slippy-map coordinates, records exact tile counts before download,
 limits unexpectedly large jobs, supports cancellation, and records partial
 downloads for recovery.
 
+Downloads preserve a 100 MiB storage reserve whenever the platform provides a
+quota estimate. The downloader checks again as uncached tiles are added, stops
+on the first browser/WebView quota-exhaustion error, records the region as
+partial or failed, and keeps already cached tiles available for a later resume.
+An unavailable quota estimate does not fabricate capacity; the cache write
+still fails boundedly if the platform reports storage exhaustion.
+
 Production map regions must use a tile service or packaged data for which
 Castalia Institute has explicit offline-download rights. The OpenStreetMap
 standard tile service used by the development preview is not an offline bulk

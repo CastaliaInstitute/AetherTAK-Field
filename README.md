@@ -17,7 +17,8 @@ client and inside Capacitor shells for iOS and Android.
   through the ordered field change feed and refreshed every 30 seconds while
   connected, without granting mobile clients mutation rights.
 - Offline map-region planning, Cache Storage downloads, and a cache-first
-  MapLibre raster protocol for authorized tile sources.
+  MapLibre raster protocol for authorized tile sources, with a 100 MiB
+  free-space reserve and recoverable quota-exhaustion handling.
 - Structured field/ecology observation capture with category, title, notes,
   geotagged native photo/video, selectable depth output, app-private media,
   streaming SHA-256 integrity for photo, video, depth, confidence, point-cloud,

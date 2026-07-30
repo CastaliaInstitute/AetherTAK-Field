@@ -15,6 +15,7 @@ import {
   createOfflineMapRegion,
   deleteOfflineMapRegion,
   downloadOfflineMapRegion,
+  offlineMapStorageReserveBytes,
   planRegionTiles,
   type RegionDownloadProgress,
 } from '../maps/offlineRegions'
@@ -25,7 +26,11 @@ interface OfflineMapManagerProps {
   regions: OfflineMapRegion[]
   source: RasterTileSource
   onNotice: (message: string) => void
+  estimateStorage?: () => Promise<StorageEstimate>
 }
+
+const estimateBrowserStorage = () =>
+  navigator.storage?.estimate() ?? Promise.resolve({})
 
 function propertyBounds(property: Property) {
   const longitudes = property.boundary.map(([longitude]) => longitude)
@@ -51,6 +56,7 @@ export function OfflineMapManager({
   regions,
   source,
   onNotice,
+  estimateStorage = estimateBrowserStorage,
 }: OfflineMapManagerProps) {
   const [propertyId, setPropertyId] = useState('')
   const [minZoom, setMinZoom] = useState(12)
@@ -70,6 +76,13 @@ export function OfflineMapManager({
     minZoom >= 0 &&
     maxZoom <= 22 &&
     minZoom <= maxZoom
+  const availableStorage =
+    storage?.usage !== undefined && storage.quota !== undefined
+      ? Math.max(0, storage.quota - storage.usage)
+      : null
+  const storageTooLow =
+    availableStorage !== null &&
+    availableStorage < offlineMapStorageReserveBytes
 
   const plannedTiles = useMemo(() => {
     if (!property || !validZoomRange) return 0
@@ -82,13 +95,15 @@ export function OfflineMapManager({
 
   useEffect(() => {
     let disposed = false
-    void navigator.storage?.estimate().then((estimate) => {
+    void estimateStorage().then((estimate) => {
       if (!disposed) setStorage(estimate)
+    }).catch(() => {
+      if (!disposed) setStorage(null)
     })
     return () => {
       disposed = true
     }
-  }, [regions])
+  }, [estimateStorage, regions])
 
   async function download(region: OfflineMapRegion) {
     const abort = new AbortController()
@@ -230,12 +245,23 @@ export function OfflineMapManager({
           <button
             className="offline-download-action"
             type="button"
-            disabled={!property || activeId !== null || !validZoomRange}
+            disabled={
+              !property ||
+              activeId !== null ||
+              !validZoomRange ||
+              storageTooLow
+            }
             onClick={() => void createAndDownload()}
           >
             <Download size={15} />
             Download {plannedTiles.toLocaleString()} tiles
           </button>
+          {storageTooLow && (
+            <p className="offline-map-storage-warning" role="alert">
+              Free device storage before downloading. AetherTAK Field keeps
+              at least {bytes(offlineMapStorageReserveBytes)} available.
+            </p>
+          )}
         </div>
       )}
 
@@ -274,7 +300,7 @@ export function OfflineMapManager({
               {region.status !== 'ready' && activeId !== region.id && (
                 <button
                   type="button"
-                  disabled={activeId !== null}
+                  disabled={activeId !== null || storageTooLow}
                   aria-label={`Resume ${region.name}`}
                   onClick={() => void download(region)}
                 >
@@ -300,6 +326,9 @@ export function OfflineMapManager({
           {storage
             ? `${bytes(storage.usage)} used · ${bytes(storage.quota)} quota`
             : 'Storage estimate unavailable'}
+        </span>
+        <span>
+          {bytes(offlineMapStorageReserveBytes)} free-space reserve
         </span>
         <small>{source.attribution}</small>
       </footer>
