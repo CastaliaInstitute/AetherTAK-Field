@@ -60,4 +60,33 @@ describe('offline field repository', () => {
     )
     expect(await db.outbox.where('entityId').equals(property.id).count()).toBe(1)
   })
+
+  it('hydrates unresolved outbox conflicts for operator action', async () => {
+    const property = {
+      ...demoSnapshot.properties[0],
+      name: 'Offline Name',
+      syncState: 'queued' as const,
+      updatedAt: new Date().toISOString(),
+    }
+    await saveLocalEntity({ type: 'property', value: property })
+    const queued = (await db.outbox.where('entityId').equals(property.id).first())!
+    await db.outbox.update(queued.id, {
+      conflict: {
+        entityType: 'property',
+        entityId: property.id,
+        revision: 3,
+        deleted: false,
+        payload: { ...property, name: 'Server Name' },
+        updatedAt: new Date().toISOString(),
+        author: 'Field Two',
+      },
+    })
+
+    expect((await loadDashboard()).conflicts).toEqual([
+      expect.objectContaining({
+        id: queued.id,
+        conflict: expect.objectContaining({ author: 'Field Two' }),
+      }),
+    ])
+  })
 })

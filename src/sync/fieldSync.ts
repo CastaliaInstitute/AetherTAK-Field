@@ -53,7 +53,7 @@ const serverEntitySchema = z.object({
   author: z.string(),
 })
 
-interface FieldSyncTransport {
+export interface FieldSyncTransport {
   mutate(mutation: Record<string, unknown>): Promise<NativeFieldResponse>
   upload(options: {
     mediaId: string
@@ -113,10 +113,24 @@ export interface FieldPullResult {
 }
 
 function serverPayload(item: OutboxItem) {
-  if (item.entityType !== 'media') return item.payload
-  const media = mediaCaptureSchema.parse(item.payload)
-  const { localUri: _localUri, previewUri: _previewUri, ...portable } = media
-  return portable
+  if (item.entityType === 'media') {
+    const media = mediaCaptureSchema.parse(item.payload)
+    const {
+      localUri: _localUri,
+      previewUri: _previewUri,
+      syncState: _syncState,
+      ...portable
+    } = media
+    return portable
+  }
+  if (typeof item.payload === 'object' && item.payload !== null) {
+    const { syncState: _syncState, ...portable } = item.payload as Record<
+      string,
+      unknown
+    >
+    return portable
+  }
+  return item.payload
 }
 
 async function uploadMedia(
@@ -162,7 +176,7 @@ function retryAt(attempts: number, now: Date, permanent = false) {
 
 async function markEntityState(
   item: OutboxItem,
-  state: 'synced' | 'conflict',
+  state: 'queued' | 'synced' | 'conflict',
 ) {
   switch (item.entityType) {
     case 'property':
@@ -170,6 +184,9 @@ async function markEntityState(
       break
     case 'season':
       await db.seasons.update(item.entityId, { syncState: state })
+      break
+    case 'field':
+      await db.fields.update(item.entityId, { syncState: state })
       break
     case 'ecological_site':
       await db.ecologicalSites.update(item.entityId, { syncState: state })
@@ -180,6 +197,9 @@ async function markEntityState(
     case 'media':
       await db.media.update(item.entityId, { syncState: state })
       break
+    case 'alert':
+      await db.alerts.update(item.entityId, { syncState: state })
+      break
     default:
       break
   }
@@ -189,6 +209,13 @@ async function acceptMutation(
   item: OutboxItem,
   response: z.infer<typeof acceptedMutationSchema>,
 ) {
+  if (
+    response.mutationId !== item.id ||
+    response.entityType !== item.entityType ||
+    response.entityId !== item.entityId
+  ) {
+    throw new Error('Aether Field API accepted a different mutation.')
+  }
   await db.transaction(
     'rw',
     [
@@ -196,9 +223,11 @@ async function acceptMutation(
       db.syncMetadata,
       db.properties,
       db.seasons,
+      db.fields,
       db.ecologicalSites,
       db.observations,
       db.media,
+      db.alerts,
     ],
     async () => {
       await db.syncMetadata.put({
@@ -208,8 +237,33 @@ async function acceptMutation(
         revision: response.revision,
         serverUpdatedAt: response.serverUpdatedAt,
       })
-      await markEntityState(item, 'synced')
       await db.outbox.delete(item.id)
+      const remaining = (await db.outbox.where('entityId').equals(item.entityId).toArray())
+        .filter(
+          (candidate) => candidate.entityType === item.entityType,
+        )
+      const later = remaining.filter((candidate) => !candidate.conflict)
+      for (const candidate of later) {
+        await db.outbox.update(candidate.id, {
+          baseRevision: response.revision,
+          operation:
+            item.operation === 'delete'
+              ? candidate.operation === 'delete'
+                ? 'delete'
+                : 'create'
+              : candidate.operation === 'delete'
+                ? 'delete'
+                : 'update',
+        })
+      }
+      await markEntityState(
+        item,
+        remaining.some((candidate) => candidate.conflict)
+          ? 'conflict'
+          : later.length > 0
+            ? 'queued'
+            : 'synced',
+      )
     },
   )
 }
@@ -221,9 +275,11 @@ async function markConflict(item: OutboxItem, current: ServerEntity) {
       db.outbox,
       db.properties,
       db.seasons,
+      db.fields,
       db.ecologicalSites,
       db.observations,
       db.media,
+      db.alerts,
     ],
     async () => {
       await db.outbox.update(item.id, {
@@ -330,7 +386,9 @@ async function putRemoteEntity(
       )
       break
     case 'field':
-      await db.fields.put(fieldSchema.parse(payload))
+      await db.fields.put(
+        fieldSchema.parse({ ...payload, syncState: 'synced' }),
+      )
       break
     case 'ecological_site':
       await db.ecologicalSites.put(
@@ -360,7 +418,9 @@ async function putRemoteEntity(
       )
       break
     case 'alert':
-      await db.alerts.put(alertSchema.parse(payload))
+      await db.alerts.put(
+        alertSchema.parse({ ...payload, syncState: 'synced' }),
+      )
       break
     case 'sensor_reading':
       await db.readings.put(sensorReadingSchema.parse(payload))
@@ -425,6 +485,136 @@ async function applyRemoteChange(
     },
   )
   return 'applied' as const
+}
+
+export type FieldConflictResolution = 'keep_device' | 'use_server'
+
+export async function resolveFieldConflict(
+  outboxId: string,
+  resolution: FieldConflictResolution,
+  transport: FieldSyncTransport = fieldApiTransport,
+) {
+  const item = await db.outbox.get(outboxId)
+  if (!item?.conflict) {
+    throw new Error('This synchronization conflict no longer exists.')
+  }
+  const current = item.conflict
+  if (
+    current.entityType !== item.entityType ||
+    current.entityId !== item.entityId
+  ) {
+    throw new Error('The synchronization conflict refers to the wrong record.')
+  }
+  const matching = (await db.outbox.where('entityId').equals(item.entityId).toArray())
+    .filter((candidate) => candidate.entityType === item.entityType)
+    .sort(
+      (left, right) =>
+        new Date(left.createdAt).getTime() -
+        new Date(right.createdAt).getTime(),
+    )
+
+  if (
+    resolution === 'keep_device' &&
+    !(current.deleted && matching.at(-1)?.operation === 'delete')
+  ) {
+    const desired = matching.at(-1) ?? item
+    const operation: OutboxItem['operation'] = current.deleted
+      ? 'create'
+      : desired.operation === 'delete'
+        ? 'delete'
+        : 'update'
+    const now = new Date().toISOString()
+    await db.transaction(
+      'rw',
+      [
+        db.outbox,
+        db.syncMetadata,
+        db.properties,
+        db.seasons,
+        db.fields,
+        db.ecologicalSites,
+        db.observations,
+        db.media,
+        db.alerts,
+      ],
+      async () => {
+        await db.outbox.bulkDelete(
+          matching
+            .filter((candidate) => candidate.id !== item.id)
+            .map((candidate) => candidate.id),
+        )
+        await db.outbox.update(item.id, {
+          operation,
+          payload: desired.payload,
+          attempts: 0,
+          lastError: null,
+          baseRevision: current.revision,
+          nextAttemptAt: now,
+          conflict: null,
+        })
+        await db.syncMetadata.put({
+          key: `${item.entityType}:${item.entityId}`,
+          entityType: item.entityType,
+          entityId: item.entityId,
+          revision: current.revision,
+          serverUpdatedAt: current.updatedAt,
+        })
+        await markEntityState(item, 'queued')
+      },
+    )
+    return { resolution, queued: true, entityDeleted: false }
+  }
+
+  const change: ServerChange = {
+    cursor: 1,
+    entityType: current.entityType,
+    entityId: current.entityId,
+    revision: current.revision,
+    operation: current.deleted ? 'delete' : 'update',
+    payload: current.payload,
+    serverUpdatedAt: current.updatedAt,
+    author: current.author,
+  }
+  const downloadedMedia =
+    change.entityType === 'media' && !current.deleted
+      ? await downloadRemoteMedia(change, transport)
+      : null
+  await db.transaction(
+    'rw',
+    [
+      db.outbox,
+      db.syncMetadata,
+      db.properties,
+      db.seasons,
+      db.fields,
+      db.ecologicalSites,
+      db.observations,
+      db.media,
+      db.alerts,
+      db.readings,
+      db.insights,
+    ],
+    async () => {
+      if (current.deleted) {
+        await deleteRemoteEntity(change)
+      } else {
+        await putRemoteEntity(change, downloadedMedia)
+      }
+      await db.syncMetadata.put({
+        key: `${item.entityType}:${item.entityId}`,
+        entityType: item.entityType,
+        entityId: item.entityId,
+        revision: current.revision,
+        serverUpdatedAt: current.updatedAt,
+      })
+      await db.outbox.bulkDelete(matching.map((candidate) => candidate.id))
+    },
+  )
+  return {
+    resolution: 'use_server' as const,
+    queued: false,
+    entityDeleted: current.deleted,
+  }
 }
 
 async function markFailure(

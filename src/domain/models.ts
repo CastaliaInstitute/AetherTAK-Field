@@ -11,6 +11,13 @@ export const coordinateSchema = z.object({
 
 export type Coordinate = z.infer<typeof coordinateSchema>
 
+export const syncStateSchema = z.enum([
+  'local',
+  'queued',
+  'synced',
+  'conflict',
+])
+
 export const propertySchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
@@ -19,7 +26,7 @@ export const propertySchema = z.object({
   boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
   timezone: z.string().min(1),
   updatedAt: z.string().datetime(),
-  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+  syncState: syncStateSchema,
 })
 
 export type Property = z.infer<typeof propertySchema>
@@ -33,7 +40,7 @@ export const seasonSchema = z.object({
   status: z.enum(['planned', 'active', 'closed']),
   notes: z.string(),
   updatedAt: z.string().datetime(),
-  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+  syncState: syncStateSchema,
 })
 
 export type Season = z.infer<typeof seasonSchema>
@@ -51,6 +58,7 @@ export const fieldSchema = z.object({
   healthScore: z.number().min(0).max(100).nullable(),
   boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
   updatedAt: z.string().datetime(),
+  syncState: syncStateSchema,
 })
 
 export type Field = z.infer<typeof fieldSchema>
@@ -75,7 +83,7 @@ export const ecologicalSiteSchema = z.object({
   boundary: z.array(z.tuple([z.number(), z.number()])).min(3),
   indicatorSpecies: z.array(z.string()),
   updatedAt: z.string().datetime(),
-  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+  syncState: syncStateSchema,
 })
 
 export type EcologicalSite = z.infer<typeof ecologicalSiteSchema>
@@ -128,7 +136,7 @@ export const observationSchema = z.object({
   coordinate: coordinateSchema,
   observedAt: z.string().datetime(),
   mediaIds: z.array(z.string().uuid()),
-  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+  syncState: syncStateSchema,
 })
 
 export type Observation = z.infer<typeof observationSchema>
@@ -167,7 +175,7 @@ export const mediaCaptureSchema = z.object({
     })
     .nullable()
     .default(null),
-  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
+  syncState: syncStateSchema,
 })
 
 export type MediaCapture = z.infer<typeof mediaCaptureSchema>
@@ -181,6 +189,7 @@ export const alertSchema = z.object({
   deviceId: z.string().nullable(),
   createdAt: z.string().datetime(),
   acknowledgedAt: z.string().datetime().nullable(),
+  syncState: syncStateSchema,
 })
 
 export type Alert = z.infer<typeof alertSchema>

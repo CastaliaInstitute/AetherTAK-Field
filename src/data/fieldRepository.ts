@@ -9,7 +9,7 @@ import type {
   Property,
   Season,
 } from '../domain/models'
-import { db, queueMutation } from './database'
+import { db, queueMutation, type OutboxItem } from './database'
 
 export async function seedDatabase(snapshot: DashboardSnapshot) {
   await db.transaction(
@@ -141,6 +141,7 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
 
 export type FieldDashboardData = Omit<DashboardSnapshot, 'contacts'> & {
   media: MediaCapture[]
+  conflicts: OutboxItem[]
   offlineMapRegions: OfflineMapRegion[]
 }
 
@@ -155,6 +156,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     media,
     alerts,
     insights,
+    conflicts,
     offlineMapRegions,
   ] = await Promise.all([
     db.properties.toArray(),
@@ -166,6 +168,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     db.media.orderBy('capturedAt').reverse().toArray(),
     db.alerts.orderBy('createdAt').reverse().toArray(),
     db.insights.orderBy('generatedAt').reverse().toArray(),
+    db.outbox.filter((item) => item.conflict !== null).toArray(),
     db.offlineMapRegions.orderBy('updatedAt').reverse().toArray(),
   ])
 
@@ -181,6 +184,7 @@ export async function loadDashboard(): Promise<FieldDashboardData> {
     insights: insights.filter(
       (insight) => new Date(insight.expiresAt).getTime() > Date.now(),
     ),
+    conflicts,
     offlineMapRegions,
   }
 }

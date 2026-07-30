@@ -74,6 +74,7 @@ export const demoFields: Field[] = [
       [-104.9968, 39.7425],
     ],
     updatedAt: minutesAgo(4),
+    syncState: 'synced',
   },
   {
     id: 'd590ba20-76fa-46a0-a880-e1b3eb56569c',
@@ -94,6 +95,7 @@ export const demoFields: Field[] = [
       [-104.9917, 39.7418],
     ],
     updatedAt: minutesAgo(12),
+    syncState: 'synced',
   },
 ]
 
@@ -213,6 +215,7 @@ export const demoAlerts: Alert[] = [
     deviceId: 'cs-soil-009',
     createdAt: minutesAgo(18),
     acknowledgedAt: null,
+    syncState: 'synced',
   },
 ]
 

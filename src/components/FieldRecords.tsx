@@ -21,6 +21,8 @@ import type { FieldDashboard } from '../data/useDashboard'
 import { saveLocalEntity } from '../data/fieldRepository'
 import { currentCoordinate } from '../platform/capture'
 import { ObservationDetail } from './ObservationDetail'
+import { ConflictCenter } from './ConflictCenter'
+import { resolveFieldConflict } from '../sync/fieldSync'
 
 type EditableKind = 'property' | 'season' | 'field' | 'ecological_site'
 type Editor = { kind: EditableKind; id?: string } | null
@@ -185,6 +187,7 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
             healthScore: optionalNumber(form.get('healthScore')),
             boundary: field?.boundary ?? squareBoundary(parent.center, 0.00018),
             updatedAt: now,
+            syncState: 'queued',
           })
           await saveLocalEntity({ type: 'field', value })
           break
@@ -230,7 +233,11 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
     if (!alert || alert.acknowledgedAt) return
     await saveLocalEntity({
       type: 'alert',
-      value: { ...alert, acknowledgedAt: new Date().toISOString() },
+      value: {
+        ...alert,
+        acknowledgedAt: new Date().toISOString(),
+        syncState: 'queued',
+      },
     })
     onNotice(`Acknowledged ${alert.title}.`)
   }
@@ -270,6 +277,12 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
           </button>
         </div>
       </header>
+
+      <ConflictCenter
+        conflicts={data.conflicts}
+        onResolve={resolveFieldConflict}
+        onNotice={onNotice}
+      />
 
       {data.properties.length === 0 && (
         <div className="records-empty">
@@ -322,7 +335,7 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
           <span>{item.cropIcon}</span>
           <div>
             <strong>{item.name}</strong>
-            <p>{item.seasonLabel} · {item.crop} · {item.status}</p>
+            <p>{item.seasonLabel} · {item.crop} · {item.status} · {item.syncState}</p>
           </div>
           <button
             type="button"
@@ -361,7 +374,7 @@ export function FieldRecords({ data, onNotice }: FieldRecordsProps) {
           <article className={`records-alert ${alert.severity}`} key={alert.id}>
             <div>
               <strong>{alert.title}</strong>
-              <p>{alert.detail}</p>
+              <p>{alert.detail} · {alert.syncState}</p>
             </div>
             <button
               type="button"

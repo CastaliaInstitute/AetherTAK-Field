@@ -47,6 +47,7 @@ const dashboard: FieldDashboard = {
   media: [photo],
   alerts: demoSnapshot.alerts,
   insights: demoSnapshot.insights,
+  conflicts: [],
   offlineMapRegions: [],
 }
 

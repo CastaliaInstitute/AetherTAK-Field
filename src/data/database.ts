@@ -179,6 +179,54 @@ class AetherFieldDatabase extends Dexie {
       syncControl: 'id',
       appMetadata: 'key',
     })
+    this.version(7)
+      .stores({
+        properties: 'id, name, updatedAt, syncState',
+        seasons: 'id, propertyId, status, startsOn, endsOn, updatedAt, syncState',
+        fields: 'id, propertyId, seasonId, status, updatedAt, syncState',
+        ecologicalSites: 'id, propertyId, siteType, updatedAt, syncState',
+        readings: 'id, deviceId, fieldId, siteId, measurement, recordedAt',
+        observations: 'id, fieldId, siteId, category, observedAt, syncState',
+        media: 'id, observationId, kind, capturedAt, syncState',
+        alerts:
+          'id, severity, fieldId, deviceId, createdAt, acknowledgedAt, syncState',
+        insights: 'id, fieldId, siteId, severity, generatedAt, expiresAt',
+        offlineMapRegions: 'id, tileSourceId, status, updatedAt',
+        outbox:
+          'id, entityType, entityId, operation, createdAt, attempts, nextAttemptAt',
+        takOutbox: 'id, createdAt, attempts, operation.kind',
+        takActivity:
+          'id, uid, direction, kind, createdAt, deliveryStatus, outboxId',
+        syncMetadata: 'key, entityType, entityId, revision',
+        syncControl: 'id',
+        appMetadata: 'key',
+      })
+      .upgrade(async (transaction) => {
+        const pending = (await transaction.table('outbox').toArray()) as OutboxItem[]
+        const stateFor = (entityType: MutableEntityType, entityId: string) => {
+          const matching = pending.filter(
+            (item) =>
+              item.entityType === entityType && item.entityId === entityId,
+          )
+          return matching.some((item) => item.conflict)
+            ? 'conflict'
+            : matching.length > 0
+              ? 'queued'
+              : 'synced'
+        }
+        await transaction
+          .table('fields')
+          .toCollection()
+          .modify((record) => {
+            record.syncState = stateFor('field', record.id)
+          })
+        await transaction
+          .table('alerts')
+          .toCollection()
+          .modify((record) => {
+            record.syncState = stateFor('alert', record.id)
+          })
+      })
   }
 }
 

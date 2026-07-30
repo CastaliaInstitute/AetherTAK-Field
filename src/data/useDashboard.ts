@@ -18,6 +18,7 @@ const emptyDashboard: FieldDashboard = {
   media: [],
   alerts: [],
   insights: [],
+  conflicts: [],
   offlineMapRegions: [],
 }
 

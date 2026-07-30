@@ -534,6 +534,56 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
 .records-empty svg { margin-bottom: 8px; color: var(--green); }
 .records-empty strong { color: var(--ink); font-size: 13px; }
 .records-empty p { max-width: 320px; margin: 5px 0 0; font-size: 10px; line-height: 1.5; }
+.conflict-center {
+  background: rgba(115, 70, 23, 0.18);
+  border: 1px solid rgba(239,183,94,.28);
+  border-radius: 14px;
+  margin: 16px 0 22px;
+  padding: 13px;
+}
+.conflict-center > header { align-items: center; display: flex; gap: 9px; }
+.conflict-center > header > svg { color: var(--amber); }
+.conflict-center > header h3 { font-size: 15px; }
+.conflict-card {
+  background: rgba(8, 15, 11, 0.35);
+  border: 1px solid rgba(239,183,94,.16);
+  border-radius: 11px;
+  margin-top: 10px;
+  padding: 11px;
+}
+.conflict-title { align-items: center; display: flex; gap: 7px; text-transform: capitalize; }
+.conflict-title > svg { color: var(--amber); }
+.conflict-title span { color: var(--muted); font-size: 8px; margin-left: auto; }
+.conflict-versions { display: grid; gap: 6px; margin-top: 10px; }
+.conflict-versions > div {
+  align-items: center;
+  background: rgba(255,255,255,.035);
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+.conflict-versions > div > svg { color: var(--muted); flex: 0 0 auto; }
+.conflict-versions span { display: grid; gap: 2px; min-width: 0; }
+.conflict-versions small { color: var(--muted); font-size: 8px; }
+.conflict-versions strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conflict-time { color: var(--muted); font-size: 8px; margin: 8px 0; }
+.conflict-actions { display: grid; gap: 7px; grid-template-columns: 1fr 1fr; }
+.conflict-actions button,
+.conflict-confirm button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 36px;
+  padding: 7px;
+}
+.conflict-actions button:first-child { color: var(--green); background: rgba(137,207,120,.08); }
+.conflict-actions button:last-child { color: var(--cyan); background: rgba(113,212,209,.08); }
+.conflict-confirm { background: rgba(239,183,94,.08); border-radius: 8px; padding: 9px; }
+.conflict-confirm p { color: #e8d3a9; font-size: 9px; line-height: 1.4; margin: 0 0 8px; }
+.conflict-confirm > div { display: flex; gap: 7px; }
+.conflict-confirm button:first-child { background: var(--amber); color: #241708; flex: 1; font-weight: 800; }
+.conflict-confirm button:last-child { background: transparent; color: var(--muted); width: 38px; }
+.conflict-error { color: #ef8c85; font-size: 9px; margin: 9px 0 0; }
 .records-subsection { margin-top: 28px; }
 .records-subheading {
   display: flex;

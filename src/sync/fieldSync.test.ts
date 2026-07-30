@@ -4,7 +4,11 @@ import { db, queueMutation } from '../data/database'
 import type { Property } from '../domain/models'
 import { demoSnapshot } from '../domain/seed'
 import type { NativeFieldResponse } from '../platform/tak'
-import { flushFieldOutbox, pullFieldChanges } from './fieldSync'
+import {
+  flushFieldOutbox,
+  pullFieldChanges,
+  resolveFieldConflict,
+} from './fieldSync'
 
 const property: Property = {
   id: '7280b290-7607-4904-9004-ee767ac3cf84',
@@ -28,7 +32,7 @@ const property: Property = {
   syncState: 'queued',
 }
 
-function accepted(itemId: string): NativeFieldResponse {
+function accepted(itemId: string, revision = 1): NativeFieldResponse {
   return {
     status: 200,
     body: {
@@ -36,7 +40,7 @@ function accepted(itemId: string): NativeFieldResponse {
       mutationId: itemId,
       entityType: 'property',
       entityId: property.id,
-      revision: 1,
+      revision,
       cursor: 1,
       serverUpdatedAt: '2026-07-30T06:45:00.000Z',
       idempotentReplay: false,
@@ -80,6 +84,52 @@ describe('Aether Field durable synchronization', () => {
     expect(
       (await db.syncMetadata.get(`property:${property.id}`))?.revision,
     ).toBe(1)
+    expect(transport.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.not.objectContaining({ syncState: expect.anything() }),
+      }),
+    )
+  })
+
+  it('rebases later offline edits after an earlier mutation is accepted', async () => {
+    const first = await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'create',
+      payload: property,
+    })
+    const updated = { ...property, name: 'Latest Offline Farm' }
+    const second = await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'update',
+      payload: updated,
+    })
+    const mutate = vi
+      .fn()
+      .mockResolvedValueOnce(accepted(first.id, 1))
+      .mockResolvedValueOnce(accepted(second.id, 2))
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate,
+      changes: vi.fn(),
+    }
+
+    await flushFieldOutbox(1, transport)
+    expect(await db.outbox.get(second.id)).toMatchObject({
+      operation: 'update',
+      baseRevision: 1,
+    })
+    expect((await db.properties.get(property.id))?.syncState).toBe('queued')
+
+    await flushFieldOutbox(1, transport)
+    expect(await db.outbox.count()).toBe(0)
+    expect((await db.properties.get(property.id))?.syncState).toBe('synced')
+    expect(mutate.mock.calls[1][0]).toMatchObject({
+      operation: 'update',
+      baseRevision: 1,
+    })
   })
 
   it('backs off after an offline failure without losing the mutation', async () => {
@@ -141,6 +191,189 @@ describe('Aether Field durable synchronization', () => {
     expect(result.conflicts).toBe(1)
     expect((await db.outbox.get(queued.id))?.conflict?.revision).toBe(2)
     expect((await db.properties.get(property.id))?.syncState).toBe('conflict')
+  })
+
+  it('tracks conflict state for crop fields and acknowledged alerts', async () => {
+    const field = { ...demoSnapshot.fields[0], syncState: 'queued' as const }
+    const alert = {
+      ...demoSnapshot.alerts[0],
+      acknowledgedAt: '2026-07-30T06:40:00.000Z',
+      syncState: 'queued' as const,
+    }
+    await db.fields.put(field)
+    await db.alerts.put(alert)
+    await queueMutation({
+      entityType: 'field',
+      entityId: field.id,
+      operation: 'update',
+      payload: field,
+    })
+    await queueMutation({
+      entityType: 'alert',
+      entityId: alert.id,
+      operation: 'update',
+      payload: alert,
+    })
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(async (mutation: Record<string, unknown>) => ({
+        status: 409,
+        body: {
+          error: {
+            current: {
+              entityType: mutation.entityType,
+              entityId: mutation.entityId,
+              revision: 2,
+              deleted: false,
+              payload: mutation.payload,
+              updatedAt: '2026-07-30T06:44:00.000Z',
+              author: 'Field Two',
+            },
+          },
+        },
+      })),
+      changes: vi.fn(),
+    }
+
+    expect(await flushFieldOutbox(100, transport)).toMatchObject({
+      conflicts: 2,
+      remaining: 2,
+    })
+    expect((await db.fields.get(field.id))?.syncState).toBe('conflict')
+    expect((await db.alerts.get(alert.id))?.syncState).toBe('conflict')
+  })
+
+  it('requeues the latest device version against the current server revision', async () => {
+    const queued = await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'create',
+      payload: property,
+    })
+    await db.outbox.update(queued.id, {
+      conflict: {
+        entityType: 'property',
+        entityId: property.id,
+        revision: 4,
+        deleted: false,
+        payload: { ...property, name: 'Server Farm' },
+        updatedAt: '2026-07-30T06:44:00.000Z',
+        author: 'Field Two',
+      },
+    })
+
+    expect(await resolveFieldConflict(queued.id, 'keep_device')).toEqual({
+      resolution: 'keep_device',
+      queued: true,
+      entityDeleted: false,
+    })
+    expect(await db.outbox.get(queued.id)).toMatchObject({
+      operation: 'update',
+      baseRevision: 4,
+      conflict: null,
+      attempts: 0,
+    })
+    expect((await db.properties.get(property.id))?.syncState).toBe('queued')
+    expect(
+      (await db.syncMetadata.get(`property:${property.id}`))?.revision,
+    ).toBe(4)
+  })
+
+  it('uses the server version and discards every pending local edit', async () => {
+    const queued = await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'create',
+      payload: property,
+    })
+    await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'update',
+      payload: { ...property, name: 'Later Local Farm' },
+    })
+    await db.outbox.update(queued.id, {
+      conflict: {
+        entityType: 'property',
+        entityId: property.id,
+        revision: 5,
+        deleted: false,
+        payload: { ...property, name: 'Authoritative Server Farm' },
+        updatedAt: '2026-07-30T06:45:00.000Z',
+        author: 'Field Two',
+      },
+    })
+
+    await resolveFieldConflict(queued.id, 'use_server')
+
+    expect((await db.properties.get(property.id))?.name).toBe(
+      'Authoritative Server Farm',
+    )
+    expect((await db.properties.get(property.id))?.syncState).toBe('synced')
+    expect(await db.outbox.where('entityId').equals(property.id).count()).toBe(0)
+    expect(
+      (await db.syncMetadata.get(`property:${property.id}`))?.revision,
+    ).toBe(5)
+  })
+
+  it('can resurrect a record after a conflicting server tombstone', async () => {
+    const queued = await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'update',
+      payload: property,
+    })
+    await db.outbox.update(queued.id, {
+      conflict: {
+        entityType: 'property',
+        entityId: property.id,
+        revision: 6,
+        deleted: true,
+        payload: null,
+        updatedAt: '2026-07-30T06:46:00.000Z',
+        author: 'Field Two',
+      },
+    })
+
+    await resolveFieldConflict(queued.id, 'keep_device')
+
+    expect(await db.outbox.get(queued.id)).toMatchObject({
+      operation: 'create',
+      baseRevision: 6,
+      conflict: null,
+    })
+  })
+
+  it('accepts a server tombstone and removes pending local edits', async () => {
+    const queued = await queueMutation({
+      entityType: 'property',
+      entityId: property.id,
+      operation: 'update',
+      payload: property,
+    })
+    await db.outbox.update(queued.id, {
+      conflict: {
+        entityType: 'property',
+        entityId: property.id,
+        revision: 7,
+        deleted: true,
+        payload: null,
+        updatedAt: '2026-07-30T06:47:00.000Z',
+        author: 'Field Two',
+      },
+    })
+
+    expect(await resolveFieldConflict(queued.id, 'use_server')).toEqual({
+      resolution: 'use_server',
+      queued: false,
+      entityDeleted: true,
+    })
+    expect(await db.properties.get(property.id)).toBeUndefined()
+    expect(await db.outbox.where('entityId').equals(property.id).count()).toBe(0)
+    expect(
+      (await db.syncMetadata.get(`property:${property.id}`))?.revision,
+    ).toBe(7)
   })
 
   it('hydrates a remote property and advances the durable cursor', async () => {
