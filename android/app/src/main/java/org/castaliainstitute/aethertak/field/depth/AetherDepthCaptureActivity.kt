@@ -36,6 +36,7 @@ import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.NotYetAvailableException
 import org.json.JSONArray
 import org.json.JSONObject
+import org.castaliainstitute.aethertak.field.privacy.RecentsPrivacy
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -103,6 +104,7 @@ class AetherDepthCaptureActivity : Activity(), GLSurfaceView.Renderer {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        RecentsPrivacy.configure(this)
         buildInterface()
         ContextCompat.registerReceiver(
             this,
@@ -115,6 +117,7 @@ class AetherDepthCaptureActivity : Activity(), GLSurfaceView.Renderer {
 
     override fun onResume() {
         super.onResume()
+        RecentsPrivacy.revealAfterResume(this)
         if (
             ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED
@@ -130,6 +133,7 @@ class AetherDepthCaptureActivity : Activity(), GLSurfaceView.Renderer {
     }
 
     override fun onPause() {
+        RecentsPrivacy.obscureBeforePause(this)
         surfaceView.onPause()
         session?.pause()
         super.onPause()

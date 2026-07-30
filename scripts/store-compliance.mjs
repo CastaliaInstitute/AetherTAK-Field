@@ -50,6 +50,9 @@ export async function verifyStoreCompliance(rootDirectory) {
     androidExtractionRules,
     androidFilePaths,
     androidVariables,
+    androidMainActivity,
+    androidDepthActivity,
+    androidRecentsPrivacy,
     iosAppDelegate,
     iosMediaPlugin,
     observationCapture,
@@ -65,6 +68,9 @@ export async function verifyStoreCompliance(rootDirectory) {
     read("android/app/src/main/res/xml/data_extraction_rules.xml"),
     read("android/app/src/main/res/xml/file_paths.xml"),
     read("android/variables.gradle"),
+    read("android/app/src/main/java/org/castaliainstitute/aethertak/field/MainActivity.kt"),
+    read("android/app/src/main/java/org/castaliainstitute/aethertak/field/depth/AetherDepthCaptureActivity.kt"),
+    read("android/app/src/main/java/org/castaliainstitute/aethertak/field/privacy/RecentsPrivacy.kt"),
     read("ios/App/App/AppDelegate.swift"),
     read("ios/App/App/AetherMediaIntegrityPlugin.swift"),
     read("src/media/observationCapture.ts"),
@@ -128,11 +134,36 @@ export async function verifyStoreCompliance(rootDirectory) {
     mustInclude(androidFilePaths, scopedPath, "Android FileProvider paths");
   }
   mustInclude(androidVariables, "targetSdkVersion = 36", "Android SDK configuration");
+  mustInclude(
+    androidRecentsPrivacy,
+    "setRecentsScreenshotEnabled(false)",
+    "Android task-switcher privacy policy",
+  );
+  mustInclude(
+    androidRecentsPrivacy,
+    "WindowManager.LayoutParams.FLAG_SECURE",
+    "Android legacy task-switcher privacy policy",
+  );
+  for (const [source, label] of [
+    [androidMainActivity, "Android main activity"],
+    [androidDepthActivity, "Android depth activity"],
+  ]) {
+    mustInclude(source, "RecentsPrivacy.configure(this)", label);
+    mustInclude(source, "RecentsPrivacy.obscureBeforePause(this)", label);
+    mustInclude(source, "RecentsPrivacy.revealAfterResume(this)", label);
+  }
   mustInclude(iosAppDelegate, "isExcludedFromBackup = true", "iOS app storage policy");
   mustInclude(
     iosAppDelegate,
     "completeUntilFirstUserAuthentication",
     "iOS app storage policy",
+  );
+  mustInclude(iosAppDelegate, "showPrivacyShield()", "iOS task-switcher privacy policy");
+  mustInclude(iosAppDelegate, "hidePrivacyShield()", "iOS task-switcher privacy policy");
+  mustInclude(
+    iosAppDelegate,
+    "Protected while inactive",
+    "iOS task-switcher privacy policy",
   );
   mustInclude(iosMediaPlugin, "isExcludedFromBackup = true", "iOS media policy");
   mustInclude(

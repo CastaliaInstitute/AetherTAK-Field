@@ -126,6 +126,12 @@ Before beta distribution, verify on physical devices:
 4. Photo/video metadata and file integrity across offline sync.
 5. LiDAR/Depth accuracy against known dimensions, including confidence and
    unsupported-device fallback.
+6. Background the main map and active depth camera and confirm the iOS app
+   switcher shows the AetherTAK privacy shield. On Android 13 and newer,
+   confirm Recents uses the non-sensitive theme background; on older supported
+   Android, confirm the pause-scoped secure window hides the snapshot. Then
+   return to the foreground and confirm a deliberate validation screenshot is
+   still possible.
 
 ## In-app physical-device evidence
 

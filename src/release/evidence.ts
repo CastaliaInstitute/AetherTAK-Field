@@ -63,8 +63,8 @@ export const physicalReleaseChecks = [
   ],
   [
     'background_lock',
-    'Screen-lock team tracking',
-    'Lock the screen and verify throttled PLI plus the required iOS indicator or Android foreground notification.',
+    'Screen-lock tracking and task-switcher privacy',
+    'Lock the screen and verify throttled PLI plus the required iOS indicator or Android foreground notification. Open the task switcher and confirm the map, contacts, messages, sensor values, and camera/depth preview are obscured while intentional foreground screenshots remain available.',
   ],
   [
     'permission_revocation',

@@ -30,6 +30,9 @@ client and inside Capacitor shells for iOS and Android.
 - Cloud/device-transfer backup exclusion for operational databases, evidence,
   and mission packages; iOS protected-file enforcement; Android no-backup
   extraction rules; and scoped FileProvider roots for explicit operator shares.
+- Background-only task-switcher privacy shields for the operational map and
+  depth camera on iOS and Android, without preventing controlled foreground
+  screenshots used for physical release evidence.
 - Bidirectional field-record and media synchronization with durable revisions,
   conflict preservation, paginated cursors, mTLS uploads/downloads, checksum
   verification, and atomic app-private file hydration.

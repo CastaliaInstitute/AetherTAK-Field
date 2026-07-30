@@ -5,6 +5,7 @@ import Capacitor
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
+    private var privacyShield: UIView?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         protectLocalOperationalData()
@@ -55,22 +56,72 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
 
+    private func showPrivacyShield() {
+        guard let window else { return }
+        if let privacyShield {
+            window.bringSubviewToFront(privacyShield)
+            return
+        }
+
+        let shield = UIView(frame: window.bounds)
+        shield.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        shield.backgroundColor = UIColor(
+            red: 13.0 / 255.0,
+            green: 21.0 / 255.0,
+            blue: 17.0 / 255.0,
+            alpha: 1
+        )
+
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.textColor = UIColor(
+            red: 155.0 / 255.0,
+            green: 225.0 / 255.0,
+            blue: 136.0 / 255.0,
+            alpha: 1
+        )
+        label.font = .systemFont(ofSize: 20, weight: .semibold)
+        label.text = "AetherTAK Field\nProtected while inactive"
+        shield.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: shield.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: shield.centerYAnchor),
+            label.leadingAnchor.constraint(
+                greaterThanOrEqualTo: shield.leadingAnchor,
+                constant: 24
+            ),
+            label.trailingAnchor.constraint(
+                lessThanOrEqualTo: shield.trailingAnchor,
+                constant: -24
+            )
+        ])
+
+        window.addSubview(shield)
+        privacyShield = shield
+    }
+
+    private func hidePrivacyShield() {
+        privacyShield?.removeFromSuperview()
+        privacyShield = nil
+    }
+
     func applicationWillResignActive(_ application: UIApplication) {
-        // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
-        // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
+        showPrivacyShield()
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
-        // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+        showPrivacyShield()
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
-        // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
+        // Keep the shield visible through the foreground transition. UIKit can
+        // display the task-switcher snapshot until the app becomes active.
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        hidePrivacyShield()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

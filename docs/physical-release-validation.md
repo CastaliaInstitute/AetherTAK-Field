@@ -40,7 +40,7 @@ companion-device session that covers the capability.
 | Known-dimension depth accuracy | A controlled target is measured against a predeclared tolerance. |
 | Depth artifact export | Preview, metric depth, supported confidence, point cloud, measurements, and supported model open correctly; every synchronized artifact retains its originating SHA-256. |
 | Unsupported-depth fallback | Unsupported hardware reports capability honestly and provides a safe fallback without a crash. |
-| Screen-lock team tracking | PLI continues at the expected cadence with the iOS indicator or Android foreground notification. |
+| Screen-lock tracking and task-switcher privacy | PLI continues at the expected cadence with the iOS indicator or Android foreground notification. The task switcher shows only the privacy shield or non-sensitive theme background for both the main app and depth capture, while an intentional foreground validation screenshot still works. |
 | Permission revocation | Location/camera permission loss produces a safe, recoverable error. On Android, revoking notification visibility stops background PLI without leaving a stale sharing state. |
 | Airplane-mode recovery | Queued work survives relaunch and resumes automatically after the network returns. |
 | Low-storage behavior | Capture or map download fails within a bounded operation and remains recoverable. |
