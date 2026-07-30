@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { gunzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import {
   collectReleaseEvidence,
   verifyReleaseEvidence,
@@ -69,6 +69,32 @@ const readinessCheckIds = [
   'network',
 ]
 
+const readinessPrivacyExclusions = [
+  'certificate and private-key material',
+  'enrollment package passwords',
+  'server addresses and profile identifiers',
+  'device identifiers and personal device names',
+  'coordinates and location history',
+  'chat and TAK event contents',
+  'observation notes and media contents',
+]
+
+const physicalPrivacyFlags = [
+  'excludesCredentials',
+  'excludesServerAddress',
+  'excludesCoordinates',
+  'excludesRecordAndMessageContent',
+  'excludesMediaAndLogs',
+  'excludesPersonalTesterIdentity',
+]
+
+const interoperabilityPrivacyFlags = [
+  'excludesServerAddress',
+  'excludesCoordinates',
+  'excludesMessageContent',
+  'excludesBinaryEvidence',
+]
+
 function app() {
   return {
     name: 'AetherTAK Field',
@@ -122,7 +148,7 @@ function readiness(platform, model, supportedDepth) {
         id === 'depth-capability' && !supportedDepth ? 'attention' : 'pass',
       detail: 'Recorded.',
     })),
-    privacy: { excludes: [] },
+    privacy: { excludes: [...readinessPrivacyExclusions] },
   }
 }
 
@@ -349,6 +375,9 @@ test('builds and verifies a complete private multi-device evidence bundle', () =
     readinessMustFollowPhysicalValidation: true,
     resultTimesMustFallWithinSessions: true,
     serverLogTimesMustFallWithinInteroperabilitySessions: true,
+    privacyContractsRequired: true,
+    maximumBundleBytes: 1_048_576,
+    maximumReferenceCharacters: 240,
   })
   assert.match(manifest.evidenceBundleSha256, /^[0-9a-f]{64}$/)
   assert.equal(JSON.stringify(manifest).includes('evidence/'), false)
@@ -540,12 +569,134 @@ test('requires readiness after physical exercises and bounded server logs', () =
   )
 })
 
+test('requires every exported privacy contract without unexpected fields', () => {
+  const readinessPrivacy = validBundle()
+  readinessPrivacy.readinessReports[0].privacy.excludes.pop()
+  assert.throws(
+    () => verifyReleaseEvidence(readinessPrivacy, expected(), new Date(now)),
+    /privacy exclusions are incomplete or unexpected/,
+  )
+
+  const physicalPrivacy = validBundle()
+  physicalPrivacy.physicalSessions[0].privacy.excludesCredentials = false
+  assert.throws(
+    () => verifyReleaseEvidence(physicalPrivacy, expected(), new Date(now)),
+    /excludesCredentials must be true/,
+  )
+
+  const interoperabilityPrivacy = validBundle()
+  interoperabilityPrivacy.interoperabilitySessions[0].privacy.endpoint = true
+  assert.throws(
+    () =>
+      verifyReleaseEvidence(
+        interoperabilityPrivacy,
+        expected(),
+        new Date(now),
+      ),
+    /does not match the expected privacy contract/,
+  )
+})
+
+test('standalone verifier mirrors all in-app evidence privacy declarations', async () => {
+  const [readinessSource, physicalSource, interoperabilitySource, verifier] =
+    await Promise.all([
+      readFile(
+        new URL('../src/device/readiness.ts', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/release/evidence.ts', import.meta.url),
+        'utf8',
+      ),
+      readFile(
+        new URL('../src/interoperability/evidence.ts', import.meta.url),
+        'utf8',
+      ),
+      readFile(new URL('./release-evidence.mjs', import.meta.url), 'utf8'),
+    ])
+  for (const exclusion of readinessPrivacyExclusions) {
+    assert.ok(readinessSource.includes(`'${exclusion}'`))
+    assert.ok(verifier.includes(`'${exclusion}'`))
+  }
+  for (const flag of physicalPrivacyFlags) {
+    assert.ok(physicalSource.includes(`${flag}: z.literal(true)`))
+    assert.ok(verifier.includes(`'${flag}'`))
+  }
+  for (const flag of interoperabilityPrivacyFlags) {
+    assert.ok(
+      interoperabilitySource.includes(`${flag}: z.literal(true)`),
+    )
+    assert.ok(verifier.includes(`'${flag}'`))
+  }
+})
+
+test('rejects malformed IDs, duplicate checks, and unbounded references', () => {
+  const malformedId = validBundle()
+  malformedId.physicalSessions[0].id = 'not-a-session-id'
+  assert.throws(
+    () => verifyReleaseEvidence(malformedId, expected(), new Date(now)),
+    /must be a UUID/,
+  )
+
+  const duplicateCheck = validBundle()
+  duplicateCheck.readinessReports[0].checks.push({
+    ...duplicateCheck.readinessReports[0].checks[0],
+  })
+  assert.throws(
+    () => verifyReleaseEvidence(duplicateCheck, expected(), new Date(now)),
+    /duplicate check/,
+  )
+
+  const unknownCheck = validBundle()
+  unknownCheck.readinessReports[0].checks.at(-1).id = 'fabricated-check'
+  assert.throws(
+    () => verifyReleaseEvidence(unknownCheck, expected(), new Date(now)),
+    /unknown check/,
+  )
+
+  const inconsistentVerdict = validBundle()
+  inconsistentVerdict.readinessReports.find(
+    (report) => report.overall === 'pass',
+  ).overall = 'attention'
+  assert.throws(
+    () =>
+      verifyReleaseEvidence(
+        inconsistentVerdict,
+        expected(),
+        new Date(now),
+      ),
+    /overall verdict does not match/,
+  )
+
+  const oversizedReference = validBundle()
+  oversizedReference.interoperabilitySessions[0]
+    .serverLogInterval.reference = 'x'.repeat(241)
+  assert.throws(
+    () =>
+      verifyReleaseEvidence(
+        oversizedReference,
+        expected(),
+        new Date(now),
+      ),
+    /at most 240 characters/,
+  )
+
+  const oversizedBundle = validBundle()
+  oversizedBundle.padding = 'x'.repeat(1024 * 1024)
+  assert.throws(
+    () => verifyReleaseEvidence(oversizedBundle, expected(), new Date(now)),
+    /bundle exceeds 1 MiB/,
+  )
+})
+
 test('collects, verifies, and encodes a private bundle through the CLI', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'aethertak-evidence-test-'))
   const input = join(directory, 'input')
   const bundlePath = join(directory, 'bundle.json')
   const manifestPath = join(directory, 'manifest.json')
   const encodedPath = join(directory, 'bundle.base64')
+  const archivePath = join(directory, 'bundle.json.gz')
+  const decodedPath = join(directory, 'decoded.json')
   try {
     await mkdir(input)
     await Promise.all(
@@ -602,6 +753,50 @@ test('collects, verifies, and encodes a private bundle through the CLI', async (
     const encoded = (await readFile(encodedPath, 'utf8')).trim()
     const decoded = JSON.parse(gunzipSync(Buffer.from(encoded, 'base64')))
     assert.equal(decoded.sourceRevision, revision)
+    await writeFile(archivePath, Buffer.from(encoded, 'base64'))
+    execFileSync(process.execPath, [
+      'scripts/release-evidence.mjs',
+      'decode',
+      '--input',
+      archivePath,
+      '--output',
+      decodedPath,
+    ])
+    assert.deepEqual(
+      JSON.parse(await readFile(decodedPath, 'utf8')),
+      decoded,
+    )
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('bounded decoder rejects a compressed evidence expansion over 1 MiB', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'aethertak-bomb-test-'))
+  const archivePath = join(directory, 'oversized.json.gz')
+  const outputPath = join(directory, 'oversized.json')
+  try {
+    await writeFile(
+      archivePath,
+      gzipSync(Buffer.alloc(1024 * 1024 + 1, 0x20)),
+    )
+    assert.throws(
+      () =>
+        execFileSync(
+          process.execPath,
+          [
+            'scripts/release-evidence.mjs',
+            'decode',
+            '--input',
+            archivePath,
+            '--output',
+            outputPath,
+          ],
+          { stdio: 'pipe' },
+        ),
+      (error) =>
+        String(error.stderr).includes('expands beyond 1 MiB'),
+    )
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

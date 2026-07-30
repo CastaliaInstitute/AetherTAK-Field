@@ -82,7 +82,9 @@ jobs:
           EVIDENCE_BUNDLE="$RUNNER_TEMP/aethertak-release-evidence.json"
           EVIDENCE_MANIFEST="$RUNNER_TEMP/aethertak-release-attestation.json"
           printf '%s' "$RELEASE_EVIDENCE_BUNDLE_BASE64" | base64 --decode > "$EVIDENCE_ARCHIVE"
-          gzip --decompress --stdout "$EVIDENCE_ARCHIVE" > "$EVIDENCE_BUNDLE"
+          node scripts/release-evidence.mjs decode \
+            --input "$EVIDENCE_ARCHIVE" \
+            --output "$EVIDENCE_BUNDLE"
           node scripts/release-evidence.mjs verify \
             --bundle "$EVIDENCE_BUNDLE" \
             --version "${{ inputs.version_name }}" \

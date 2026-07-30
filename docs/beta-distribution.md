@@ -38,6 +38,12 @@ must fall inside their recorded session. A Device readiness report must be
 generated after the matching physical-device session completes, so a stale
 pre-exercise snapshot cannot authorize distribution.
 
+The verifier also enforces each export's privacy declaration, bounded
+device/session metadata, UUID session identifiers, unique readiness checks,
+and bounded controlled-evidence references. Missing or false exclusion flags,
+unexpected privacy fields, malformed identifiers, or oversized references
+fail authorization.
+
 The private bundle is decoded only into the Actions runner's temporary
 directory and deleted after authorization. The workflow retains only a
 non-sensitive digest attestation as an artifact. Each platform job downloads
@@ -45,6 +51,10 @@ that exact authorization artifact and creates a provenance statement before
 any store upload. The statement binds the final AAB or IPA checksum to the
 evidence-bundle digest, source revision, version/build, repository, and
 workflow run.
+
+Bundle decoding is dependency-free and capped at 1 MiB of decompressed JSON.
+This limit is enforced before parsing, so a small compressed archive cannot
+expand without bound on the authorization runner.
 
 ## Prepare private release evidence
 

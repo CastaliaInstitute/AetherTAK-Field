@@ -175,6 +175,8 @@ test('keeps beta distribution manual, protected, and internal-only', async () =>
   assert.match(workflow, /test "\$CONFIRM" = "BETA"/)
   assert.match(workflow, /secrets\.RELEASE_EVIDENCE_BUNDLE_BASE64/)
   assert.match(workflow, /scripts\/release-evidence\.mjs verify/)
+  assert.match(workflow, /scripts\/release-evidence\.mjs decode/)
+  assert.doesNotMatch(workflow, /gzip --decompress/)
   assert.match(workflow, /aethertak-field-release-attestation/)
   assert.match(workflow, /Remove private release evidence/)
   assert.match(workflow, /AETHER_GOOGLE_PLAY_TRACK: internal/)

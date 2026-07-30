@@ -7,7 +7,7 @@ import {
 } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { gzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 
 const physicalChecks = [
   'enrollment_import',
@@ -55,8 +55,43 @@ const requiredReadinessChecks = [
   'media-integrity',
 ]
 
+const readinessChecks = [
+  ...requiredReadinessChecks,
+  'depth-capability',
+  'network',
+]
+
+const readinessPrivacyExclusions = [
+  'certificate and private-key material',
+  'enrollment package passwords',
+  'server addresses and profile identifiers',
+  'device identifiers and personal device names',
+  'coordinates and location history',
+  'chat and TAK event contents',
+  'observation notes and media contents',
+]
+
+const physicalPrivacyFlags = [
+  'excludesCredentials',
+  'excludesServerAddress',
+  'excludesCoordinates',
+  'excludesRecordAndMessageContent',
+  'excludesMediaAndLogs',
+  'excludesPersonalTesterIdentity',
+]
+
+const interoperabilityPrivacyFlags = [
+  'excludesServerAddress',
+  'excludesCoordinates',
+  'excludesMessageContent',
+  'excludesBinaryEvidence',
+]
+
 const maximumEvidenceAgeMs = 30 * 24 * 60 * 60 * 1_000
 const allowedClockSkewMs = 5 * 60 * 1_000
+const maximumEvidenceBundleBytes = 1024 * 1024
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function fail(message) {
   throw new Error(message)
@@ -77,6 +112,56 @@ function object(value, label) {
 function string(value, label) {
   requireValue(typeof value === 'string' && value.length > 0, `${label} is required.`)
   return value
+}
+
+function boundedString(value, label, maximum, allowEmpty = false) {
+  requireValue(typeof value === 'string', `${label} must be a string.`)
+  requireValue(
+    (allowEmpty || value.trim().length > 0) && value.length <= maximum,
+    `${label} must contain at most ${maximum} characters${allowEmpty ? '' : ' and cannot be empty'}.`,
+  )
+  return value
+}
+
+function uuid(value, label) {
+  requireValue(
+    typeof value === 'string' && uuidPattern.test(value),
+    `${label} must be a UUID.`,
+  )
+  return value
+}
+
+function exactTrueFlags(value, keys, label) {
+  const privacy = object(value, label)
+  const actualKeys = Object.keys(privacy).sort()
+  const expectedKeys = [...keys].sort()
+  requireValue(
+    actualKeys.length === expectedKeys.length &&
+      actualKeys.every((key, index) => key === expectedKeys[index]),
+    `${label} does not match the expected privacy contract.`,
+  )
+  for (const key of keys) {
+    requireValue(
+      privacy[key] === true,
+      `${label} flag ${key} must be true.`,
+    )
+  }
+}
+
+function validateReadinessPrivacy(value) {
+  const privacy = object(value, 'Readiness privacy')
+  requireValue(
+    Object.keys(privacy).length === 1 &&
+      Object.hasOwn(privacy, 'excludes'),
+    'Readiness privacy does not match the expected privacy contract.',
+  )
+  const exclusions = array(privacy.excludes, 'Readiness privacy exclusions')
+  requireValue(
+    exclusions.length === readinessPrivacyExclusions.length &&
+      new Set(exclusions).size === exclusions.length &&
+      readinessPrivacyExclusions.every((entry) => exclusions.includes(entry)),
+    'Readiness privacy exclusions are incomplete or unexpected.',
+  )
 }
 
 function timestamp(value, label) {
@@ -232,28 +317,90 @@ function validateReadiness(reportValue, expected, clock) {
     'Readiness generation time',
     clock,
   )
-  exactBuild(object(report.app, 'Readiness app'), expected, 'Readiness report')
+  const app = object(report.app, 'Readiness app')
+  exactBuild(app, expected, 'Readiness report')
+  requireValue(
+    app.id === 'org.castaliainstitute.aethertak.field',
+    'Readiness report has the wrong application identifier.',
+  )
+  boundedString(app.name, 'Readiness application name', 120)
+  boundedString(app.version, 'Readiness application version', 80)
+  boundedString(String(app.build), 'Readiness application build', 80)
+  boundedString(app.sourceRevision, 'Readiness source revision', 80)
   const device = object(report.device, 'Readiness device')
   requireValue(
     device.platform === 'ios' || device.platform === 'android',
     'Readiness report must come from iOS or Android.',
   )
   requireValue(device.isVirtual === false, 'Readiness report came from a virtual device.')
+  boundedString(device.model, 'Readiness device model', 120)
+  boundedString(device.operatingSystem, 'Readiness operating system', 120)
+  boundedString(device.osVersion, 'Readiness OS version', 120)
+  boundedString(device.manufacturer, 'Readiness manufacturer', 120, true)
+  boundedString(device.webViewVersion, 'Readiness WebView version', 120, true)
   const runtime = object(report.runtime, 'Readiness runtime')
   requireValue(runtime.native === true, 'Readiness report did not come from the native app.')
-  const checks = new Map(
-    array(report.checks, 'Readiness checks').map((checkValue) => {
-      const check = object(checkValue, 'Readiness check')
-      return [check.id, check]
-    }),
+  requireValue(typeof runtime.online === 'boolean', 'Readiness online state is invalid.')
+  requireValue(
+    Number.isInteger(runtime.contactCount) && runtime.contactCount >= 0,
+    'Readiness contact count is invalid.',
   )
+  requireValue(
+    report.overall === 'pass' || report.overall === 'attention',
+    'Readiness overall verdict is not releasable.',
+  )
+  const checks = new Map()
+  for (const checkValue of array(report.checks, 'Readiness checks')) {
+    const check = object(checkValue, 'Readiness check')
+    boundedString(check.id, 'Readiness check ID', 80)
+    requireValue(
+      readinessChecks.includes(check.id),
+      `Readiness report has an unknown check ${check.id}.`,
+    )
+    boundedString(check.label, `Readiness check ${check.id} label`, 120)
+    boundedString(check.detail, `Readiness check ${check.id} detail`, 1_000)
+    requireValue(
+      check.status === 'pass' ||
+        check.status === 'attention' ||
+        check.status === 'fail',
+      `Readiness check ${check.id} has an invalid status.`,
+    )
+    requireValue(
+      !checks.has(check.id),
+      `Readiness report has duplicate check ${check.id}.`,
+    )
+    checks.set(check.id, check)
+  }
   for (const id of requiredReadinessChecks) {
     requireValue(
       checks.get(id)?.status === 'pass',
       `Readiness check ${id} did not pass on ${device.model}.`,
     )
   }
+  requireValue(
+    checks.size === readinessChecks.length,
+    'Readiness report does not contain the complete check matrix.',
+  )
+  const derivedOverall = [...checks.values()].some(
+    (check) => check.status === 'fail',
+  )
+    ? 'fail'
+    : [...checks.values()].some((check) => check.status === 'attention')
+      ? 'attention'
+      : 'pass'
+  requireValue(
+    report.overall === derivedOverall,
+    'Readiness overall verdict does not match its check results.',
+  )
   const depth = object(report.depth, 'Readiness depth')
+  requireValue(
+    typeof depth.supported === 'boolean' &&
+      typeof depth.supportsPointCloud === 'boolean' &&
+      typeof depth.supportsMesh === 'boolean' &&
+      typeof depth.supportsConfidence === 'boolean',
+    'Readiness depth capability flags are invalid.',
+  )
+  boundedString(depth.provider, 'Readiness depth provider', 80)
   if (depth.supported) {
     const expectedProvider = device.platform === 'ios' ? 'arkit' : 'arcore'
     requireValue(
@@ -261,7 +408,16 @@ function validateReadiness(reportValue, expected, clock) {
       `${device.platform} depth report does not identify ${expectedProvider}.`,
     )
     requireValue(depth.supportsPointCloud === true, 'Supported depth lacks point-cloud capability.')
+  } else {
+    requireValue(
+      depth.provider === 'none' &&
+        depth.supportsPointCloud === false &&
+        depth.supportsMesh === false &&
+        depth.supportsConfidence === false,
+      'Unsupported depth report claims native depth capabilities.',
+    )
   }
+  validateReadinessPrivacy(report.privacy)
   return {
     report,
     device,
@@ -300,11 +456,18 @@ function completePhysicalResult(result, label, interval, clock) {
     `${label} test timestamp is outside its session interval.`,
   )
   if (result.status === 'not_applicable') {
+    boundedString(result.notes, `${label} notes`, 500)
     requireValue(
       typeof result.notes === 'string' && result.notes.trim().length > 0,
       `${label} N/A has no justification.`,
     )
   } else {
+    boundedString(
+      result.evidenceReference,
+      `${label} evidence reference`,
+      240,
+    )
+    boundedString(result.notes, `${label} notes`, 500, true)
     requireValue(
       typeof result.evidenceReference === 'string' &&
         result.evidenceReference.trim().length > 0,
@@ -320,6 +483,12 @@ function completePhysicalResult(result, label, interval, clock) {
 function validatePhysicalSession(sessionValue, expected, readiness, clock) {
   const session = object(sessionValue, 'Device validation session')
   requireValue(session.schemaVersion === 1, 'Unsupported device validation schema.')
+  uuid(session.id, 'Device validation ID')
+  boundedString(
+    session.evidenceSetReference,
+    'Device validation evidence-set reference',
+    240,
+  )
   const interval = {
     startsAt: evidenceTimestamp(
       session.startedAt,
@@ -356,6 +525,18 @@ function validatePhysicalSession(sessionValue, expected, readiness, clock) {
   requireValue(
     device.platform === 'ios' || device.platform === 'android',
     'Device validation must come from iOS or Android.',
+  )
+  boundedString(device.model, 'Device validation model', 120)
+  boundedString(
+    device.operatingSystem,
+    'Device validation operating system',
+    120,
+  )
+  boundedString(device.osVersion, 'Device validation OS version', 120)
+  exactTrueFlags(
+    session.privacy,
+    physicalPrivacyFlags,
+    'Device validation privacy',
   )
   const results = uniqueResults(
     session.results,
@@ -439,6 +620,7 @@ function validatePhysicalSession(sessionValue, expected, readiness, clock) {
 function validateInteroperabilitySession(sessionValue, expected, clock) {
   const session = object(sessionValue, 'Interoperability session')
   requireValue(session.schemaVersion === 1, 'Unsupported interoperability schema.')
+  uuid(session.id, 'Interoperability session ID')
   const sessionStartsAt = evidenceTimestamp(
     session.startedAt,
     'Interoperability start',
@@ -468,7 +650,19 @@ function validateInteroperabilitySession(sessionValue, expected, clock) {
     session.peer?.client === 'iTAK' || session.peer?.client === 'ATAK',
     'Interoperability peer must be iTAK or ATAK.',
   )
-  string(session.peer.version, 'Peer version')
+  boundedString(session.peer.version, 'Peer version', 80)
+  boundedString(session.peer.deviceModel, 'Peer device model', 120)
+  boundedString(session.peer.osVersion, 'Peer OS version', 120)
+  boundedString(session.field.deviceModel, 'Field device model', 120)
+  boundedString(session.field.osVersion, 'Field OS version', 120)
+  boundedString(session.serverVersion, 'TAK Server version', 120)
+  boundedString(session.senderCallsign, 'Field callsign', 80)
+  boundedString(session.recipientCallsign, 'Peer callsign', 80)
+  exactTrueFlags(
+    session.privacy,
+    interoperabilityPrivacyFlags,
+    'Interoperability privacy',
+  )
   const expectedPeerVersion =
     session.peer.client === 'iTAK' ? expected.itakVersion : expected.atakVersion
   requireValue(
@@ -506,7 +700,11 @@ function validateInteroperabilitySession(sessionValue, expected, clock) {
     startsAt >= sessionStartsAt && endsAt <= sessionCompletedAt,
     'Server log interval is outside its interoperability session.',
   )
-  string(interval.reference, 'Controlled server log reference')
+  boundedString(
+    interval.reference,
+    'Controlled server log reference',
+    240,
+  )
   const expectedPairs = new Set(
     interoperabilityCapabilities.flatMap((capability) => [
       `${capability}:field_to_peer`,
@@ -530,7 +728,8 @@ function validateInteroperabilitySession(sessionValue, expected, clock) {
       testedAt >= sessionStartsAt && testedAt <= sessionCompletedAt,
       `${pair} timestamp is outside its interoperability session.`,
     )
-    string(result.evidenceReference, `${pair} evidence reference`)
+    boundedString(result.evidenceReference, `${pair} evidence reference`, 240)
+    boundedString(result.notes, `${pair} notes`, 500, true)
   }
   requireValue(
     actualPairs.size === expectedPairs.size,
@@ -552,6 +751,10 @@ function requiredPlatforms(value) {
 export function verifyReleaseEvidence(bundleValue, expected, now = new Date()) {
   const clock = verificationClock(now)
   const bundle = object(bundleValue, 'Release evidence bundle')
+  requireValue(
+    Buffer.byteLength(JSON.stringify(bundle)) <= maximumEvidenceBundleBytes,
+    'Release evidence bundle exceeds 1 MiB.',
+  )
   requireValue(bundle.schemaVersion === 1, 'Unsupported release evidence bundle schema.')
   requireValue(bundle.versionName === expected.versionName, 'Evidence bundle version mismatch.')
   requireValue(String(bundle.buildNumber) === expected.buildNumber, 'Evidence bundle build mismatch.')
@@ -617,6 +820,9 @@ export function verifyReleaseEvidence(bundleValue, expected, now = new Date()) {
       readinessMustFollowPhysicalValidation: true,
       resultTimesMustFallWithinSessions: true,
       serverLogTimesMustFallWithinInteroperabilitySessions: true,
+      privacyContractsRequired: true,
+      maximumBundleBytes: maximumEvidenceBundleBytes,
+      maximumReferenceCharacters: 240,
     },
     coverage: {
       physicalPlatforms: [...new Set(
@@ -714,14 +920,37 @@ async function encodeCommand(options) {
   await writePrivate(option(options, 'output'), `${encoded}\n`)
 }
 
+async function decodeCommand(options) {
+  const archive = await readFile(option(options, 'input'))
+  requireValue(
+    archive.length <= 48 * 1024,
+    'Compressed evidence archive exceeds the accepted size limit.',
+  )
+  let contents
+  try {
+    contents = gunzipSync(archive, {
+      maxOutputLength: maximumEvidenceBundleBytes,
+    })
+  } catch {
+    fail('Evidence archive is invalid or expands beyond 1 MiB.')
+  }
+  try {
+    JSON.parse(contents)
+  } catch {
+    fail('Decoded evidence bundle is not valid JSON.')
+  }
+  await writePrivate(option(options, 'output'), contents)
+}
+
 async function main() {
   const [command, ...values] = process.argv.slice(2)
   const options = argumentsMap(values)
   if (command === 'collect') return collectCommand(options)
   if (command === 'verify') return verifyCommand(options)
   if (command === 'encode') return encodeCommand(options)
+  if (command === 'decode') return decodeCommand(options)
   fail(
-    `Usage: ${basename(process.argv[1])} collect|verify|encode [options]`,
+    `Usage: ${basename(process.argv[1])} collect|verify|encode|decode [options]`,
   )
 }
 
