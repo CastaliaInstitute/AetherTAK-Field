@@ -53,6 +53,7 @@ export async function saveLocalEntity(entity: MutableFieldEntity) {
       db.ecologicalSites,
       db.observations,
       db.outbox,
+      db.syncMetadata,
     ],
     async () => {
       switch (entity.type) {

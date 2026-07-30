@@ -10,6 +10,7 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import org.castaliainstitute.aethertak.field.tak.TakEnrollmentPackage
+import org.castaliainstitute.aethertak.field.tak.TakFieldApiClient
 import org.castaliainstitute.aethertak.field.tak.TakIdentityStore
 import org.castaliainstitute.aethertak.field.tak.TakProfile
 import org.castaliainstitute.aethertak.field.tak.TakTlsTransport
@@ -20,6 +21,7 @@ class AetherTakTransportPlugin : Plugin() {
     private val contacts = ConcurrentHashMap<String, JSObject>()
     private lateinit var identityStore: TakIdentityStore
     private lateinit var transport: TakTlsTransport
+    private lateinit var fieldApi: TakFieldApiClient
     @Volatile private var state = "not_enrolled"
     @Volatile private var lastError: String? = null
 
@@ -35,6 +37,7 @@ class AetherTakTransportPlugin : Plugin() {
                 notifyListeners("statusChanged", status())
             },
         )
+        fieldApi = TakFieldApiClient(context, transport)
     }
 
     @PluginMethod
@@ -131,6 +134,69 @@ class AetherTakTransportPlugin : Plugin() {
                     )
                 },
             )
+        }
+    }
+
+    @PluginMethod
+    fun fieldMutation(call: PluginCall) {
+        val mutation = call.getObject("mutation")
+        executeFieldRequest(call) { profile, port ->
+            requireNotNull(mutation) { "A mutation object is required." }
+            fieldApi.mutate(profile, port, mutation.toString())
+        }
+    }
+
+    @PluginMethod
+    fun fieldChanges(call: PluginCall) {
+        val cursor = call.getLong("cursor", 0L) ?: 0L
+        val limit = call.getInt("limit", 100) ?: 100
+        executeFieldRequest(call) { profile, port ->
+            require(cursor >= 0) { "The change cursor cannot be negative." }
+            require(limit in 1..500) { "The change limit must be between 1 and 500." }
+            fieldApi.changes(profile, port, cursor, limit)
+        }
+    }
+
+    @PluginMethod
+    fun fieldUpload(call: PluginCall) {
+        executeFieldRequest(call) { profile, port ->
+            fieldApi.upload(
+                profile = profile,
+                port = port,
+                mediaId = requireNotNull(call.getString("mediaId")),
+                uriValue = requireNotNull(call.getString("uri")),
+                contentType = requireNotNull(call.getString("contentType")),
+                observationId = call.getString("observationId"),
+                role = call.getString("role"),
+                suppliedSha256 = call.getString("sha256"),
+            )
+        }
+    }
+
+    private fun executeFieldRequest(
+        call: PluginCall,
+        action: (TakProfile, Int) -> org.castaliainstitute.aethertak.field.tak.FieldApiResponse,
+    ) {
+        val profile = identityStore.load()
+        if (profile == null) {
+            call.reject("Import an AetherTAK enrollment package first.", "NOT_ENROLLED")
+            return
+        }
+        val port = call.getInt("port", 9443) ?: 9443
+        worker.execute {
+            try {
+                val response = action(profile, port)
+                call.resolve(JSObject().apply {
+                    put("status", response.status)
+                    put("body", JSObject(response.body))
+                })
+            } catch (error: Exception) {
+                call.reject(
+                    error.message ?: "Aether Field API request failed.",
+                    "FIELD_API_FAILED",
+                    error,
+                )
+            }
         }
     }
 

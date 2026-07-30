@@ -25,6 +25,8 @@ import {
 import { captureDepthObservation } from './media/depthObservation'
 import { depthScanner } from './platform/depth'
 import { takTransport } from './platform/tak'
+import { flushFieldOutbox } from './sync/fieldSync'
+import { flushTakOutbox } from './tak/outbox'
 import {
   createOfflineMapRegion,
   downloadOfflineMapRegion,
@@ -77,6 +79,16 @@ export default function App() {
     void takTransport.status().then((status) => setConnection(status.state))
     void depthScanner.capability().then(setDepth)
   }, [])
+
+  useEffect(() => {
+    const synchronize = () => {
+      if (connection !== 'connected' || !navigator.onLine) return
+      void Promise.allSettled([flushTakOutbox(), flushFieldOutbox()])
+    }
+    synchronize()
+    window.addEventListener('online', synchronize)
+    return () => window.removeEventListener('online', synchronize)
+  }, [connection])
 
   const averageHealth = useMemo(() => {
     const scored = fields.flatMap((field) =>

@@ -113,7 +113,7 @@ export async function captureDepthObservation(
 
   await db.transaction(
     'rw',
-    [db.observations, db.media, db.outbox],
+    [db.observations, db.media, db.outbox, db.syncMetadata],
     async () => {
       await db.observations.add(observation)
       await db.media.bulkAdd(media)

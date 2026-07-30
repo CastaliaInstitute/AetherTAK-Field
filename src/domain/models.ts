@@ -167,7 +167,7 @@ export const mediaCaptureSchema = z.object({
     })
     .nullable()
     .default(null),
-  syncState: z.enum(['local', 'queued', 'synced']),
+  syncState: z.enum(['local', 'queued', 'synced', 'conflict']),
 })
 
 export type MediaCapture = z.infer<typeof mediaCaptureSchema>

@@ -11,7 +11,10 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "disconnect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getContacts", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "sendCot", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "sendCot", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fieldMutation", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fieldChanges", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fieldUpload", returnType: CAPPluginReturnPromise)
     ]
 
     private let worker = DispatchQueue(
@@ -22,6 +25,7 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
     private var contacts: [String: [String: Any]] = [:]
     private var identityStore: TakIdentityStore!
     private var transport: TakTlsTransport!
+    private var fieldApi: TakFieldApiClient!
     private var state = "not_enrolled"
     private var lastError: String?
 
@@ -40,6 +44,7 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
                 self.notifyListeners("statusChanged", data: self.status())
             }
         )
+        fieldApi = TakFieldApiClient(identityStore: identityStore)
     }
 
     @objc func importEnrollmentPackage(_ call: CAPPluginCall) {
@@ -147,6 +152,95 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
                     error
                 )
             }
+        }
+    }
+
+    @objc func fieldMutation(_ call: CAPPluginCall) {
+        guard let mutation = call.getObject("mutation") else {
+            call.reject("A mutation object is required.", "INVALID_MUTATION")
+            return
+        }
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.mutate(
+                profile: profile,
+                port: port,
+                mutation: mutation
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    @objc func fieldChanges(_ call: CAPPluginCall) {
+        let cursor = call.getInt("cursor") ?? 0
+        let limit = call.getInt("limit") ?? 100
+        guard cursor >= 0, (1...500).contains(limit) else {
+            call.reject("Invalid change cursor or limit.", "INVALID_PAGINATION")
+            return
+        }
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.changes(
+                profile: profile,
+                port: port,
+                cursor: cursor,
+                limit: limit
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    @objc func fieldUpload(_ call: CAPPluginCall) {
+        guard
+            let mediaId = call.getString("mediaId"),
+            let uri = call.getString("uri"),
+            let contentType = call.getString("contentType")
+        else {
+            call.reject("mediaId, uri, and contentType are required.", "INVALID_MEDIA")
+            return
+        }
+        withFieldProfile(call) { profile, port in
+            self.fieldApi.upload(
+                profile: profile,
+                port: port,
+                mediaId: mediaId,
+                uri: uri,
+                contentType: contentType,
+                observationId: call.getString("observationId"),
+                role: call.getString("role"),
+                suppliedSha256: call.getString("sha256")
+            ) { result in self.resolveField(call, result) }
+        }
+    }
+
+    private func withFieldProfile(
+        _ call: CAPPluginCall,
+        action: (TakProfile, Int) -> Void
+    ) {
+        guard let profile = identityStore.loadProfile() else {
+            call.reject(
+                "Import an AetherTAK enrollment package first.",
+                "NOT_ENROLLED"
+            )
+            return
+        }
+        let port = call.getInt("port") ?? 9443
+        guard (1...65535).contains(port) else {
+            call.reject("Invalid Aether Field API port.", "INVALID_PORT")
+            return
+        }
+        action(profile, port)
+    }
+
+    private func resolveField(
+        _ call: CAPPluginCall,
+        _ result: Result<FieldApiResponse, Error>
+    ) {
+        switch result {
+        case .success(let response):
+            call.resolve(["status": response.status, "body": response.body])
+        case .failure(let error):
+            call.reject(
+                error.localizedDescription,
+                "FIELD_API_FAILED",
+                error
+            )
         }
     }
 

@@ -37,6 +37,29 @@ interface AetherTakTransportPlugin {
   getStatus(): Promise<TakStatus>
   getContacts(): Promise<{ contacts: TakContact[] }>
   sendCot(options: { xml: string }): Promise<{ accepted: boolean }>
+  fieldMutation(options: {
+    port: number
+    mutation: Record<string, unknown>
+  }): Promise<NativeFieldResponse>
+  fieldChanges(options: {
+    port: number
+    cursor: number
+    limit: number
+  }): Promise<NativeFieldResponse>
+  fieldUpload(options: {
+    port: number
+    mediaId: string
+    uri: string
+    contentType: string
+    observationId?: string
+    role?: string
+    sha256?: string
+  }): Promise<NativeFieldResponse>
+}
+
+export interface NativeFieldResponse {
+  status: number
+  body: Record<string, unknown>
 }
 
 const nativeTak = registerPlugin<AetherTakTransportPlugin>('AetherTakTransport')
@@ -53,6 +76,29 @@ const browserStatus: TakStatus = {
   },
   lastConnectedAt: null,
   error: 'Native TAK transport is available in the iOS and Android builds.',
+}
+
+const configuredFieldPort = Number(
+  import.meta.env.VITE_AETHER_FIELD_API_PORT ?? '9443',
+)
+
+function fieldPort() {
+  if (
+    !Number.isInteger(configuredFieldPort) ||
+    configuredFieldPort < 1 ||
+    configuredFieldPort > 65_535
+  ) {
+    throw new Error('VITE_AETHER_FIELD_API_PORT must be a valid TCP port.')
+  }
+  return configuredFieldPort
+}
+
+function requireNativeFieldApi() {
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error(
+      'Secure Aether Field synchronization requires the iOS or Android application.',
+    )
+  }
 }
 
 export const takTransport = {
@@ -108,5 +154,31 @@ export const takTransport = {
       staleSeconds: message.staleSeconds,
     }
     return this.sendOperation(operation)
+  },
+}
+
+export const fieldApiTransport = {
+  async mutate(
+    mutation: Record<string, unknown>,
+  ): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldMutation({ port: fieldPort(), mutation })
+  },
+
+  async changes(cursor: number, limit = 100): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldChanges({ port: fieldPort(), cursor, limit })
+  },
+
+  async upload(options: {
+    mediaId: string
+    uri: string
+    contentType: string
+    observationId?: string
+    role?: string
+    sha256?: string
+  }): Promise<NativeFieldResponse> {
+    requireNativeFieldApi()
+    return nativeTak.fieldUpload({ port: fieldPort(), ...options })
   },
 }
