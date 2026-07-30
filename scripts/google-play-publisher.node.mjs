@@ -67,6 +67,7 @@ test('publishes one bundle through an atomic Google Play edit', async () => {
     serviceAccountJson: JSON.stringify(account),
     packageName: 'org.castaliainstitute.aethertak.field',
     releaseName: 'AetherTAK Field 0.2.0',
+    expectedVersionCode: '42',
     bundle: Buffer.from('signed-aab'),
     fetchImpl,
   })
@@ -113,6 +114,7 @@ test('deletes an uncommitted edit after a track failure', async () => {
     publishBundle({
       serviceAccountJson: JSON.stringify(account),
       packageName: 'org.castaliainstitute.aethertak.field',
+      expectedVersionCode: '43',
       bundle: Buffer.from('signed-aab'),
       fetchImpl,
     }),
@@ -120,6 +122,33 @@ test('deletes an uncommitted edit after a track failure', async () => {
   )
   assert.equal(requests.at(-1).options.method, 'DELETE')
   assert.match(requests.at(-1).url, /edits\/edit-failed$/)
+})
+
+test('abandons the edit when Google Play reports a different version code', async () => {
+  const requests = []
+  const responses = [
+    json({ access_token: 'test-token' }),
+    json({ id: 'edit-mismatch' }),
+    json({ versionCode: 44 }),
+    new Response(null, { status: 204 }),
+  ]
+  const fetchImpl = async (url, options = {}) => {
+    requests.push({ url: String(url), options })
+    return responses.shift()
+  }
+
+  await assert.rejects(
+    publishBundle({
+      serviceAccountJson: JSON.stringify(account),
+      packageName: 'org.castaliainstitute.aethertak.field',
+      expectedVersionCode: '43',
+      bundle: Buffer.from('signed-aab'),
+      fetchImpl,
+    }),
+    /version code 44, expected 43/,
+  )
+  assert.equal(requests.at(-1).options.method, 'DELETE')
+  assert.equal(requests.some(({ url }) => url.includes('/tracks/')), false)
 })
 
 test('rejects malformed service-account material before network access', () => {

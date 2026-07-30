@@ -33,7 +33,11 @@ platform. It requires:
 
 The private bundle is decoded only into the Actions runner's temporary
 directory and deleted after authorization. The workflow retains only a
-non-sensitive digest attestation as an artifact.
+non-sensitive digest attestation as an artifact. Each platform job downloads
+that exact authorization artifact and creates a provenance statement before
+any store upload. The statement binds the final AAB or IPA checksum to the
+evidence-bundle digest, source revision, version/build, repository, and
+workflow run.
 
 ## Prepare private release evidence
 
@@ -105,10 +109,12 @@ Environment secrets:
   JSON key.
 
 The workflow injects the requested version into Gradle, runs the shared and
-Android tests, builds a signed `.aab`, retains it as a workflow artifact, and
-uses the Android Publisher API edit transaction to upload it to the `internal`
-track. It commits with `ERROR_IF_IN_REVIEW`, so it will not cancel an existing
-Google Play review. Failed edits are deleted best-effort.
+Android tests, builds a signed `.aab`, retains it with its checksum and
+provenance statement, and uses the Android Publisher API edit transaction to
+upload it to the `internal` track. The publisher rejects and abandons the edit
+if Google Play reports a version code other than the requested build number.
+It commits with `ERROR_IF_IN_REVIEW`, so it will not cancel an existing Google
+Play review. Failed edits are deleted best-effort.
 
 Normal pull-request CI also builds a release AAB using a one-day, disposable
 CI-only signing key. That proves the release Gradle path but the resulting AAB
@@ -139,9 +145,11 @@ Environment secrets:
 - `APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD`
 
 The macOS job creates an isolated temporary keychain, builds and exports a
-signed IPA with the requested version/build, validates it with App Store
-Connect, uploads it for TestFlight processing, retains the IPA as a workflow
-artifact, and deletes the temporary keychain even after failure.
+signed IPA, verifies its bundle identifier, version, build number, signature,
+and signing-team identifier, then creates its provenance statement. It
+validates the IPA with App Store Connect, uploads it for TestFlight processing,
+retains the IPA, checksum, and provenance statement as workflow artifacts, and
+deletes the temporary keychain even after failure.
 
 Apple processes an uploaded build asynchronously. After the first successful
 upload, finish export-compliance metadata and assign the processed build to the
@@ -156,6 +164,7 @@ For each beta, retain:
 - store version and build number;
 - generated AAB/IPA artifact checksums;
 - the release-evidence attestation JSON and checksum artifact;
+- each platform artifact's provenance JSON binding those two records;
 - Google Play/TestFlight processing result and tester group;
 - the in-app Device readiness JSON from every physical test device; and
 - one completed Device validation session JSON from every release-candidate

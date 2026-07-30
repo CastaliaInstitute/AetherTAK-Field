@@ -93,6 +93,7 @@ export async function publishBundle({
   packageName,
   track = 'internal',
   releaseName,
+  expectedVersionCode,
   bundle,
   fetchImpl = fetch,
 }) {
@@ -104,6 +105,9 @@ export async function publishBundle({
   }
   if (!Buffer.isBuffer(bundle) || bundle.length === 0) {
     throw new Error('The Android App Bundle is empty.')
+  }
+  if (!/^[1-9][0-9]*$/.test(expectedVersionCode)) {
+    throw new Error('The expected Google Play version code is required.')
   }
 
   const account = parseServiceAccount(serviceAccountJson)
@@ -148,6 +152,11 @@ export async function publishBundle({
       throw new Error('Google Play did not return an uploaded version code.')
     }
     const versionCode = String(uploaded.versionCode)
+    if (versionCode !== expectedVersionCode) {
+      throw new Error(
+        `Google Play uploaded version code ${versionCode}, expected ${expectedVersionCode}.`,
+      )
+    }
 
     const trackResponse = await fetchImpl(
       `${publisherRoot}/applications/${application}/edits/${editId}/tracks/${encodeURIComponent(track)}`,
@@ -190,16 +199,18 @@ async function main() {
     bundlePath,
     track = 'internal',
     releaseName,
+    expectedVersionCode,
   ] = [
     process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON,
     process.env.AETHER_ANDROID_PACKAGE_NAME,
     process.env.AETHER_ANDROID_BUNDLE_PATH,
     process.env.AETHER_GOOGLE_PLAY_TRACK,
     process.env.AETHER_RELEASE_NAME,
+    process.env.AETHER_VERSION_CODE,
   ]
-  if (!serviceAccountJson || !packageName || !bundlePath) {
+  if (!serviceAccountJson || !packageName || !bundlePath || !expectedVersionCode) {
     throw new Error(
-      'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON, AETHER_ANDROID_PACKAGE_NAME, and AETHER_ANDROID_BUNDLE_PATH are required.',
+      'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON, AETHER_ANDROID_PACKAGE_NAME, AETHER_ANDROID_BUNDLE_PATH, and AETHER_VERSION_CODE are required.',
     )
   }
   const result = await publishBundle({
@@ -207,6 +218,7 @@ async function main() {
     packageName,
     track,
     releaseName,
+    expectedVersionCode,
     bundle: await readFile(bundlePath),
   })
   process.stdout.write(

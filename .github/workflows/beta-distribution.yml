@@ -125,8 +125,14 @@ jobs:
       AETHER_ANDROID_BUNDLE_PATH: android/app/build/outputs/bundle/release/app-release.aab
       AETHER_GOOGLE_PLAY_TRACK: internal
       AETHER_RELEASE_NAME: AetherTAK Field ${{ inputs.version_name }} (${{ inputs.build_number }})
+      AETHER_RELEASE_ATTESTATION_PATH: ${{ runner.temp }}/release-attestation/aethertak-release-attestation.json
+      AETHER_ANDROID_PROVENANCE_PATH: ${{ runner.temp }}/aethertak-field-android-provenance.json
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: aethertak-field-release-attestation-${{ inputs.version_name }}-${{ inputs.build_number }}
+          path: ${{ runner.temp }}/release-attestation
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -157,12 +163,26 @@ jobs:
         run: ./gradlew test bundleRelease
       - name: Record Android artifact checksum
         run: sha256sum "$AETHER_ANDROID_BUNDLE_PATH" > "$RUNNER_TEMP/aethertak-field-android.sha256"
+      - name: Attest Android artifact
+        run: |
+          node scripts/release-provenance.mjs \
+            --attestation "$AETHER_RELEASE_ATTESTATION_PATH" \
+            --artifact "$AETHER_ANDROID_BUNDLE_PATH" \
+            --version "${{ inputs.version_name }}" \
+            --build "${{ inputs.build_number }}" \
+            --revision "$GITHUB_SHA" \
+            --platform android \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output "$AETHER_ANDROID_PROVENANCE_PATH"
       - uses: actions/upload-artifact@v7
         with:
           name: aethertak-field-android-${{ inputs.version_name }}-${{ inputs.build_number }}
           path: |
             android/app/build/outputs/bundle/release/app-release.aab
             ${{ runner.temp }}/aethertak-field-android.sha256
+            ${{ runner.temp }}/aethertak-field-android-provenance.json
           if-no-files-found: error
       - name: Publish to Google Play internal testing
         run: node scripts/google-play-publisher.mjs
@@ -185,8 +205,14 @@ jobs:
       APP_STORE_CONNECT_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
       APPLE_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_BASE64 }}
       APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      AETHER_RELEASE_ATTESTATION_PATH: ${{ runner.temp }}/release-attestation/aethertak-release-attestation.json
+      AETHER_IOS_PROVENANCE_PATH: ${{ runner.temp }}/aethertak-field-ios-provenance.json
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: aethertak-field-release-attestation-${{ inputs.version_name }}-${{ inputs.build_number }}
+          path: ${{ runner.temp }}/release-attestation
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -257,16 +283,50 @@ jobs:
       - name: Locate exported IPA
         id: ipa
         run: |
-          IPA_PATH=$(find "$EXPORT_PATH" -maxdepth 1 -name '*.ipa' -print -quit)
-          test -n "$IPA_PATH"
+          IPA_FILES=("$EXPORT_PATH"/*.ipa)
+          test "${#IPA_FILES[@]}" -eq 1
+          IPA_PATH="${IPA_FILES[0]}"
+          test -f "$IPA_PATH"
           shasum -a 256 "$IPA_PATH" > "$RUNNER_TEMP/aethertak-field-ios.sha256"
           echo "path=$IPA_PATH" >> "$GITHUB_OUTPUT"
+      - name: Verify exported IPA identity
+        env:
+          IPA_PATH: ${{ steps.ipa.outputs.path }}
+        run: |
+          APP_EXPANSION="$RUNNER_TEMP/verified-ipa"
+          mkdir "$APP_EXPANSION"
+          ditto -x -k "$IPA_PATH" "$APP_EXPANSION"
+          APP_PATHS=("$APP_EXPANSION"/Payload/*.app)
+          test "${#APP_PATHS[@]}" -eq 1
+          APP_PATH="${APP_PATHS[0]}"
+          test -d "$APP_PATH"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "org.castaliainstitute.aethertak.field"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")" = "${{ inputs.version_name }}"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "${{ inputs.build_number }}"
+          codesign --verify --deep --strict "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
+      - name: Attest iOS artifact
+        env:
+          IPA_PATH: ${{ steps.ipa.outputs.path }}
+        run: |
+          node scripts/release-provenance.mjs \
+            --attestation "$AETHER_RELEASE_ATTESTATION_PATH" \
+            --artifact "$IPA_PATH" \
+            --version "${{ inputs.version_name }}" \
+            --build "${{ inputs.build_number }}" \
+            --revision "$GITHUB_SHA" \
+            --platform ios \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output "$AETHER_IOS_PROVENANCE_PATH"
       - uses: actions/upload-artifact@v7
         with:
           name: aethertak-field-ios-${{ inputs.version_name }}-${{ inputs.build_number }}
           path: |
             ${{ steps.ipa.outputs.path }}
             ${{ runner.temp }}/aethertak-field-ios.sha256
+            ${{ runner.temp }}/aethertak-field-ios-provenance.json
           if-no-files-found: error
       - name: Validate with App Store Connect
         env:
