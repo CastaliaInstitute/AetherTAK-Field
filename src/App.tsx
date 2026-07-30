@@ -370,12 +370,34 @@ export default function App() {
       setNotice(`Enrolled ${profile.callsign} with ${profile.name}.`)
       const status = await takTransport.connect(profile.id)
       setConnection(status.state)
+      setProfile(status.profile)
     } catch (error) {
       setNotice(
         error instanceof Error ? error.message : 'TAK enrollment failed.',
       )
     } finally {
       if (enrollmentInput.current) enrollmentInput.current.value = ''
+    }
+  }
+
+  async function removeTakEnrollment() {
+    if (
+      !window.confirm(
+        'Remove this TAK certificate enrollment and its private identity from this device?',
+      )
+    ) return
+    try {
+      await takTransport.removeEnrollment()
+      setConnection('not_enrolled')
+      setProfile(null)
+      setContacts([])
+      setNotice('TAK enrollment and device credentials were removed.')
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : 'TAK enrollment removal failed.',
+      )
     }
   }
 
@@ -525,7 +547,7 @@ export default function App() {
           <Users size={30} />
           <p className="eyebrow">TAK NETWORK</p>
           <h2>Team contacts</h2>
-          {connection === 'not_enrolled' || connection === 'disconnected' ? (
+          {takTransport.isNative() ? (
             <>
               <input
                 ref={enrollmentInput}
@@ -539,12 +561,25 @@ export default function App() {
               <button
                 className="primary-action enrollment-action"
                 type="button"
+                disabled={connection === 'connecting'}
                 onClick={() => enrollmentInput.current?.click()}
               >
-                <Download size={18} /> Import TAK server package
+                <Download size={18} />
+                {profile
+                  ? 'Replace TAK server package'
+                  : 'Import TAK server package'}
               </button>
             </>
           ) : null}
+          {takTransport.isNative() && profile && (
+            <button
+              className="remove-enrollment-action"
+              type="button"
+              onClick={() => void removeTakEnrollment()}
+            >
+              Remove certificate enrollment
+            </button>
+          )}
           <TakTeamPanel
             callsign={identity.callsign}
             contacts={contacts}

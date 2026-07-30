@@ -13,6 +13,9 @@ Methods exposed to the shared layer:
 - `connect({ profileId? })`: establish TLS CoT streaming with reconnect and
   certificate validation.
 - `disconnect()`
+- `removeEnrollment()`: disconnect, remove the active private identity and
+  trust anchor from Keychain/Android KeyStore, and clear non-secret profile
+  metadata.
 - `getStatus()`
 - `getContacts()`
 - `sendCot({ xml })`
@@ -71,7 +74,11 @@ limits, import the client identity into Keychain/Android KeyStore, retain only
 non-secret profile metadata outside secure storage, pin the issued CA, enforce
 TLS 1.2 or newer with server-name verification, stream CoT bidirectionally,
 extract live contacts, and stream checksum-verified media into app-private
-storage. CI compiles Android on Ubuntu and iOS on a macOS runner.
+storage. Enrollment imports validate certificate validity and chain trust,
+stage replacement credentials under unique labels, synchronously activate the
+new profile, roll staged items back on failure, and retire the previous identity
+only after activation succeeds. Disconnect preserves enrollment; explicit
+removal destroys it. CI compiles Android on Ubuntu and iOS on a macOS runner.
 
 ARKit LiDAR and ARCore Depth capture/export are implemented with capability
 fallbacks. Physical-device accuracy, end-to-end sync, iTAK/ATAK

@@ -9,6 +9,7 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "importEnrollmentPackage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "connect", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "disconnect", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "removeEnrollment", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getContacts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sendCot", returnType: CAPPluginReturnPromise),
@@ -67,6 +68,10 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
                 let material = try TakEnrollmentPackage.read(url: url)
                 let profile = try self.identityStore.importMaterial(material)
+                self.transport.disconnect()
+                self.contactLock.lock()
+                self.contacts.removeAll()
+                self.contactLock.unlock()
                 self.state = "disconnected"
                 self.lastError = nil
                 call.resolve(self.profileObject(profile))
@@ -111,6 +116,18 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin {
             ? "not_enrolled"
             : "disconnected"
         call.resolve()
+    }
+
+    @objc func removeEnrollment(_ call: CAPPluginCall) {
+        transport.disconnect()
+        contactLock.lock()
+        contacts.removeAll()
+        contactLock.unlock()
+        identityStore.deleteProfile()
+        state = "not_enrolled"
+        lastError = nil
+        call.resolve()
+        notifyListeners("statusChanged", data: status())
     }
 
     @objc func getStatus(_ call: CAPPluginCall) {

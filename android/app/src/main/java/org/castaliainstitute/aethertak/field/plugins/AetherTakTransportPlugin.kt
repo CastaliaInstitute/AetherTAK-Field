@@ -51,6 +51,8 @@ class AetherTakTransportPlugin : Plugin() {
             try {
                 TakEnrollmentPackage.read(context, path).use { material ->
                     val profile = identityStore.import(material)
+                    transport.disconnect()
+                    contacts.clear()
                     state = "disconnected"
                     lastError = null
                     call.resolve(profileObject(profile))
@@ -96,6 +98,25 @@ class AetherTakTransportPlugin : Plugin() {
         transport.disconnect()
         state = if (identityStore.load() == null) "not_enrolled" else "disconnected"
         call.resolve()
+    }
+
+    @PluginMethod
+    fun removeEnrollment(call: PluginCall) {
+        transport.disconnect()
+        contacts.clear()
+        try {
+            identityStore.delete()
+            state = "not_enrolled"
+            lastError = null
+            call.resolve()
+            notifyListeners("statusChanged", status())
+        } catch (error: Exception) {
+            call.reject(
+                error.message ?: "TAK enrollment removal failed.",
+                "ENROLLMENT_REMOVAL_FAILED",
+                error,
+            )
+        }
     }
 
     @PluginMethod

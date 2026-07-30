@@ -33,10 +33,11 @@ final class TakIdentityStore {
     private let profileKey = "org.castaliainstitute.aethertak.profile"
 
     func importMaterial(_ material: TakEnrollmentMaterial) throws -> TakProfile {
-        let identity = try importIdentity(
+        let importedClient = try importIdentity(
             material.clientData,
             password: material.clientPassword
         )
+        let identity = importedClient.identity
         let clientCertificate = try certificate(for: identity)
         let caCertificates = try importCertificates(
             material.caData,
@@ -47,16 +48,25 @@ final class TakIdentityStore {
                 "CA PKCS#12 contains no certificate."
             )
         }
+        try validate(importedClient.chain, anchoredBy: caCertificate)
         let id = stableIdentifier(clientCertificate)
-        let clientLabel = "aethertak-client-\(id)"
-        let caLabel = "aethertak-ca-\(id)"
-
-        if let previous = loadProfile() {
-            deleteItem(class: kSecClassIdentity, label: previous.clientLabel)
-            deleteItem(class: kSecClassCertificate, label: previous.caLabel)
-        }
-        try addIdentity(identity, label: clientLabel)
-        try addCertificate(caCertificate, label: caLabel)
+        let previous = loadProfile()
+        let reusesClient = previous.map {
+            certificateData(identity(label: $0.clientLabel)) ==
+                SecCertificateCopyData(clientCertificate) as Data
+        } ?? false
+        let reusesCA = previous.map {
+            certificate(label: $0.caLabel).map {
+                SecCertificateCopyData($0) as Data
+            } == SecCertificateCopyData(caCertificate) as Data
+        } ?? false
+        let rotation = UUID().uuidString.lowercased()
+        let clientLabel = reusesClient
+            ? previous!.clientLabel
+            : "aethertak-client-\(id)-\(rotation)"
+        let caLabel = reusesCA
+            ? previous!.caLabel
+            : "aethertak-ca-\(id)-\(rotation)"
 
         let profile = TakProfile(
             id: id,
@@ -70,7 +80,48 @@ final class TakIdentityStore {
             caLabel: caLabel
         )
         let encoded = try JSONEncoder().encode(profile)
-        UserDefaults.standard.set(encoded, forKey: profileKey)
+        let previousData = UserDefaults.standard.data(forKey: profileKey)
+
+        var stagedClient = false
+        var stagedCA = false
+        do {
+            if !reusesClient {
+                try addIdentity(identity, label: clientLabel)
+                stagedClient = true
+            }
+            if !reusesCA {
+                try addCertificate(caCertificate, label: caLabel)
+                stagedCA = true
+            }
+            UserDefaults.standard.set(encoded, forKey: profileKey)
+            guard UserDefaults.standard.synchronize() else {
+                throw TakIdentityError.invalidIdentity(
+                    "Unable to commit TAK enrollment metadata."
+                )
+            }
+        } catch {
+            if let previousData {
+                UserDefaults.standard.set(previousData, forKey: profileKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: profileKey)
+            }
+            if stagedCA {
+                deleteItem(class: kSecClassCertificate, label: caLabel)
+            }
+            if stagedClient {
+                deleteItem(class: kSecClassIdentity, label: clientLabel)
+            }
+            throw error
+        }
+
+        if let previous {
+            if previous.clientLabel != clientLabel {
+                deleteItem(class: kSecClassIdentity, label: previous.clientLabel)
+            }
+            if previous.caLabel != caLabel {
+                deleteItem(class: kSecClassCertificate, label: previous.caLabel)
+            }
+        }
         return profile
     }
 
@@ -94,10 +145,20 @@ final class TakIdentityStore {
         copyItem(class: kSecClassCertificate, label: label) as! SecCertificate?
     }
 
+    func deleteProfile() {
+        let profile = loadProfile()
+        UserDefaults.standard.removeObject(forKey: profileKey)
+        UserDefaults.standard.synchronize()
+        if let profile {
+            deleteItem(class: kSecClassIdentity, label: profile.clientLabel)
+            deleteItem(class: kSecClassCertificate, label: profile.caLabel)
+        }
+    }
+
     private func importIdentity(
         _ data: Data,
         password: String
-    ) throws -> SecIdentity {
+    ) throws -> (identity: SecIdentity, chain: [SecCertificate]) {
         let items = try importPKCS12(data, password: password)
         guard
             let dictionary = items.first as? [CFString: Any],
@@ -107,7 +168,10 @@ final class TakIdentityStore {
                 "Client PKCS#12 contains no private identity."
             )
         }
-        return identity
+        let leaf = try certificate(for: identity)
+        let chain = dictionary[kSecImportItemCertChain] as? [SecCertificate]
+            ?? [leaf]
+        return (identity, chain)
     }
 
     private func importCertificates(
@@ -156,6 +220,52 @@ final class TakIdentityStore {
             )
         }
         return result
+    }
+
+    private func certificateData(_ identity: SecIdentity?) -> Data? {
+        guard
+            let identity,
+            let certificate = try? certificate(for: identity)
+        else {
+            return nil
+        }
+        return SecCertificateCopyData(certificate) as Data
+    }
+
+    private func validate(
+        _ clientChain: [SecCertificate],
+        anchoredBy ca: SecCertificate
+    ) throws {
+        guard !clientChain.isEmpty else {
+            throw TakIdentityError.invalidIdentity(
+                "Client certificate chain is empty."
+            )
+        }
+        let includesAnchor = clientChain.contains {
+            SecCertificateCopyData($0) as Data ==
+                SecCertificateCopyData(ca) as Data
+        }
+        let certificates = clientChain + (includesAnchor ? [] : [ca])
+        var trust: SecTrust?
+        let status = SecTrustCreateWithCertificates(
+            certificates as CFArray,
+            SecPolicyCreateBasicX509(),
+            &trust
+        )
+        guard status == errSecSuccess, let trust else {
+            throw TakIdentityError.security(
+                "Certificate-chain validation setup failed",
+                status
+            )
+        }
+        SecTrustSetAnchorCertificates(trust, [ca] as CFArray)
+        SecTrustSetAnchorCertificatesOnly(trust, true)
+        var error: CFError?
+        guard SecTrustEvaluateWithError(trust, &error) else {
+            throw TakIdentityError.invalidIdentity(
+                "Client certificate is expired or is not issued by the packaged TAK CA."
+            )
+        }
     }
 
     private func addIdentity(_ identity: SecIdentity, label: String) throws {

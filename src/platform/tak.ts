@@ -38,6 +38,7 @@ interface AetherTakTransportPlugin {
   importEnrollmentPackage(options: { path: string }): Promise<TakServerProfile>
   connect(options?: { profileId?: string }): Promise<TakStatus>
   disconnect(): Promise<void>
+  removeEnrollment(): Promise<void>
   getStatus(): Promise<TakStatus>
   getContacts(): Promise<{ contacts: TakContact[] }>
   sendCot(options: { xml: string }): Promise<{ accepted: boolean }>
@@ -139,6 +140,15 @@ export const takTransport = {
   async connect(profileId?: string): Promise<TakStatus> {
     if (!Capacitor.isNativePlatform()) return browserStatus
     return nativeTak.connect(profileId ? { profileId } : {})
+  },
+
+  async removeEnrollment(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error(
+        'TAK enrollment removal requires the iOS or Android application.',
+      )
+    }
+    await nativeTak.removeEnrollment()
   },
 
   async sendXml(xml: string): Promise<boolean> {
