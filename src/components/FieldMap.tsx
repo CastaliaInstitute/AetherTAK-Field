@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import {
   type GeoJSONSource,
@@ -17,6 +17,7 @@ import type {
   TakContact,
 } from '../domain/models'
 import type { TakActivity } from '../tak/activity'
+import { liveTakActivity } from '../tak/staleness'
 import {
   activeRasterSource,
   rasterStyleUrl,
@@ -48,10 +49,13 @@ interface FieldMapProps {
   onMapPress: ((coordinate: Coordinate) => void) | null
 }
 
-function activityPointCollection(activity: TakActivity[]): FeatureCollection {
+function activityPointCollection(
+  activity: TakActivity[],
+  now: number,
+): FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: activity
+    features: liveTakActivity(activity, now)
       .filter((item) => item.kind === 'marker' || item.kind === 'emergency')
       .map((item) => ({
         type: 'Feature',
@@ -72,10 +76,13 @@ function activityPointCollection(activity: TakActivity[]): FeatureCollection {
   }
 }
 
-function activityLineCollection(activity: TakActivity[]): FeatureCollection {
+function activityLineCollection(
+  activity: TakActivity[],
+  now: number,
+): FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: activity
+    features: liveTakActivity(activity, now)
       .filter(
         (item) =>
           (item.kind === 'route' || item.kind === 'shape') &&
@@ -200,6 +207,8 @@ export function FieldMap({
   const map = useRef<MapLibreMap | null>(null)
   const contactMarkers = useRef<maplibregl.Marker[]>([])
   const detailPopup = useRef<maplibregl.Popup | null>(null)
+  const [activityClock, setActivityClock] = useState(() => Date.now())
+  const activityClockRef = useRef(activityClock)
   const onMapPressRef = useRef(onMapPress)
   const fieldsRef = useRef(fields)
   const ecologicalSitesRef = useRef(ecologicalSites)
@@ -217,7 +226,16 @@ export function FieldMap({
   alertsRef.current = alerts
   insightsRef.current = insights
   activityRef.current = activity
+  activityClockRef.current = activityClock
   draftRef.current = draft
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setActivityClock(Date.now()),
+      5_000,
+    )
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!container.current || map.current) return
@@ -473,7 +491,10 @@ export function FieldMap({
       })
       nextMap.addSource('tak-activity-points', {
         type: 'geojson',
-        data: activityPointCollection(activityRef.current),
+        data: activityPointCollection(
+          activityRef.current,
+          activityClockRef.current,
+        ),
       })
       nextMap.addLayer({
         id: 'tak-activity-points',
@@ -494,7 +515,10 @@ export function FieldMap({
       })
       nextMap.addSource('tak-activity-lines', {
         type: 'geojson',
-        data: activityLineCollection(activityRef.current),
+        data: activityLineCollection(
+          activityRef.current,
+          activityClockRef.current,
+        ),
       })
       nextMap.addLayer({
         id: 'tak-activity-shape-fill',
@@ -646,13 +670,13 @@ export function FieldMap({
       currentMap.getSource('tak-activity-points') as
         | GeoJSONSource
         | undefined
-    )?.setData(activityPointCollection(activity))
+    )?.setData(activityPointCollection(activity, activityClock))
     ;(
       currentMap.getSource('tak-activity-lines') as
         | GeoJSONSource
         | undefined
-    )?.setData(activityLineCollection(activity))
-  }, [activity])
+    )?.setData(activityLineCollection(activity, activityClock))
+  }, [activity, activityClock])
 
   useEffect(() => {
     const currentMap = map.current

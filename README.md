@@ -40,7 +40,9 @@ client and inside Capacitor shells for iOS and Android.
   backed by a durable offline TAK event outbox and activity history.
 - Live native contacts, foreground PLI publishing, addressed GeoChat,
   tap-to-compose markers/routes/open lines/closed areas, rendered TAK geometry, and explicitly
-  confirmed emergency signaling with cancellation.
+  confirmed emergency signaling with cancellation. Live map objects honor CoT
+  stale times on a bounded clock while durable activity remains available for
+  operator history.
 - Recipient-targeted TAK mission-package ZIP exchange with app-private offline
   staging, authenticated Marti upload/download, explicit inbound approval,
   byte-count and SHA-256 verification, receipts, and native open/share.

@@ -130,6 +130,7 @@ vi.mock('maplibre-gl', () => {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   mapState.instances.length = 0
   mapState.popupContents.length = 0
 })
@@ -206,8 +207,8 @@ describe('FieldMap operational layers', () => {
         points: [coordinate, { ...coordinate, latitude: 39.75 }],
         closed: false,
         fileTransfer: null,
-        createdAt: '2026-07-30T10:00:00.000Z',
-        staleAt: '2026-07-30T10:05:00.000Z',
+        createdAt: '2099-07-30T10:00:00.000Z',
+        staleAt: '2099-07-30T10:05:00.000Z',
         deliveryStatus: 'sent' as const,
         xml: '<event/>',
       },
@@ -227,8 +228,8 @@ describe('FieldMap operational layers', () => {
         ],
         closed: true,
         fileTransfer: null,
-        createdAt: '2026-07-30T10:00:00.000Z',
-        staleAt: '2026-07-30T10:05:00.000Z',
+        createdAt: '2099-07-30T10:00:00.000Z',
+        staleAt: '2099-07-30T10:05:00.000Z',
         deliveryStatus: 'sent' as const,
         xml: '<event/>',
       },
@@ -256,6 +257,69 @@ describe('FieldMap operational layers', () => {
       'LineString',
       'Polygon',
     ])
+  })
+
+  it('removes a TAK map object after its CoT stale time while retaining activity history', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime('2026-07-30T10:04:59.000Z')
+    const coordinate = {
+      latitude: 39.74,
+      longitude: -104.99,
+      altitudeMeters: null,
+      horizontalAccuracyMeters: null,
+      verticalAccuracyMeters: null,
+      headingDegrees: null,
+    }
+    const activity = [{
+      id: 'inbound:marker',
+      uid: 'marker',
+      outboxId: null,
+      direction: 'inbound' as const,
+      kind: 'marker' as const,
+      title: 'Temporary marker',
+      message: null,
+      coordinate,
+      points: [coordinate],
+      closed: null,
+      fileTransfer: null,
+      createdAt: '2026-07-30T10:04:00.000Z',
+      staleAt: '2026-07-30T10:05:00.000Z',
+      deliveryStatus: 'received' as const,
+      xml: '<event/>',
+    }]
+    render(
+      <FieldMap
+        fields={[]}
+        ecologicalSites={[]}
+        readings={[]}
+        observations={[]}
+        alerts={[]}
+        insights={[]}
+        contacts={[]}
+        activity={activity}
+        draft={null}
+        onMapPress={null}
+      />,
+    )
+    const instance = mapState.instances[0] as MapState
+    act(() => instance.emit('load'))
+    const initialPointSource = instance.sources.get('tak-activity-points')
+    expect(initialPointSource).toBeDefined()
+    expect(
+      (initialPointSource!.data as {
+        features: unknown[]
+      }).features,
+    ).toHaveLength(1)
+
+    act(() => vi.advanceTimersByTime(5_000))
+
+    const pointSource = instance.sources.get('tak-activity-points')
+    expect(pointSource).toBeDefined()
+    const updated = pointSource!.setData.mock.lastCall?.[0] as {
+      features: unknown[]
+    }
+    expect(updated.features).toHaveLength(0)
+    expect(activity).toHaveLength(1)
   })
 
   it('shows tapped map details as text without interpreting record markup', () => {
