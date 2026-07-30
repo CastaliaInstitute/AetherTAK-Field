@@ -691,7 +691,7 @@ private object AetherAndroidDepthExporter {
         }
 
         val measurements = measurements(points)
-        JSONObject().apply {
+        return JSONObject().apply {
             put("id", id.toString().lowercase())
             put("provider", "arcore-depth")
             put("capturedAt", Instant.now().toString())
