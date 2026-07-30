@@ -467,7 +467,7 @@ private enum AetherDepthExporter {
         for anchor in anchors {
             let geometry = anchor.geometry
             for index in 0..<geometry.vertices.count {
-                let vertex = geometry.vertex(at: index)
+                let vertex = geometry.vertices.vertex(at: index)
                 let world = anchor.transform * SIMD4<Float>(vertex.x, vertex.y, vertex.z, 1)
                 output += "v \(world.x) \(world.y) \(world.z)\n"
             }
