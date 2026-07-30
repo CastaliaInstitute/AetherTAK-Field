@@ -41,7 +41,7 @@ companion-device session that covers the capability.
 | Depth artifact export | Preview, metric depth, supported confidence, point cloud, measurements, and supported model open correctly. |
 | Unsupported-depth fallback | Unsupported hardware reports capability honestly and provides a safe fallback without a crash. |
 | Screen-lock team tracking | PLI continues at the expected cadence with the iOS indicator or Android foreground notification. |
-| Permission revocation | Location/camera permission loss produces a safe, recoverable error. |
+| Permission revocation | Location/camera permission loss produces a safe, recoverable error. On Android, revoking notification visibility stops background PLI without leaving a stale sharing state. |
 | Airplane-mode recovery | Queued work survives relaunch and resumes automatically after the network returns. |
 | Low-storage behavior | Capture or map download fails within a bounded operation and remains recoverable. |
 

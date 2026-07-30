@@ -69,7 +69,7 @@ export const physicalReleaseChecks = [
   [
     'permission_revocation',
     'Permission revocation',
-    'Revoke location/camera permission during the workflow and confirm a safe, recoverable failure.',
+    'Revoke location/camera permission during the workflow; on Android also revoke notification visibility during background PLI. Confirm a safe, recoverable failure, stopped hidden sharing, and no stale indicator.',
   ],
   [
     'airplane_mode',

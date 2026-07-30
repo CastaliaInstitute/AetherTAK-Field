@@ -21,6 +21,7 @@ const REQUIRED_ANDROID_PERMISSIONS = [
   "android.permission.ACCESS_FINE_LOCATION",
   "android.permission.FOREGROUND_SERVICE",
   "android.permission.FOREGROUND_SERVICE_LOCATION",
+  "android.permission.POST_NOTIFICATIONS",
 ];
 
 const FORBIDDEN_ANDROID_PERMISSIONS = [

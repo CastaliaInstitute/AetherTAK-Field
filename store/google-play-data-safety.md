@@ -21,4 +21,4 @@ Media, notes, observations, sensor records, and depth captures are collected onl
 
 Do not claim “not shared” until the production operator has confirmed that every server and processor is first-party or qualifies for a Google Play service-provider exemption. Do not claim a deletion-request mechanism until its public process or URL exists.
 
-The Android app requests no broad photo/video library or storage permission and no background-location permission. Camera, microphone, foreground location, and the location foreground service support explicit field-capture and PLI features.
+The Android app requests no broad photo/video library or storage permission and no background-location permission. Camera, microphone, foreground location, and the location foreground service support explicit field-capture and PLI features. Notification permission is requested only when enabling background PLI so its persistent location-sharing notification remains visible; sharing is stopped if notification visibility is revoked.

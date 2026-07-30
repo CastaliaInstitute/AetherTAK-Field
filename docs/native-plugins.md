@@ -50,7 +50,10 @@ failure response is then returned to the sender.
 Background team tracking is opt-in and stops on disconnect, enrollment
 replacement, or credential removal. Android uses a location-typed foreground
 service with a persistent notification and Stop action; it relies on foreground
-location permission and does not request `ACCESS_BACKGROUND_LOCATION`. iOS uses
+location permission and does not request `ACCESS_BACKGROUND_LOCATION`. On
+Android 13 and newer, enabling background PLI requests notification permission
+in context; the app refuses to start or stops sharing if app/channel
+notifications cannot remain visible. iOS uses
 Core Location with the `location` background mode and displays the system
 background-location indicator. The shared foreground watcher is disabled while
 the native publisher is active so the same identity does not emit duplicate

@@ -1,16 +1,21 @@
 package org.castaliainstitute.aethertak.field.plugins
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
+import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -20,8 +25,18 @@ import org.castaliainstitute.aethertak.field.tak.TakFieldApiClient
 import org.castaliainstitute.aethertak.field.tak.TakIdentityStore
 import org.castaliainstitute.aethertak.field.tak.TakProfile
 import org.castaliainstitute.aethertak.field.tak.TakTlsTransport
+import org.castaliainstitute.aethertak.field.tak.TrackingNotificationPrerequisites
+import org.castaliainstitute.aethertak.field.tak.trackingNotificationProblem
 
-@CapacitorPlugin(name = "AetherTakTransport")
+@CapacitorPlugin(
+    name = "AetherTakTransport",
+    permissions = [
+        Permission(
+            strings = [Manifest.permission.POST_NOTIFICATIONS],
+            alias = AetherTakTransportPlugin.NOTIFICATION_PERMISSION,
+        ),
+    ],
+)
 class AetherTakTransportPlugin : Plugin() {
     private val worker = Executors.newSingleThreadExecutor()
     private val contacts = ConcurrentHashMap<String, JSObject>()
@@ -30,6 +45,7 @@ class AetherTakTransportPlugin : Plugin() {
     private lateinit var fieldApi: TakFieldApiClient
     @Volatile private var state = "not_enrolled"
     @Volatile private var lastError: String? = null
+    @Volatile private var backgroundTrackingError: String? = null
 
     override fun load() {
         identityStore = TakIdentityStore(context)
@@ -164,13 +180,59 @@ class AetherTakTransportPlugin : Plugin() {
             )
             return
         }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            getPermissionState(NOTIFICATION_PERMISSION) != PermissionState.GRANTED
+        ) {
+            requestPermissionForAlias(
+                NOTIFICATION_PERMISSION,
+                call,
+                "notificationPermissionCallback",
+            )
+            return
+        }
+        startBackgroundTracking(call)
+    }
+
+    @PermissionCallback
+    private fun notificationPermissionCallback(call: PluginCall) {
+        if (getPermissionState(NOTIFICATION_PERMISSION) != PermissionState.GRANTED) {
+            call.reject(
+                "Allow notifications so Android can visibly show background team location.",
+                "NOTIFICATION_PERMISSION_REQUIRED",
+            )
+            return
+        }
+        startBackgroundTracking(call)
+    }
+
+    private fun startBackgroundTracking(call: PluginCall) {
+        val problem = trackingNotificationProblem()
+        if (problem != null) {
+            backgroundTrackingError = problem
+            call.reject(problem, "VISIBLE_NOTIFICATION_REQUIRED")
+            return
+        }
         val intent = Intent(context, BackgroundPliService::class.java)
             .setAction(BackgroundPliService.ACTION_START)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (error: RuntimeException) {
+            val message =
+                error.message ?: "Android could not start background team tracking."
+            backgroundTrackingError = message
+            call.reject(
+                message,
+                "BACKGROUND_TRACKING_START_FAILED",
+                error,
+            )
+            return
         }
+        backgroundTrackingError = null
         call.resolve(JSObject().apply {
             put("supported", true)
             put("enabled", true)
@@ -336,21 +398,57 @@ class AetherTakTransportPlugin : Plugin() {
         }
     }
 
-    private fun stopBackgroundTracking() {
+    private fun stopBackgroundTracking(error: String? = null) {
         context.stopService(Intent(context, BackgroundPliService::class.java))
+        backgroundTrackingError = error
     }
 
-    private fun backgroundTrackingStatus(): JSObject = JSObject().apply {
-        put("supported", true)
-        put("enabled", BackgroundPliService.running)
-        put(
-            "detail",
-            BackgroundPliService.lastError
-                ?: if (BackgroundPliService.running) {
-                    "Android is sharing team position with a visible foreground service."
-                } else {
-                    "Background team position is off."
-                },
+    private fun backgroundTrackingStatus(): JSObject {
+        val visibilityProblem = if (BackgroundPliService.running) {
+            trackingNotificationProblem()
+        } else {
+            null
+        }
+        if (visibilityProblem != null) {
+            stopBackgroundTracking(visibilityProblem)
+        }
+        return JSObject().apply {
+            put("supported", true)
+            put("enabled", BackgroundPliService.running && visibilityProblem == null)
+            put(
+                "detail",
+                backgroundTrackingError
+                    ?: BackgroundPliService.lastError
+                    ?: if (BackgroundPliService.running) {
+                        "Android is sharing team position with a visible foreground service."
+                    } else {
+                        "Background team position is off."
+                    },
+            )
+        }
+    }
+
+    private fun trackingNotificationProblem(): String? {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val channelBlocked =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                manager.getNotificationChannel(
+                    BackgroundPliService.CHANNEL_ID,
+                )?.importance == NotificationManager.IMPORTANCE_NONE
+        return trackingNotificationProblem(
+            TrackingNotificationPrerequisites(
+                sdkInt = Build.VERSION.SDK_INT,
+                runtimePermissionGranted =
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                        ActivityCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS,
+                        ) == PackageManager.PERMISSION_GRANTED,
+                appNotificationsEnabled =
+                    NotificationManagerCompat.from(context)
+                        .areNotificationsEnabled(),
+                channelBlocked = channelBlocked,
+            ),
         )
     }
 
@@ -403,5 +501,9 @@ class AetherTakTransportPlugin : Plugin() {
             .find(xml)
             ?.groupValues
             ?.get(1)
+    }
+
+    companion object {
+        private const val NOTIFICATION_PERMISSION = "notifications"
     }
 }

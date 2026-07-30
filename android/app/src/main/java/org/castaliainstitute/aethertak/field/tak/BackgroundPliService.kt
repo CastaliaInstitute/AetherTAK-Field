@@ -242,7 +242,7 @@ class BackgroundPliService : Service(), LocationListener {
     companion object {
         const val ACTION_START = "org.castaliainstitute.aethertak.field.START_BACKGROUND_PLI"
         const val ACTION_STOP = "org.castaliainstitute.aethertak.field.STOP_BACKGROUND_PLI"
-        private const val CHANNEL_ID = "aethertak-background-pli"
+        const val CHANNEL_ID = "aethertak-background-pli"
         private const val NOTIFICATION_ID = 4821
 
         @Volatile var running = false
