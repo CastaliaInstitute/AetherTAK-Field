@@ -78,6 +78,13 @@ confidence, point-cloud, and model records also retain the native hardware
 model when the operating system reports it; unavailable model metadata remains
 optional and never discards otherwise valid field evidence.
 
+The observation evidence viewer passes an artifact to the native open/share
+sheet only when it has a valid SHA-256 digest and a local `file:`, `content:`,
+or `capacitor:` URI. Browser records, remote URLs, inline previews, and
+checksum-pending media fail closed. The explicit operator handoff includes the
+artifact label, capture time, hardware model when available, and digest; it
+does not add coordinates or observation notes to the share-sheet text.
+
 ## AetherDepthScanner
 
 The plugin reports capabilities before presenting a capture UI:

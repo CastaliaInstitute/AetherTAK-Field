@@ -8,6 +8,17 @@ import type { MediaCapture, Observation } from '../domain/models'
 import { demoSnapshot } from '../domain/seed'
 import { ObservationDetail } from './ObservationDetail'
 
+const { shareArtifact } = vi.hoisted(() => ({
+  shareArtifact: vi.fn(),
+}))
+
+vi.mock('../media/artifactSharing', () => ({
+  artifactSharing: {
+    canShare: () => true,
+    share: shareArtifact,
+  },
+}))
+
 const observation: Observation = {
   id: '12cff24a-35b4-4f77-9c42-ecb8f8d5973d',
   fieldId: demoSnapshot.fields[0].id,
@@ -53,7 +64,10 @@ const depth: MediaCapture = {
   syncState: 'queued',
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  shareArtifact.mockReset()
+})
 
 describe('ObservationDetail', () => {
   it('renders assignment, geotag, depth measurement, and missing media state', () => {
@@ -73,7 +87,47 @@ describe('ObservationDetail', () => {
     expect(screen.getByText(/North Market Beds/)).toBeInTheDocument()
     expect(screen.getByText('39.741000')).toBeInTheDocument()
     expect(screen.getByText(/1.82 m ±0.08/)).toBeInTheDocument()
+    expect(screen.getByText('iPhone')).toBeInTheDocument()
     expect(screen.getByText('Artifact unavailable')).toBeInTheDocument()
+    expect(screen.getByText(/SHA-256 aaaaaaaaaaaa/)).toBeInTheDocument()
+  })
+
+  it('opens the verified local artifact through the native share sheet', async () => {
+    shareArtifact.mockResolvedValue(undefined)
+    render(
+      <ObservationDetail
+        observation={observation}
+        media={[depth]}
+        fields={demoSnapshot.fields}
+        ecologicalSites={demoSnapshot.ecologicalSites}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Open or share metric depth' }),
+    )
+    expect(shareArtifact).toHaveBeenCalledWith(depth, observation)
+  })
+
+  it('reports a native share-sheet failure without losing the evidence view', async () => {
+    shareArtifact.mockRejectedValue(new Error('Share sheet unavailable.'))
+    render(
+      <ObservationDetail
+        observation={observation}
+        media={[depth]}
+        fields={demoSnapshot.fields}
+        ecologicalSites={demoSnapshot.ecologicalSites}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Open or share metric depth' }),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Share sheet unavailable.',
+    )
     expect(screen.getByText(/SHA-256 aaaaaaaaaaaa/)).toBeInTheDocument()
   })
 

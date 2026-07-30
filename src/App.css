@@ -786,6 +786,22 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
   overflow-wrap: anywhere;
   padding: 9px 11px;
 }
+.artifact-share {
+  align-items: center;
+  background: rgba(87, 205, 164, 0.08);
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--cyan);
+  display: flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  gap: 7px;
+  justify-content: center;
+  padding: 10px 11px;
+  width: 100%;
+}
+.artifact-share:disabled { color: var(--muted); }
+.artifact-share-error { margin: 12px 0 0; }
 .observation-artifact.missing {
   align-items: center;
   color: #efb75e;

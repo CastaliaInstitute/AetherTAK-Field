@@ -5,10 +5,11 @@ import {
   FileWarning,
   MapPin,
   ScanLine,
+  Share2,
   Video,
   X,
 } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   EcologicalSite,
   Field,
@@ -20,6 +21,7 @@ import {
   mediaDisplayUri,
   observationArtifacts,
 } from '../media/mediaDisplay'
+import { artifactSharing } from '../media/artifactSharing'
 
 interface ObservationDetailProps {
   observation: Observation
@@ -95,6 +97,8 @@ export function ObservationDetail({
   const artifacts = observationArtifacts(observation, media)
   const coordinate = observation.coordinate
   const closeButton = useRef<HTMLButtonElement>(null)
+  const [sharingId, setSharingId] = useState<string | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
 
   useEffect(() => {
     closeButton.current?.focus()
@@ -104,6 +108,22 @@ export function ObservationDetail({
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [onClose])
+
+  async function shareArtifact(artifact: MediaCapture) {
+    setSharingId(artifact.id)
+    setShareError(null)
+    try {
+      await artifactSharing.share(artifact, observation)
+    } catch (error) {
+      setShareError(
+        error instanceof Error
+          ? error.message
+          : 'This evidence could not be opened or shared.',
+      )
+    } finally {
+      setSharingId(null)
+    }
+  }
 
   return (
     <div
@@ -187,8 +207,22 @@ export function ObservationDetail({
                 )}
                 <div className="artifact-integrity">
                   <span>{artifact.mimeType}</span>
+                  <span>{artifact.deviceModel ?? 'Hardware not reported'}</span>
                   <span>{artifact.sha256 ? `SHA-256 ${artifact.sha256.slice(0, 12)}…` : 'Checksum pending'}</span>
                 </div>
+                {artifactSharing.canShare(artifact) && (
+                  <button
+                    className="artifact-share"
+                    type="button"
+                    disabled={sharingId !== null}
+                    onClick={() => void shareArtifact(artifact)}
+                  >
+                    <Share2 size={15} />
+                    {sharingId === artifact.id
+                      ? 'Opening share sheet…'
+                      : `Open or share ${artifactLabel(artifact.kind).toLowerCase()}`}
+                  </button>
+                )}
               </article>
             ) : (
               <article className="observation-artifact missing" key={id}>
@@ -201,6 +235,11 @@ export function ObservationDetail({
             ),
           )}
         </div>
+        {shareError && (
+          <p className="capture-error artifact-share-error" role="alert">
+            {shareError}
+          </p>
+        )}
       </section>
     </div>
   )
