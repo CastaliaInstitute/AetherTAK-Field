@@ -42,6 +42,10 @@ client and inside Capacitor shells for iOS and Android.
 - CoT 2.0 encoding and parsing for PLI, GeoChat, markers, routes, shapes, and
   emergency events, plus server-hosted mission-package requests and receipts,
   backed by a durable offline TAK event outbox and activity history.
+- Fail-closed inbound TAK validation before persistence or map rendering,
+  including bounded XML/geometry, declaration rejection, valid event times,
+  renderable coordinates, constrained mission-package metadata, and
+  schema-filtered native contacts.
 - Live native contacts, foreground PLI publishing, addressed GeoChat,
   tap-to-compose markers/routes/open lines/closed areas, rendered TAK geometry, and explicitly
   confirmed emergency signaling with cancellation. Live map objects honor CoT

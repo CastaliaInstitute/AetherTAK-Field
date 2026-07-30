@@ -6,6 +6,7 @@ import {
   fieldSchema,
   mediaCaptureSchema,
   sensorReadingSchema,
+  takContactSchema,
 } from './models'
 import { demoFields, demoReadings, demoSnapshot } from './seed'
 
@@ -73,6 +74,38 @@ describe('field data contracts', () => {
         headingDegrees: null,
       }),
     ).toThrow()
+  })
+
+  it('accepts only bounded, renderable native TAK contacts', () => {
+    const contact = {
+      uid: 'peer-1',
+      callsign: 'ATAK One',
+      team: 'Green',
+      coordinate: {
+        latitude: 39.7408,
+        longitude: -104.9937,
+        altitudeMeters: 1608,
+        horizontalAccuracyMeters: 4,
+        verticalAccuracyMeters: 7,
+        headingDegrees: 82,
+      },
+      staleAt: '2026-07-30T05:05:00.000Z',
+    }
+
+    expect(takContactSchema.parse(contact)).toEqual(contact)
+    expect(
+      takContactSchema.safeParse({
+        ...contact,
+        coordinate: { ...contact.coordinate, latitude: 91 },
+      }).success,
+    ).toBe(false)
+    expect(
+      takContactSchema.safeParse({ ...contact, staleAt: 'not-a-time' }).success,
+    ).toBe(false)
+    expect(
+      takContactSchema.safeParse({ ...contact, callsign: 'x'.repeat(129) })
+        .success,
+    ).toBe(false)
   })
 
   it('rejects malformed or non-canonical media digests', () => {

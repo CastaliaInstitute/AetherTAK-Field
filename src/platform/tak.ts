@@ -3,7 +3,11 @@ import {
   registerPlugin,
   type PluginListenerHandle,
 } from '@capacitor/core'
-import type { TakConnectionState, TakContact } from '../domain/models'
+import {
+  takContactSchema,
+  type TakConnectionState,
+  type TakContact,
+} from '../domain/models'
 import { operationToCot } from '../tak/cot'
 import type { TakOperation } from '../tak/operations'
 
@@ -194,7 +198,10 @@ export const takTransport = {
 
   async contacts(): Promise<TakContact[]> {
     if (!Capacitor.isNativePlatform()) return []
-    return (await nativeTak.getContacts()).contacts
+    return (await nativeTak.getContacts()).contacts.flatMap((contact) => {
+      const parsed = takContactSchema.safeParse(contact)
+      return parsed.success ? [parsed.data] : []
+    })
   },
 
   async connect(profileId?: string): Promise<TakStatus> {

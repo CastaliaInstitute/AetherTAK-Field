@@ -238,13 +238,15 @@ export type TakConnectionState =
   | 'connected'
   | 'degraded'
 
-export interface TakContact {
-  uid: string
-  callsign: string
-  team: string | null
-  coordinate: Coordinate
-  staleAt: string
-}
+export const takContactSchema = z.object({
+  uid: z.string().min(1).max(256),
+  callsign: z.string().min(1).max(128),
+  team: z.string().max(64).nullable(),
+  coordinate: coordinateSchema,
+  staleAt: z.string().datetime({ offset: true }),
+})
+
+export type TakContact = z.infer<typeof takContactSchema>
 
 export const depthCapabilitySchema = z
   .object({

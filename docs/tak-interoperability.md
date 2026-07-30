@@ -18,6 +18,16 @@ shapes used by TAK clients:
 - XML declarations, formatting whitespace, unknown detail extensions, and
   numeric-looking callsigns
 
+Before an inbound event reaches durable activity or the operational map, the
+shared boundary limits it to 256 KiB and 100 geometry points, rejects document
+type/entity declarations, requires bounded UID/type fields and parseable
+`time`/`stale` values, rejects stale times before event times, and validates
+latitude/longitude ranges. Mission-package metadata becomes actionable only
+when its digest, byte count, and bounded identifiers are valid. Native contact
+snapshots are independently schema-filtered so a malformed PLI cannot poison
+MapLibre state. Built-in XML entities remain enabled because interoperable
+GeoChat text requires them.
+
 The native Swift and Kotlin contact paths additionally exercise double- and
 single-quoted attributes, predefined and numeric XML entities, exact element
 matching, malformed/custom entity rejection, and bounded input handling.

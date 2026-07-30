@@ -6,8 +6,15 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '',
   parseAttributeValue: false,
+  // Built-in XML entities are required for interoperable GeoChat text.
+  // Custom declarations are rejected before parsing below.
+  processEntities: true,
   trimValues: false,
 })
+
+export const MAX_COT_EVENT_BYTES = 256 * 1024
+export const MAX_COT_GEOMETRY_POINTS = 100
+const MAX_MISSION_PACKAGE_BYTES = 25 * 1024 * 1024
 
 const escapeXml = (value: string) =>
   value
@@ -295,7 +302,97 @@ function operationKind(type: string): TakOperation['kind'] {
   return 'marker'
 }
 
+function requiredBoundedString(
+  value: unknown,
+  label: string,
+  maximumLength: number,
+) {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > maximumLength
+  ) {
+    throw new Error(`Invalid CoT ${label}.`)
+  }
+  return value
+}
+
+function optionalBoundedString(value: unknown, maximumLength: number) {
+  if (typeof value !== 'string') return null
+  return value.length <= maximumLength ? value : null
+}
+
+function cotTimestamp(value: unknown, label: string) {
+  const timestamp = requiredBoundedString(value, label, 64)
+  if (!Number.isFinite(Date.parse(timestamp))) {
+    throw new Error(`Invalid CoT ${label}.`)
+  }
+  return timestamp
+}
+
+function coordinateNumber(
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`Invalid CoT ${label}.`)
+  }
+  return parsed
+}
+
+function optionalCoordinateNumber(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  fallback: number | null,
+) {
+  if (value === undefined || value === null || value === '') return fallback
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum
+    ? parsed
+    : fallback
+}
+
+function geometryCoordinate(
+  latitude: unknown,
+  longitude: unknown,
+  altitude: unknown,
+): Coordinate {
+  return {
+    latitude: coordinateNumber(latitude, 'latitude', -90, 90),
+    longitude: coordinateNumber(longitude, 'longitude', -180, 180),
+    altitudeMeters: optionalCoordinateNumber(
+      altitude,
+      -20_000,
+      100_000,
+      null,
+    ),
+    horizontalAccuracyMeters: null,
+    verticalAccuracyMeters: null,
+    headingDegrees: null,
+  }
+}
+
+function geometryValues(value: unknown, label: string) {
+  const items = values(value)
+  if (items.length > MAX_COT_GEOMETRY_POINTS) {
+    throw new Error(`CoT ${label} exceeds the geometry point limit.`)
+  }
+  return items
+}
+
 export function parseCotEvent(xml: string): ParsedCotEvent {
+  if (
+    new TextEncoder().encode(xml).byteLength > MAX_COT_EVENT_BYTES
+  ) {
+    throw new Error('CoT event exceeds the size limit.')
+  }
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) {
+    throw new Error('CoT document declarations are not allowed.')
+  }
   const result = parser.parse(xml) as {
     event?: {
       uid?: unknown
@@ -307,12 +404,15 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
     }
   }
   const value = result.event
-  if (!value || typeof value.uid !== 'string' || typeof value.type !== 'string') {
+  if (!value) {
     throw new Error('Invalid CoT event.')
   }
-  const numeric = (input: unknown, fallback: number) => {
-    const parsed = Number(input)
-    return Number.isFinite(parsed) ? parsed : fallback
+  const uid = requiredBoundedString(value.uid, 'UID', 256)
+  const type = requiredBoundedString(value.type, 'type', 128)
+  const time = cotTimestamp(value.time, 'time')
+  const stale = cotTimestamp(value.stale, 'stale time')
+  if (Date.parse(stale) < Date.parse(time)) {
+    throw new Error('Invalid CoT stale time.')
   }
   const pointValue = value.point ?? {}
   const detail = value.detail ?? {}
@@ -324,36 +424,40 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
   const ackresponse = record(detail.ackresponse)
   const track = record(detail.track)
   const coordinate: Coordinate = {
-    latitude: numeric(pointValue.lat, 0),
-    longitude: numeric(pointValue.lon, 0),
-    altitudeMeters: numeric(pointValue.hae, 0),
-    horizontalAccuracyMeters: numeric(pointValue.ce, 9999999),
-    verticalAccuracyMeters: numeric(pointValue.le, 9999999),
-    headingDegrees:
-      track.course === undefined
-        ? null
-        : numeric(track.course, 0),
+    latitude: coordinateNumber(pointValue.lat, 'latitude', -90, 90),
+    longitude: coordinateNumber(pointValue.lon, 'longitude', -180, 180),
+    altitudeMeters: optionalCoordinateNumber(
+      pointValue.hae,
+      -20_000,
+      100_000,
+      null,
+    ),
+    horizontalAccuracyMeters: optionalCoordinateNumber(
+      pointValue.ce,
+      0,
+      10_000_000,
+      9_999_999,
+    ),
+    verticalAccuracyMeters: optionalCoordinateNumber(
+      pointValue.le,
+      0,
+      10_000_000,
+      9_999_999,
+    ),
+    headingDegrees: optionalCoordinateNumber(track.course, 0, 360, null),
   }
-  const kind = operationKind(value.type)
+  const kind = operationKind(type)
   let points: Coordinate[] = [coordinate]
   let closed: boolean | null = null
   if (kind === 'route') {
-    points = values(detail.link).flatMap((linkValue) => {
+    points = geometryValues(detail.link, 'route').flatMap((linkValue) => {
       const rawPoint = record(linkValue).point
       if (typeof rawPoint !== 'string') return []
       const [latitude, longitude, altitude] = rawPoint
         .split(',')
-        .map(Number)
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return []
-      return [{
-        latitude,
-        longitude,
-        altitudeMeters: Number.isFinite(altitude) ? altitude : null,
-        horizontalAccuracyMeters: null,
-        verticalAccuracyMeters: null,
-        headingDegrees: null,
-      }]
+      return [geometryCoordinate(latitude, longitude, altitude)]
     })
+    if (points.length < 2) throw new Error('Invalid CoT route geometry.')
   }
   if (kind === 'shape') {
     const shape = record(detail.shape)
@@ -362,21 +466,12 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
       polyline.closed === undefined
         ? null
         : String(polyline.closed).toLowerCase() === 'true'
-    points = values(polyline.vertex).flatMap((vertexValue) => {
+    points = geometryValues(polyline.vertex, 'shape').map((vertexValue) => {
       const vertex = record(vertexValue)
-      const latitude = Number(vertex.lat)
-      const longitude = Number(vertex.lon)
-      const altitude = Number(vertex.hae)
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return []
-      return [{
-        latitude,
-        longitude,
-        altitudeMeters: Number.isFinite(altitude) ? altitude : null,
-        horizontalAccuracyMeters: null,
-        verticalAccuracyMeters: null,
-        headingDegrees: null,
-      }]
+      return geometryCoordinate(vertex.lat, vertex.lon, vertex.hae)
     })
+    const minimum = closed ? 3 : 2
+    if (points.length < minimum) throw new Error('Invalid CoT shape geometry.')
   }
   let fileTransfer: ParsedCotFileTransfer | null = null
   if (kind === 'missionPackage') {
@@ -388,8 +483,15 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
       typeof fileshare.senderUid === 'string' &&
       typeof fileshare.senderUrl === 'string' &&
       typeof fileshare.sha256 === 'string' &&
+      /^[0-9a-f]{64}$/i.test(fileshare.sha256) &&
       Number.isSafeInteger(sizeBytes) &&
-      sizeBytes >= 0
+      sizeBytes >= 1 &&
+      sizeBytes <= MAX_MISSION_PACKAGE_BYTES &&
+      fileshare.filename.length <= 255 &&
+      fileshare.name.length <= 128 &&
+      fileshare.senderCallsign.length <= 128 &&
+      fileshare.senderUid.length <= 256 &&
+      fileshare.senderUrl.length <= 2_048
     ) {
       fileTransfer = {
         mode: 'request',
@@ -412,8 +514,12 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
       typeof ackresponse.uid === 'string' &&
       typeof ackresponse.senderUid === 'string' &&
       typeof ackresponse.sha256 === 'string' &&
+      /^[0-9a-f]{64}$/i.test(ackresponse.sha256) &&
       Number.isSafeInteger(sizeBytes) &&
-      sizeBytes >= 0
+      sizeBytes >= 1 &&
+      sizeBytes <= MAX_MISSION_PACKAGE_BYTES &&
+      ackresponse.uid.length <= 256 &&
+      ackresponse.senderUid.length <= 256
     ) {
       fileTransfer = {
         mode: 'ack',
@@ -427,34 +533,30 @@ export function parseCotEvent(xml: string): ParsedCotEvent {
         sizeBytes,
         ackUid: ackresponse.uid,
         success: String(ackresponse.success).toLowerCase() === 'true',
-        reason:
-          typeof ackresponse.reason === 'string' ? ackresponse.reason : null,
+        reason: optionalBoundedString(ackresponse.reason, 512),
       }
     }
   }
 
+  const contactCallsign = optionalBoundedString(contact.callsign, 128)
+  const chatCallsign = optionalBoundedString(chat.senderCallsign, 128)
+  const emergencyCallsign = optionalBoundedString(text(emergency), 128)
+  const emergencyType = optionalBoundedString(emergency.type, 128)
   return {
-    uid: value.uid,
-    type: value.type,
+    uid,
+    type,
     kind,
-    time: String(value.time ?? ''),
-    stale: String(value.stale ?? ''),
+    time,
+    stale,
     coordinate,
     points,
     closed,
-    callsign:
-      typeof contact.callsign === 'string'
-        ? contact.callsign
-        : typeof chat.senderCallsign === 'string'
-          ? chat.senderCallsign
-          : text(emergency),
-    remarks: text(detail.remarks),
+    callsign: contactCallsign ?? chatCallsign ?? emergencyCallsign,
+    remarks: optionalBoundedString(text(detail.remarks), 4_096),
     emergencyType:
       emergency.cancel === 'true'
         ? 'Cancel'
-        : typeof emergency.type === 'string'
-          ? emergency.type
-          : null,
+        : emergencyType,
     fileTransfer,
     raw: xml,
   }

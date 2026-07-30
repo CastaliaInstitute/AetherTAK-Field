@@ -288,5 +288,13 @@ describe('ATAK and iTAK CoT interoperability fixtures', () => {
       success: true,
       reason: 'Transfer complete',
     })
+
+    expect(
+      parseCotEvent(
+        request
+          .replace(`sha256="${'a'.repeat(64)}"`, 'sha256="not-a-digest"')
+          .replace('sizeInBytes="4096"', 'sizeInBytes="999999999"'),
+      ).fileTransfer,
+    ).toBeNull()
   })
 })

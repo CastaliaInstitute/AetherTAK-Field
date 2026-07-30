@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Coordinate } from '../domain/models'
-import { operationToCot, parseCotEvent } from './cot'
+import {
+  MAX_COT_EVENT_BYTES,
+  MAX_COT_GEOMETRY_POINTS,
+  operationToCot,
+  parseCotEvent,
+} from './cot'
 import type { TakIdentity, TakOperation } from './operations'
 
 const coordinate: Coordinate = {
@@ -157,5 +162,67 @@ describe('TAK Cursor-on-Target codec', () => {
         createdAt,
       }),
     ).toThrow('at least two points')
+  })
+
+  it('rejects oversized, declared-entity, and invalid-time events', () => {
+    expect(() => parseCotEvent('x'.repeat(MAX_COT_EVENT_BYTES + 1))).toThrow(
+      'size limit',
+    )
+    expect(() =>
+      parseCotEvent(
+        '<!DOCTYPE event [<!ENTITY callsign "peer">]><event/>',
+      ),
+    ).toThrow('declarations are not allowed')
+
+    const valid = operationToCot({
+      kind: 'marker',
+      uid: 'marker-time',
+      callsign: 'Marker',
+      coordinate,
+      createdAt,
+    })
+    expect(() =>
+      parseCotEvent(valid.replace(createdAt, 'not-a-time')),
+    ).toThrow('Invalid CoT time')
+    expect(() =>
+      parseCotEvent(
+        valid.replace(
+          '2026-07-30T05:05:00.000Z',
+          '2026-07-30T04:59:59.000Z',
+        ),
+      ),
+    ).toThrow('Invalid CoT stale time')
+  })
+
+  it('rejects coordinates and geometry that cannot be rendered safely', () => {
+    const valid = operationToCot({
+      kind: 'marker',
+      uid: 'marker-coordinate',
+      callsign: 'Marker',
+      coordinate,
+      createdAt,
+    })
+    expect(() =>
+      parseCotEvent(valid.replace('lat="39.7408"', 'lat="91"')),
+    ).toThrow('Invalid CoT latitude')
+    expect(() =>
+      parseCotEvent(valid.replace('lon="-104.9937"', 'lon="-181"')),
+    ).toThrow('Invalid CoT longitude')
+
+    const route = operationToCot({
+      kind: 'route',
+      uid: 'route-large',
+      title: 'Large route',
+      colorArgb: 0,
+      points: Array.from(
+        { length: MAX_COT_GEOMETRY_POINTS + 1 },
+        (_, index) => ({
+          ...coordinate,
+          latitude: coordinate.latitude + index / 100_000,
+        }),
+      ),
+      createdAt,
+    })
+    expect(() => parseCotEvent(route)).toThrow('geometry point limit')
   })
 })
