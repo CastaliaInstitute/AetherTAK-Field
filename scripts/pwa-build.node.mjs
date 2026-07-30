@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import {
+  assertSelfContainedPresentation,
   buildPwaAssets,
   createPngIcon,
 } from './pwa-build.mjs'
@@ -59,6 +60,37 @@ test('builds a content-versioned offline shell without touching map caches', asy
     await writeFile(path.join(directory, 'assets', 'app.js'), 'changed()')
     const changed = await buildPwaAssets(directory)
     assert.notEqual(changed.cacheName, first.cacheName)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('rejects third-party presentation dependencies from the app shell', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'aethertak-pwa-remote-'))
+  try {
+    await mkdir(path.join(directory, 'assets'))
+    await writeFile(path.join(directory, 'index.html'), '<main>Field</main>')
+    await writeFile(
+      path.join(directory, 'assets', 'app.css'),
+      '@import url("https://fonts.googleapis.com/css2?family=DM+Sans");',
+    )
+
+    await assert.rejects(
+      assertSelfContainedPresentation(directory, [
+        'assets/app.css',
+        'index.html',
+      ]),
+      /must not fetch third-party resources/,
+    )
+    await writeFile(path.join(directory, 'assets', 'app.css'), ':root{}')
+    await writeFile(
+      path.join(directory, 'index.html'),
+      '<link rel="preload stylesheet" href="https://cdn.example.test/app.css">',
+    )
+    await assert.rejects(
+      buildPwaAssets(directory),
+      /must not fetch third-party resources/,
+    )
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

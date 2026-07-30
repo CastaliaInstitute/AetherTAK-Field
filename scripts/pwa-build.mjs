@@ -171,6 +171,36 @@ self.addEventListener('fetch', (event) => {
 `
 }
 
+export async function assertSelfContainedPresentation(directory, files) {
+  for (const file of files) {
+    if (!file.endsWith('.css') && !file.endsWith('.html')) continue
+    const source = await readFile(path.join(directory, file), 'utf8')
+    const remotePresentationLink = [...source.matchAll(/<link\b[^>]*>/gi)]
+      .some(([tag]) => {
+        const relation =
+          tag.match(/\brel\s*=\s*["']([^"']+)["']/i)?.[1] ?? ''
+        const href =
+          tag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1] ?? ''
+        const presentationRelation = relation
+          .split(/\s+/)
+          .some((token) =>
+            /^(?:stylesheet|preload|preconnect)$/i.test(token),
+          )
+        return presentationRelation && /^https?:\/\//i.test(href)
+      })
+    if (
+      /(?:@import\s+(?:url\()?\s*['"]?https?:|url\(\s*['"]?https?:)/i
+        .test(source) ||
+      remotePresentationLink ||
+      /fonts\.(?:googleapis|gstatic)\.com/i.test(source)
+    ) {
+      throw new Error(
+        `Application shell presentation must not fetch third-party resources: ${file}`,
+      )
+    }
+  }
+}
+
 export async function buildPwaAssets(directory) {
   const icons = path.join(directory, 'icons')
   await mkdir(icons, { recursive: true })
@@ -192,6 +222,7 @@ export async function buildPwaAssets(directory) {
   const files = (await filesBelow(directory))
     .filter((file) => file !== 'sw.js')
     .sort()
+  await assertSelfContainedPresentation(directory, files)
   const digest = createHash('sha256')
   for (const file of files) {
     digest.update(file)

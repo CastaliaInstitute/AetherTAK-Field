@@ -26,6 +26,8 @@ client and inside Capacitor shells for iOS and Android.
 - Installable web manifest and content-versioned offline application shell with
   generated 192/512/maskable icons, network-first navigation fallback, and
   cache rotation that preserves independently managed offline map regions.
+- A self-contained presentation layer using platform-native fonts, with a
+  release gate that rejects remote stylesheets, fonts, and CSS assets.
 - Structured field/ecology observation capture with category, title, notes,
   geotagged native photo/video, selectable depth output, app-private media,
   streaming SHA-256 integrity for photo, video, depth, confidence, point-cloud,

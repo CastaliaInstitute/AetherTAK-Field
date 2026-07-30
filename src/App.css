@@ -18,19 +18,19 @@
 .eyebrow {
   margin: 0 0 4px;
   color: #7f9689;
-  font: 700 10px/1.2 'Manrope', sans-serif;
+  font: 700 10px/1.2 var(--font-sans);
   letter-spacing: .13em;
 }
 
 h1, h2, h3, p { margin-top: 0; }
 h1 {
   margin-bottom: 0;
-  font: 700 25px/1 'Manrope', sans-serif;
+  font: 700 25px/1 var(--font-sans);
   letter-spacing: -.04em;
 }
 h1 span { color: var(--green); }
-h2 { margin: 0; font: 650 20px/1.2 'Manrope', sans-serif; letter-spacing: -.025em; }
-h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
+h2 { margin: 0; font: 650 20px/1.2 var(--font-sans); letter-spacing: -.025em; }
+h3 { margin: 0; font: 650 15px/1.3 var(--font-sans); }
 
 .connection {
   display: inline-flex;
@@ -57,7 +57,7 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
 }
 .status-strip div { display: grid; text-align: center; border-right: 1px solid var(--line); }
 .status-strip div:last-child { border: 0; }
-.status-strip strong { font: 650 17px 'Manrope', sans-serif; color: #f1f5ef; }
+.status-strip strong { font: 650 17px var(--font-sans); color: #f1f5ef; }
 .status-strip span { color: var(--muted); font-size: 10px; }
 
 .offline-map-manager {
@@ -210,7 +210,9 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
   box-shadow: 0 20px 50px rgba(0,0,0,.25);
 }
 .field-map { width: 100%; height: 100%; background: #24342c; }
-.maplibregl-map { font-family: 'DM Sans', sans-serif; }
+.maplibregl-map {
+  font-family: var(--font-sans);
+}
 .maplibregl-ctrl-group { background: rgba(21,32,26,.87)!important; }
 .maplibregl-ctrl-group button { filter: invert(1); }
 .map-legend {
@@ -420,7 +422,7 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
 .field-copy p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .field-status { color: var(--green); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
 .health { display: grid; min-width: 46px; text-align: right; }
-.health strong { color: var(--green); font: 650 18px 'Manrope', sans-serif; }
+.health strong { color: var(--green); font: 650 18px var(--font-sans); }
 .health span { color: var(--muted); font-size: 9px; }
 
 .sensor-panel {
@@ -497,7 +499,7 @@ h3 { margin: 0; font: 650 15px/1.3 'Manrope', sans-serif; }
 .alert p { margin: 2px 0 0; color: #bda984; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .al-mark {
   display: grid; place-items: center; flex: 0 0 38px; height: 38px;
-  color: #0f211d; background: var(--cyan); border-radius: 11px; font: 700 14px 'Manrope';
+  color: #0f211d; background: var(--cyan); border-radius: 11px; font: 700 14px var(--font-sans);
 }
 .al-panel {
   margin: 12px 20px 0;
