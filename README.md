@@ -13,11 +13,19 @@ client and inside Capacitor shells for iOS and Android.
 - IndexedDB field records and durable mutation outbox for offline sync.
 - Native plugin contracts for certificate-backed TAK transport and
   capability-detected ARKit LiDAR / ARCore Depth.
+- CoT 2.0 encoding and parsing for PLI, GeoChat, markers, routes, shapes, and
+  emergency events, backed by a durable offline TAK event outbox.
 - Read-only Al field insight surface.
 
 The browser provides a safe preview. Certificate enrollment, CoT transport, and
 depth capture are intentionally native-only so private key material does not
 cross the JavaScript bridge.
+
+The checked-in Swift and Java native bridge classes currently provide real
+device capability detection and explicit unavailable/not-implemented results.
+Certificate import, streaming TLS transport, and depth-capture sessions are the
+next native implementation gate; the app does not pretend these operations
+succeeded in this foundation build.
 
 ## Development
 

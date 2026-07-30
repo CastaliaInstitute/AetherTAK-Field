@@ -1,5 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { TakConnectionState, TakContact } from '../domain/models'
+import { operationToCot } from '../tak/cot'
+import type { TakOperation } from '../tak/operations'
 
 export interface TakServerProfile {
   id: string
@@ -34,7 +36,7 @@ interface AetherTakTransportPlugin {
   disconnect(): Promise<void>
   getStatus(): Promise<TakStatus>
   getContacts(): Promise<{ contacts: TakContact[] }>
-  sendCot(options: { message: CotMessage }): Promise<{ accepted: boolean }>
+  sendCot(options: { xml: string }): Promise<{ accepted: boolean }>
 }
 
 const nativeTak = registerPlugin<AetherTakTransportPlugin>('AetherTakTransport')
@@ -70,8 +72,32 @@ export const takTransport = {
     return nativeTak.connect(profileId ? { profileId } : {})
   },
 
-  async send(message: CotMessage): Promise<boolean> {
+  async sendXml(xml: string): Promise<boolean> {
     if (!Capacitor.isNativePlatform()) return false
-    return (await nativeTak.sendCot({ message })).accepted
+    return (await nativeTak.sendCot({ xml })).accepted
+  },
+
+  async sendOperation(operation: TakOperation): Promise<boolean> {
+    return this.sendXml(operationToCot(operation))
+  },
+
+  async send(message: CotMessage): Promise<boolean> {
+    const operation: TakOperation = {
+      kind: 'marker',
+      uid: message.uid,
+      callsign: message.callsign,
+      coordinate: {
+        latitude: message.latitude,
+        longitude: message.longitude,
+        altitudeMeters: message.altitudeMeters ?? null,
+        horizontalAccuracyMeters: null,
+        verticalAccuracyMeters: null,
+        headingDegrees: null,
+      },
+      cotType: message.type,
+      createdAt: new Date().toISOString(),
+      staleSeconds: message.staleSeconds,
+    }
+    return this.sendOperation(operation)
   },
 }

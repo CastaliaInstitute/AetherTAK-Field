@@ -1,0 +1,47 @@
+import 'fake-indexeddb/auto'
+import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { db } from '../data/database'
+import {
+  markTakEventFailed,
+  markTakEventSent,
+  pendingTakEvents,
+  queueTakOperation,
+} from './outbox'
+
+const marker = {
+  kind: 'marker' as const,
+  uid: 'marker-offline-1',
+  callsign: 'Soil sample',
+  coordinate: {
+    latitude: 39.74,
+    longitude: -104.99,
+    altitudeMeters: null,
+    horizontalAccuracyMeters: 3,
+    verticalAccuracyMeters: null,
+    headingDegrees: null,
+  },
+  remarks: 'Sample A-14',
+  createdAt: '2026-07-30T05:00:00.000Z',
+}
+
+describe('offline TAK outbox', () => {
+  beforeEach(async () => {
+    await db.takOutbox.clear()
+  })
+
+  afterAll(async () => {
+    db.close()
+    await db.delete()
+  })
+
+  it('persists encoded CoT until delivery succeeds', async () => {
+    const queued = await queueTakOperation(marker)
+    expect((await pendingTakEvents())[0].xml).toContain('Sample A-14')
+
+    await markTakEventFailed(queued.id, 'offline')
+    expect((await db.takOutbox.get(queued.id))?.attempts).toBe(1)
+
+    await markTakEventSent(queued.id)
+    expect(await pendingTakEvents()).toEqual([])
+  })
+})

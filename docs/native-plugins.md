@@ -52,3 +52,13 @@ Before beta distribution, verify on physical devices:
 4. Photo/video metadata and file integrity across offline sync.
 5. LiDAR/Depth accuracy against known dimensions, including confidence and
    unsupported-device fallback.
+
+## Implementation status
+
+The shared CoT codec and offline TAK outbox are implemented and unit tested.
+The Swift and Java plugin classes are registered in their native projects and
+perform device capability checks, input validation, and honest failure
+reporting. The certificate importer, Keychain/KeyStore identity persistence,
+streaming TLS client, ARKit capture session, and ARCore capture session remain
+open work and require compilation plus physical-device verification on their
+respective platforms.

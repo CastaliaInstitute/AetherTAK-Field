@@ -6,6 +6,7 @@ import type {
   Observation,
   SensorReading,
 } from '../domain/models'
+import type { QueuedTakEvent } from '../tak/outbox'
 
 export interface OutboxItem {
   id: string
@@ -25,6 +26,7 @@ class AetherFieldDatabase extends Dexie {
   media!: EntityTable<MediaCapture, 'id'>
   alerts!: EntityTable<Alert, 'id'>
   outbox!: EntityTable<OutboxItem, 'id'>
+  takOutbox!: EntityTable<QueuedTakEvent, 'id'>
 
   constructor() {
     super('aethertak-field')
@@ -35,6 +37,15 @@ class AetherFieldDatabase extends Dexie {
       media: 'id, observationId, kind, capturedAt, syncState',
       alerts: 'id, severity, fieldId, deviceId, createdAt, acknowledgedAt',
       outbox: 'id, entityType, entityId, operation, createdAt, attempts',
+    })
+    this.version(2).stores({
+      fields: 'id, propertyId, status, updatedAt',
+      readings: 'id, deviceId, fieldId, siteId, measurement, recordedAt',
+      observations: 'id, fieldId, siteId, category, observedAt, syncState',
+      media: 'id, observationId, kind, capturedAt, syncState',
+      alerts: 'id, severity, fieldId, deviceId, createdAt, acknowledgedAt',
+      outbox: 'id, entityType, entityId, operation, createdAt, attempts',
+      takOutbox: 'id, createdAt, attempts, operation.kind',
     })
   }
 }
@@ -54,4 +65,3 @@ export async function queueMutation(
   await db.outbox.add(queued)
   return queued
 }
-
