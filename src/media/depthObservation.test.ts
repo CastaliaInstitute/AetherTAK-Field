@@ -87,6 +87,58 @@ describe('offline depth observation capture', () => {
     expect(await db.outbox.count()).toBe(4)
   })
 
+  it('atomically queues an integrity-bound Android depth-surface model', async () => {
+    const meshScan: DepthScanResult = {
+      ...scan,
+      modelUri: 'file:///scan/depth-surface.obj',
+    }
+    const inspect = vi.fn(async (uri: string) => ({
+      sha256: uri.includes('depth-surface')
+        ? 'd'.repeat(64)
+        : uri.includes('depth')
+          ? 'a'.repeat(64)
+          : uri.includes('confidence')
+            ? 'b'.repeat(64)
+            : 'c'.repeat(64),
+      sizeBytes: 1_024,
+    }))
+    const cleanup = vi.fn(async () => undefined)
+
+    const result = await captureDepthObservation(
+      {
+        fieldId: null,
+        siteId: null,
+        category: 'habitat',
+        title: 'Habitat surface',
+        notes: 'ARCore sampled depth surface',
+      },
+      'mesh',
+      {
+        locate: async () => coordinate,
+        scan: async () => meshScan,
+        inspect,
+        cleanup,
+      },
+    )
+
+    expect(result.media.map((artifact) => artifact.kind)).toEqual([
+      'depth',
+      'depth_confidence',
+      'point_cloud',
+      'model',
+    ])
+    expect(result.media.at(-1)).toMatchObject({
+      kind: 'model',
+      mimeType: 'model/obj',
+      sha256: 'd'.repeat(64),
+    })
+    expect(inspect).toHaveBeenCalledTimes(4)
+    expect(cleanup).not.toHaveBeenCalled()
+    expect(result.observation.mediaIds).toHaveLength(4)
+    expect(await db.media.count()).toBe(4)
+    expect(await db.outbox.count()).toBe(5)
+  })
+
   it('removes the complete scan and commits nothing when integrity fails', async () => {
     const cleanup = vi.fn(async () => undefined)
     const inspect = vi

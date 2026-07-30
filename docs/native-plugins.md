@@ -79,7 +79,9 @@ The plugin reports capabilities before presenting a capture UI:
 
 - iOS: ARKit scene depth / LiDAR, confidence maps, point clouds, and mesh export.
 - Android: ARCore Depth API, confidence metadata where available, point clouds,
-  and model export.
+  and bounded sampled depth-surface OBJ model export. The Android model is
+  reconstructed from calibrated depth samples; it does not claim ARCore
+  environmental scene-mesh support.
 
 Methods:
 

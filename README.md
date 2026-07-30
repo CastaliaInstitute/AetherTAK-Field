@@ -64,7 +64,8 @@ identities in Keychain/Android KeyStore, pin the issued CA, require TLS 1.2 or
 newer, verify the server identity, stream CoT bidirectionally, and maintain live
 contacts. Native field API clients reuse that identity for verified streaming
 media transfers. ARKit exports depth, confidence, point clouds, measurements,
-and supported meshes; ARCore exports depth, point clouds, and measurements.
+and supported meshes; ARCore exports depth, confidence, point clouds,
+measurements, and bounded sampled depth-surface OBJ models.
 
 ## Development
 

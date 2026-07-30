@@ -351,6 +351,7 @@ class AetherDepthCaptureActivity : Activity(), GLSurfaceView.Renderer {
                         principalPoint = principal,
                         imageDimensions = imageDimensions,
                         cameraPose = pose,
+                        mode = intent.getStringExtra(EXTRA_MODE) ?: "measure",
                     )
                     runOnUiThread {
                         setResult(
@@ -581,16 +582,54 @@ private object AetherAndroidDepthExporter {
         principalPoint: FloatArray,
         imageDimensions: IntArray,
         cameraPose: com.google.ar.core.Pose,
+        mode: String,
     ): JSONObject {
+        require(mode in setOf("measure", "point_cloud", "mesh")) {
+            "Unsupported depth scan mode."
+        }
         val id = UUID.randomUUID()
         val directory = File(filesDir, "DepthScans/${id.toString().lowercase()}")
         check(directory.mkdirs() || directory.isDirectory) {
             "Could not create private depth scan storage."
         }
+        return try {
+            exportIntoDirectory(
+                id = id,
+                directory = directory,
+                coordinate = coordinate,
+                depth = depth,
+                confidence = confidence,
+                previewJpeg = previewJpeg,
+                focalLength = focalLength,
+                principalPoint = principalPoint,
+                imageDimensions = imageDimensions,
+                cameraPose = cameraPose,
+                mode = mode,
+            )
+        } catch (error: Exception) {
+            directory.deleteRecursively()
+            throw error
+        }
+    }
+
+    private fun exportIntoDirectory(
+        id: UUID,
+        directory: File,
+        coordinate: JSONObject,
+        depth: AetherDepthCaptureActivity.DepthGrid,
+        confidence: ByteArray,
+        previewJpeg: ByteArray,
+        focalLength: FloatArray,
+        principalPoint: FloatArray,
+        imageDimensions: IntArray,
+        cameraPose: com.google.ar.core.Pose,
+        mode: String,
+    ): JSONObject {
         val previewFile = File(directory, "preview.jpg")
         val depthFile = File(directory, "depth.u16le")
         val confidenceFile = File(directory, "confidence.u8")
         val cloudFile = File(directory, "point-cloud.ply")
+        val modelFile = File(directory, "depth-surface.obj")
 
         previewFile.writeBytes(previewJpeg)
         depthFile.outputStream().buffered().use { output ->
@@ -630,8 +669,29 @@ private object AetherAndroidDepthExporter {
             }
         }
 
+        val exportedModel = if (mode == "mesh") {
+            val scaleX = depth.width.toFloat() / imageDimensions[0].toFloat()
+            val scaleY = depth.height.toFloat() / imageDimensions[1].toFloat()
+            val surface = buildDepthSurfaceMesh(
+                width = depth.width,
+                height = depth.height,
+                depthMillimetersLittleEndian = depth.bytes,
+                focalX = focalLength[0] * scaleX,
+                focalY = focalLength[1] * scaleY,
+                centerX = principalPoint[0] * scaleX,
+                centerY = principalPoint[1] * scaleY,
+            )
+            check(surface.faces.isNotEmpty()) {
+                "No continuous ARCore depth surface was available for a 3D model."
+            }
+            writeSurfaceModel(surface, cameraPose, modelFile)
+            modelFile
+        } else {
+            null
+        }
+
         val measurements = measurements(points)
-        return JSONObject().apply {
+        JSONObject().apply {
             put("id", id.toString().lowercase())
             put("provider", "arcore-depth")
             put("capturedAt", Instant.now().toString())
@@ -640,7 +700,10 @@ private object AetherAndroidDepthExporter {
             put("depthUri", Uri.fromFile(depthFile).toString())
             put("confidenceUri", Uri.fromFile(confidenceFile).toString())
             put("pointCloudUri", Uri.fromFile(cloudFile).toString())
-            put("modelUri", JSONObject.NULL)
+            put(
+                "modelUri",
+                exportedModel?.let { Uri.fromFile(it).toString() } ?: JSONObject.NULL,
+            )
             put("measurements", measurements)
         }
     }
@@ -683,6 +746,29 @@ private object AetherAndroidDepthExporter {
             }
         }
         return points
+    }
+
+    private fun writeSurfaceModel(
+        surface: DepthSurfaceMesh,
+        cameraPose: com.google.ar.core.Pose,
+        outputFile: File,
+    ) {
+        outputFile.bufferedWriter().use { output ->
+            output.appendLine("# AetherTAK Field ARCore sampled depth surface")
+            output.appendLine("# Units: meters; coordinates: ARCore world frame")
+            output.appendLine("o AetherTAK_ARCore_Depth_Surface")
+            surface.vertices.forEach { vertex ->
+                val world = cameraPose.transformPoint(
+                    floatArrayOf(vertex.x, vertex.y, vertex.z),
+                )
+                output.appendLine("v ${world[0]} ${world[1]} ${world[2]}")
+            }
+            surface.faces.forEach { face ->
+                output.appendLine(
+                    "f ${face.first + 1} ${face.second + 1} ${face.third + 1}",
+                )
+            }
+        }
     }
 
     private fun measurements(points: List<Point>): JSONArray {

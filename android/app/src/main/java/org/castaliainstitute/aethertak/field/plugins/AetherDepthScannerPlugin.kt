@@ -27,7 +27,7 @@ class AetherDepthScannerPlugin : Plugin() {
             put("supported", supported)
             put("provider", if (supported) "arcore-depth" else "none")
             put("supportsPointCloud", supported)
-            put("supportsMesh", false)
+            put("supportsMesh", supported)
             put("supportsConfidence", supported)
             put(
                 "reason",
@@ -48,11 +48,16 @@ class AetherDepthScannerPlugin : Plugin() {
             call.reject("A coordinate is required.", "INVALID_OPTIONS")
             return
         }
+        val mode = call.getString("mode", "measure") ?: "measure"
+        if (mode !in setOf("measure", "point_cloud", "mesh")) {
+            call.reject("Unsupported depth scan mode.", "INVALID_OPTIONS")
+            return
+        }
         val intent = Intent(context, AetherDepthCaptureActivity::class.java).apply {
             putExtra(AetherDepthCaptureActivity.EXTRA_COORDINATE, coordinate.toString())
             putExtra(
                 AetherDepthCaptureActivity.EXTRA_MODE,
-                call.getString("mode", "measure"),
+                mode,
             )
         }
         startActivityForResult(call, intent, "depthCaptureResult")

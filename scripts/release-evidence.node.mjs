@@ -109,7 +109,7 @@ function readiness(platform, model, supportedDepth) {
         ? platform === 'ios' ? 'arkit-lidar' : 'arcore-depth'
         : 'none',
       supportsPointCloud: supportedDepth,
-      supportsMesh: platform === 'ios' && supportedDepth,
+      supportsMesh: supportedDepth,
       supportsConfidence: supportedDepth,
       reason: supportedDepth ? null : 'Unavailable',
     },
