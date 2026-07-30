@@ -7,6 +7,11 @@ import {
 import type { FeatureCollection } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Field, SensorReading, TakContact } from '../domain/models'
+import {
+  activeRasterSource,
+  rasterStyleUrl,
+  registerRasterTileProtocol,
+} from '../maps/tileSource'
 
 interface FieldMapProps {
   fields: Field[]
@@ -65,6 +70,7 @@ export function FieldMap({ fields, readings, contacts }: FieldMapProps) {
 
   useEffect(() => {
     if (!container.current || map.current) return
+    registerRasterTileProtocol(activeRasterSource)
 
     const nextMap = new maplibregl.Map({
       container: container.current,
@@ -74,14 +80,14 @@ export function FieldMap({ fields, readings, contacts }: FieldMapProps) {
       style: {
         version: 8,
         sources: {
-          osm: {
+          basemap: {
             type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tiles: [rasterStyleUrl(activeRasterSource)],
             tileSize: 256,
-            attribution: '© OpenStreetMap contributors',
+            attribution: activeRasterSource.attribution,
           },
         },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+        layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
       },
     })
 

@@ -10,6 +10,9 @@ export interface TileCoordinate {
   y: number
 }
 
+export const mapCacheName = (tileSourceId: string) =>
+  `aethertak-map-${tileSourceId}`
+
 const maximumLatitude = 85.05112878
 const clampLatitude = (latitude: number) =>
   Math.min(maximumLatitude, Math.max(-maximumLatitude, latitude))
@@ -123,7 +126,7 @@ export async function downloadOfflineMapRegion(
     )
   }
 
-  const cache = await caches.open(`aethertak-map-${region.tileSourceId}`)
+  const cache = await caches.open(mapCacheName(region.tileSourceId))
   let completed = 0
   let failed = 0
   await db.offlineMapRegions.put({
@@ -176,7 +179,7 @@ export async function downloadOfflineMapRegion(
 
 export async function deleteOfflineMapRegion(region: OfflineMapRegion) {
   if ('caches' in globalThis) {
-    const cache = await caches.open(`aethertak-map-${region.tileSourceId}`)
+    const cache = await caches.open(mapCacheName(region.tileSourceId))
     for (const coordinate of planRegionTiles(
       region.bounds,
       region.minZoom,

@@ -11,9 +11,10 @@ client and inside Capacitor shells for iOS and Android.
 - Persisted property, season, crop-field, ecological-site, observation, alert,
   and read-only Al insight records.
 - ChirpStack v4 uplink normalization with LoRaWAN radio metadata.
-- Offline map-region planning and Cache Storage download manifests for
-  authorized tile sources.
-- Geotagged camera capture using native Camera and Geolocation plugins.
+- Offline map-region planning, Cache Storage downloads, and a cache-first
+  MapLibre raster protocol for authorized tile sources.
+- Durable geotagged photo and video observations using native Camera,
+  Geolocation, Filesystem, SHA-256 photo integrity, and an atomic sync outbox.
 - IndexedDB field records and durable mutation outbox for offline sync.
 - Native plugin contracts for certificate-backed TAK transport and
   capability-detected ARKit LiDAR / ARCore Depth.

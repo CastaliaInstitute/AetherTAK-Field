@@ -19,6 +19,11 @@ Each configured source requires:
 - Explicit zoom and geographic bounds.
 - A documented tile-count ceiling appropriate to the device.
 
-Before mobile beta, connect cached tiles to the MapLibre custom protocol used by
-the runtime map, verify airplane-mode rendering after process termination, and
-test cache eviction plus low-storage behavior on both platforms.
+Copy `.env.example` to a local environment file and provide the licensed source
+configuration. Setting `VITE_MAP_TILE_ALLOW_OFFLINE=true` enables the region
+download action. The live MapLibre map uses the `aether-raster://` protocol,
+which checks the region cache before the network, so cached tiles render in
+airplane mode without a separate code path.
+
+Before mobile beta, verify airplane-mode rendering after process termination
+and test cache eviction plus low-storage behavior on both platforms.

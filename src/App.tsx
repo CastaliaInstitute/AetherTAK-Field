@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Camera,
   ChevronRight,
+  Download,
   Leaf,
   Map,
   MessageCircle,
@@ -10,15 +11,24 @@ import {
   ScanLine,
   Sprout,
   Users,
+  Video,
   Wifi,
   WifiOff,
 } from 'lucide-react'
 import { FieldMap } from './components/FieldMap'
 import { demoSnapshot } from './domain/seed'
 import type { DepthCapability, TakConnectionState } from './domain/models'
-import { captureGeotaggedPhoto } from './platform/capture'
+import {
+  captureObservationPhoto,
+  captureObservationVideo,
+} from './media/observationCapture'
 import { depthScanner } from './platform/depth'
 import { takTransport } from './platform/tak'
+import {
+  createOfflineMapRegion,
+  downloadOfflineMapRegion,
+} from './maps/offlineRegions'
+import { activeRasterSource } from './maps/tileSource'
 import './App.css'
 
 type Tab = 'map' | 'fields' | 'capture' | 'team'
@@ -46,6 +56,9 @@ export default function App() {
     useState<TakConnectionState>('disconnected')
   const [depth, setDepth] = useState<DepthCapability>(initialDepth)
   const [notice, setNotice] = useState<string | null>(null)
+  const [offlineMapState, setOfflineMapState] = useState<
+    'idle' | 'downloading' | 'ready'
+  >('idle')
   const {
     properties,
     seasons,
@@ -72,13 +85,81 @@ export default function App() {
   async function takePhoto() {
     setNotice('Opening camera and acquiring a precise location…')
     try {
-      const capture = await captureGeotaggedPhoto()
+      const capture = await captureObservationPhoto({
+        fieldId: fields[0]?.id ?? null,
+        siteId: null,
+        category: 'crop',
+        title: 'Field photo',
+        notes: 'Captured in AetherTAK Field.',
+      })
       setNotice(
-        `Photo queued at ${capture.coordinate.latitude.toFixed(5)}, ${capture.coordinate.longitude.toFixed(5)}.`,
+        `Observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
       )
     } catch (error) {
       setNotice(
         error instanceof Error ? error.message : 'Camera capture was cancelled.',
+      )
+    }
+  }
+
+  async function recordVideo() {
+    setNotice('Opening video camera and acquiring a precise location…')
+    try {
+      const capture = await captureObservationVideo({
+        fieldId: fields[0]?.id ?? null,
+        siteId: null,
+        category: 'crop',
+        title: 'Field video',
+        notes: 'Recorded in AetherTAK Field.',
+      })
+      setNotice(
+        `Video observation queued at ${capture.observation.coordinate.latitude.toFixed(5)}, ${capture.observation.coordinate.longitude.toFixed(5)}.`,
+      )
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : 'Video recording was cancelled.',
+      )
+    }
+  }
+
+  async function cachePropertyMap() {
+    if (!activeRasterSource.allowOfflineDownload) {
+      setNotice(
+        'Offline download is disabled for the preview basemap. Configure an authorized tile source first.',
+      )
+      return
+    }
+    const boundary = properties[0]?.boundary
+    if (!boundary) return
+    const longitudes = boundary.map(([longitude]) => longitude)
+    const latitudes = boundary.map(([, latitude]) => latitude)
+    const region = createOfflineMapRegion({
+      name: properties[0].name,
+      tileSourceId: activeRasterSource.id,
+      tileUrlTemplate: activeRasterSource.urlTemplate,
+      bounds: {
+        west: Math.min(...longitudes),
+        south: Math.min(...latitudes),
+        east: Math.max(...longitudes),
+        north: Math.max(...latitudes),
+      },
+      minZoom: 12,
+      maxZoom: 17,
+    })
+    setOfflineMapState('downloading')
+    setNotice(`Downloading ${region.tileCount} authorized map tiles…`)
+    try {
+      const downloaded = await downloadOfflineMapRegion(region, {
+        maxTiles: 5_000,
+      })
+      setOfflineMapState(downloaded.status === 'ready' ? 'ready' : 'idle')
+      setNotice(
+        `${downloaded.downloadedTiles}/${downloaded.tileCount} map tiles are available offline.`,
+      )
+    } catch (error) {
+      setOfflineMapState('idle')
+      setNotice(
+        error instanceof Error ? error.message : 'Offline map download failed.',
       )
     }
   }
@@ -108,6 +189,22 @@ export default function App() {
             <div><strong>{readings.length}</strong><span>Sensors live</span></div>
             <div><strong>{averageHealth}%</strong><span>Field health</span></div>
           </section>
+
+          <button
+            className={`offline-map-button ${offlineMapState}`}
+            type="button"
+            disabled={offlineMapState === 'downloading'}
+            onClick={() => void cachePropertyMap()}
+          >
+            <Download size={14} />
+            {offlineMapState === 'ready'
+              ? 'Property map available offline'
+              : offlineMapState === 'downloading'
+                ? 'Downloading property map…'
+                : activeRasterSource.allowOfflineDownload
+                  ? 'Download property map'
+                  : 'Preview basemap · online'}
+          </button>
 
           <FieldMap fields={fields} readings={readings} contacts={contacts} />
 
@@ -210,6 +307,9 @@ export default function App() {
           <p>Photos retain coordinates, accuracy, time, field metadata, and sync state.</p>
           <button className="primary-action" type="button" onClick={() => void takePhoto()}>
             <Camera size={19} /> Take geotagged photo
+          </button>
+          <button className="secondary-action" type="button" onClick={() => void recordVideo()}>
+            <Video size={19} /> Record geotagged video
           </button>
           <button className="secondary-action" type="button" disabled={!depth.supported}>
             <ScanLine size={19} />

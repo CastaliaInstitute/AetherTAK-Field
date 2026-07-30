@@ -1,14 +1,16 @@
+import { Capacitor } from '@capacitor/core'
 import {
   Camera,
-  CameraResultType,
-  CameraSource,
-  type Photo,
+  CameraDirection,
+  EncodingType,
+  type MediaResult,
 } from '@capacitor/camera'
 import { Geolocation } from '@capacitor/geolocation'
 import type { Coordinate } from '../domain/models'
 
-export interface GeotaggedPhoto {
-  photo: Photo
+export interface GeotaggedMedia {
+  media: MediaResult
+  kind: 'photo' | 'video'
   coordinate: Coordinate
   capturedAt: string
 }
@@ -30,20 +32,43 @@ export async function currentCoordinate(): Promise<Coordinate> {
   }
 }
 
-export async function captureGeotaggedPhoto(): Promise<GeotaggedPhoto> {
-  const [photo, coordinate] = await Promise.all([
-    Camera.getPhoto({
-      source: CameraSource.Camera,
-      resultType: CameraResultType.Uri,
+export async function captureGeotaggedPhoto(): Promise<GeotaggedMedia> {
+  const [media, coordinate] = await Promise.all([
+    Camera.takePhoto({
       quality: 92,
       correctOrientation: true,
+      encodingType: EncodingType.JPEG,
       saveToGallery: false,
+      cameraDirection: CameraDirection.Rear,
+      includeMetadata: true,
     }),
     currentCoordinate(),
   ])
 
   return {
-    photo,
+    media,
+    kind: 'photo',
+    coordinate,
+    capturedAt: new Date().toISOString(),
+  }
+}
+
+export async function captureGeotaggedVideo(): Promise<GeotaggedMedia> {
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error('Video recording requires the iOS or Android application.')
+  }
+  const [media, coordinate] = await Promise.all([
+    Camera.recordVideo({
+      saveToGallery: false,
+      includeMetadata: true,
+      isPersistent: true,
+    }),
+    currentCoordinate(),
+  ])
+
+  return {
+    media,
+    kind: 'video',
     coordinate,
     capturedAt: new Date().toISOString(),
   }
