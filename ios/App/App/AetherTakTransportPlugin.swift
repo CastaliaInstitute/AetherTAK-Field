@@ -572,16 +572,16 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
     private func receiveEvent(_ xml: String) {
         notifyListeners("cotEvent", data: ["xml": xml])
         guard
-            let type = attribute(xml, tag: "event", name: "type"),
+            let type = cotAttribute(xml, tag: "event", name: "type"),
             type.hasPrefix("a-"),
-            let uid = attribute(xml, tag: "event", name: "uid"),
-            let callsign = attribute(xml, tag: "contact", name: "callsign"),
-            let stale = attribute(xml, tag: "event", name: "stale"),
+            let uid = cotAttribute(xml, tag: "event", name: "uid"),
+            let callsign = cotAttribute(xml, tag: "contact", name: "callsign"),
+            let stale = cotAttribute(xml, tag: "event", name: "stale"),
             let latitude = Double(
-                attribute(xml, tag: "point", name: "lat") ?? ""
+                cotAttribute(xml, tag: "point", name: "lat") ?? ""
             ),
             let longitude = Double(
-                attribute(xml, tag: "point", name: "lon") ?? ""
+                cotAttribute(xml, tag: "point", name: "lon") ?? ""
             )
         else {
             return
@@ -590,23 +590,23 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
             "latitude": latitude,
             "longitude": longitude,
             "altitudeMeters": optionalNumber(
-                attribute(xml, tag: "point", name: "hae")
+                cotAttribute(xml, tag: "point", name: "hae")
             ),
             "horizontalAccuracyMeters": optionalNumber(
-                attribute(xml, tag: "point", name: "ce")
+                cotAttribute(xml, tag: "point", name: "ce")
             ),
             "verticalAccuracyMeters": optionalNumber(
-                attribute(xml, tag: "point", name: "le")
+                cotAttribute(xml, tag: "point", name: "le")
             ),
             "headingDegrees": optionalNumber(
-                attribute(xml, tag: "track", name: "course")
+                cotAttribute(xml, tag: "track", name: "course")
             )
         ]
         contactLock.lock()
         contacts[uid] = [
             "uid": uid,
             "callsign": callsign,
-            "team": attribute(xml, tag: "__group", name: "name") ?? NSNull(),
+            "team": cotAttribute(xml, tag: "__group", name: "name") ?? NSNull(),
             "coordinate": coordinate,
             "staleAt": stale
         ]
@@ -617,24 +617,4 @@ public class AetherTakTransportPlugin: CAPPlugin, CAPBridgedPlugin, CLLocationMa
         value.flatMap(Double.init).map { $0 as Any } ?? NSNull()
     }
 
-    private func attribute(
-        _ xml: String,
-        tag: String,
-        name: String
-    ) -> String? {
-        let escapedTag = NSRegularExpression.escapedPattern(for: tag)
-        let escapedName = NSRegularExpression.escapedPattern(for: name)
-        let pattern = "<\(escapedTag)\\b[^>]*\\b\(escapedName)=\"([^\"]*)\""
-        guard
-            let regex = try? NSRegularExpression(pattern: pattern),
-            let match = regex.firstMatch(
-                in: xml,
-                range: NSRange(xml.startIndex..., in: xml)
-            ),
-            let range = Range(match.range(at: 1), in: xml)
-        else {
-            return nil
-        }
-        return String(xml[range])
-    }
 }

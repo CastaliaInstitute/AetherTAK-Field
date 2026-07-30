@@ -19,6 +19,7 @@
 		A37E00212026073000000001 /* TakFieldApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37E00222026073000000001 /* TakFieldApiClient.swift */; };
 		A37E00312026073000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A37E00322026073000000001 /* PrivacyInfo.xcprivacy */; };
 		A37E00412026073000000001 /* BackgroundPli.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37E00422026073000000001 /* BackgroundPli.swift */; };
+		A37E00512026073000000001 /* CotAttribute.swift in Sources */ = {isa = PBXBuildFile; fileRef = A37E00522026073000000001 /* CotAttribute.swift */; };
 		A37E00172026073000000001 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = A37E00182026073000000001 /* ZIPFoundation */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
@@ -39,6 +40,7 @@
 		A37E00222026073000000001 /* TakFieldApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TakFieldApiClient.swift; sourceTree = "<group>"; };
 		A37E00322026073000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A37E00422026073000000001 /* BackgroundPli.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundPli.swift; sourceTree = "<group>"; };
+		A37E00522026073000000001 /* CotAttribute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CotAttribute.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				A37E00162026073000000001 /* TakTlsTransport.swift */,
 				A37E00222026073000000001 /* TakFieldApiClient.swift */,
 				A37E00422026073000000001 /* BackgroundPli.swift */,
+				A37E00522026073000000001 /* CotAttribute.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -192,6 +195,7 @@
 				A37E00152026073000000001 /* TakTlsTransport.swift in Sources */,
 				A37E00212026073000000001 /* TakFieldApiClient.swift in Sources */,
 				A37E00412026073000000001 /* BackgroundPli.swift in Sources */,
+				A37E00512026073000000001 /* CotAttribute.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

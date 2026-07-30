@@ -144,7 +144,8 @@ plugins parse the issued mission package, enforce archive-size and XML safety
 limits, import the client identity into Keychain/Android KeyStore, retain only
 non-secret profile metadata outside secure storage, pin the issued CA, enforce
 TLS 1.2 or newer with server-name verification, stream CoT bidirectionally,
-extract live contacts, and stream checksum-verified media into app-private
+extract live contacts with bounded, entity-aware XML attribute decoding, and
+stream checksum-verified media into app-private
 storage. Enrollment imports validate certificate validity and chain trust,
 stage replacement credentials under unique labels, synchronously activate the
 new profile, roll staged items back on failure, and retire the previous identity

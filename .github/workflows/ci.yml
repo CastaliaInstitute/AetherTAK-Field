@@ -89,6 +89,13 @@ jobs:
             ios/App/Tests/BackgroundPli/main.swift \
             -o "$RUNNER_TEMP/background-pli-tests"
           "$RUNNER_TEMP/background-pli-tests"
+      - name: Test iOS CoT attribute decoder
+        run: |
+          swiftc \
+            ios/App/App/CotAttribute.swift \
+            ios/App/Tests/CotAttribute/main.swift \
+            -o "$RUNNER_TEMP/cot-attribute-tests"
+          "$RUNNER_TEMP/cot-attribute-tests"
       - run: >-
           xcodebuild
           -project ios/App/App.xcodeproj

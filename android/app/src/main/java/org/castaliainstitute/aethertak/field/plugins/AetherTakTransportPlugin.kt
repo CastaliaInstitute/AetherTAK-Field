@@ -25,6 +25,7 @@ import org.castaliainstitute.aethertak.field.tak.TakFieldApiClient
 import org.castaliainstitute.aethertak.field.tak.TakIdentityStore
 import org.castaliainstitute.aethertak.field.tak.TakProfile
 import org.castaliainstitute.aethertak.field.tak.TakTlsTransport
+import org.castaliainstitute.aethertak.field.tak.cotAttribute
 import org.castaliainstitute.aethertak.field.tak.TrackingNotificationPrerequisites
 import org.castaliainstitute.aethertak.field.tak.trackingNotificationProblem
 
@@ -464,43 +465,34 @@ class AetherTakTransportPlugin : Plugin() {
     private fun receiveEvent(xml: String) {
         val event = JSObject().put("xml", xml)
         notifyListeners("cotEvent", event)
-        val type = attribute(xml, "event", "type") ?: return
+        val type = cotAttribute(xml, "event", "type") ?: return
         if (!type.startsWith("a-")) return
-        val uid = attribute(xml, "event", "uid") ?: return
-        val callsign = attribute(xml, "contact", "callsign") ?: return
-        val stale = attribute(xml, "event", "stale") ?: return
-        val latitude = attribute(xml, "point", "lat")?.toDoubleOrNull() ?: return
-        val longitude = attribute(xml, "point", "lon")?.toDoubleOrNull() ?: return
+        val uid = cotAttribute(xml, "event", "uid") ?: return
+        val callsign = cotAttribute(xml, "contact", "callsign") ?: return
+        val stale = cotAttribute(xml, "event", "stale") ?: return
+        val latitude = cotAttribute(xml, "point", "lat")?.toDoubleOrNull() ?: return
+        val longitude = cotAttribute(xml, "point", "lon")?.toDoubleOrNull() ?: return
         val coordinate = JSObject().apply {
             put("latitude", latitude)
             put("longitude", longitude)
-            put("altitudeMeters", attribute(xml, "point", "hae")?.toDoubleOrNull())
+            put("altitudeMeters", cotAttribute(xml, "point", "hae")?.toDoubleOrNull())
             put(
                 "horizontalAccuracyMeters",
-                attribute(xml, "point", "ce")?.toDoubleOrNull(),
+                cotAttribute(xml, "point", "ce")?.toDoubleOrNull(),
             )
             put(
                 "verticalAccuracyMeters",
-                attribute(xml, "point", "le")?.toDoubleOrNull(),
+                cotAttribute(xml, "point", "le")?.toDoubleOrNull(),
             )
-            put("headingDegrees", attribute(xml, "track", "course")?.toDoubleOrNull())
+            put("headingDegrees", cotAttribute(xml, "track", "course")?.toDoubleOrNull())
         }
         contacts[uid] = JSObject().apply {
             put("uid", uid)
             put("callsign", callsign)
-            put("team", attribute(xml, "__group", "name") ?: JSObject.NULL)
+            put("team", cotAttribute(xml, "__group", "name") ?: JSObject.NULL)
             put("coordinate", coordinate)
             put("staleAt", stale)
         }
-    }
-
-    private fun attribute(xml: String, tag: String, name: String): String? {
-        val escapedTag = Regex.escape(tag)
-        val escapedName = Regex.escape(name)
-        return Regex("<$escapedTag\\b[^>]*\\b$escapedName=\"([^\"]*)\"")
-            .find(xml)
-            ?.groupValues
-            ?.get(1)
     }
 
     companion object {

@@ -18,6 +18,10 @@ shapes used by TAK clients:
 - XML declarations, formatting whitespace, unknown detail extensions, and
   numeric-looking callsigns
 
+The native Swift and Kotlin contact paths additionally exercise double- and
+single-quoted attributes, predefined and numeric XML entities, exact element
+matching, malformed/custom entity rejection, and bounded input handling.
+
 The outbound assertions follow the public ATAK-CIV implementation:
 
 - `GeoChatService` for `b-t-f` GeoChat details
