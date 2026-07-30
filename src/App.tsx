@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Camera,
@@ -29,6 +29,7 @@ import {
   downloadOfflineMapRegion,
 } from './maps/offlineRegions'
 import { activeRasterSource } from './maps/tileSource'
+import { importTakDataPackage } from './tak/enrollmentImport'
 import './App.css'
 
 type Tab = 'map' | 'fields' | 'capture' | 'team'
@@ -59,6 +60,7 @@ export default function App() {
   const [offlineMapState, setOfflineMapState] = useState<
     'idle' | 'downloading' | 'ready'
   >('idle')
+  const enrollmentInput = useRef<HTMLInputElement>(null)
   const {
     properties,
     seasons,
@@ -161,6 +163,23 @@ export default function App() {
       setNotice(
         error instanceof Error ? error.message : 'Offline map download failed.',
       )
+    }
+  }
+
+  async function enrollTak(file: File | undefined) {
+    if (!file) return
+    setNotice('Validating and importing the TAK certificate package…')
+    try {
+      const profile = await importTakDataPackage(file)
+      setNotice(`Enrolled ${profile.callsign} with ${profile.name}.`)
+      const status = await takTransport.connect(profile.id)
+      setConnection(status.state)
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : 'TAK enrollment failed.',
+      )
+    } finally {
+      if (enrollmentInput.current) enrollmentInput.current.value = ''
     }
   }
 
@@ -324,6 +343,26 @@ export default function App() {
           <Users size={30} />
           <p className="eyebrow">TAK NETWORK</p>
           <h2>Team contacts</h2>
+          {connection === 'not_enrolled' || connection === 'disconnected' ? (
+            <>
+              <input
+                ref={enrollmentInput}
+                className="visually-hidden"
+                type="file"
+                accept=".zip,application/zip"
+                onChange={(event) =>
+                  void enrollTak(event.currentTarget.files?.[0])
+                }
+              />
+              <button
+                className="primary-action enrollment-action"
+                type="button"
+                onClick={() => enrollmentInput.current?.click()}
+              >
+                <Download size={18} /> Import TAK server package
+              </button>
+            </>
+          ) : null}
           {contacts.map((contact) => (
             <article className="record-row" key={contact.uid}>
               <span className="team-avatar">{contact.callsign.slice(0, 2)}</span>

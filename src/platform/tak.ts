@@ -62,6 +62,15 @@ export const takTransport = {
     return Capacitor.isNativePlatform() ? nativeTak.getStatus() : browserStatus
   },
 
+  async importEnrollmentPackage(path: string): Promise<TakServerProfile> {
+    if (!Capacitor.isNativePlatform()) {
+      throw new Error(
+        'TAK certificate enrollment requires the iOS or Android application.',
+      )
+    }
+    return nativeTak.importEnrollmentPackage({ path })
+  },
+
   async contacts(): Promise<TakContact[]> {
     if (!Capacitor.isNativePlatform()) return []
     return (await nativeTak.getContacts()).contacts

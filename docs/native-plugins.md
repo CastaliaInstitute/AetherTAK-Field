@@ -56,9 +56,13 @@ Before beta distribution, verify on physical devices:
 ## Implementation status
 
 The shared CoT codec and offline TAK outbox are implemented and unit tested.
-The Swift and Java plugin classes are registered in their native projects and
-perform device capability checks, input validation, and honest failure
-reporting. The certificate importer, Keychain/KeyStore identity persistence,
-streaming TLS client, ARKit capture session, and ARCore capture session remain
-open work and require compilation plus physical-device verification on their
-respective platforms.
+The Swift and Kotlin plugins are registered in their native projects. Both TAK
+plugins parse the issued mission package, enforce archive-size and XML safety
+limits, import the client identity into Keychain/Android KeyStore, retain only
+non-secret profile metadata outside secure storage, pin the issued CA, enforce
+TLS 1.2 or newer with server-name verification, stream CoT bidirectionally, and
+extract live contacts. CI compiles Android on Ubuntu and iOS on a macOS runner.
+
+ARKit capture, ARCore capture, and physical-device interoperability remain open
+gates. Native enrollment and transport are not considered verified against
+iTAK/ATAK until those device tests pass.

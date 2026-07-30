@@ -26,11 +26,12 @@ The browser provides a safe preview. Certificate enrollment, CoT transport, and
 depth capture are intentionally native-only so private key material does not
 cross the JavaScript bridge.
 
-The checked-in Swift and Java native bridge classes currently provide real
-device capability detection and explicit unavailable/not-implemented results.
-Certificate import, streaming TLS transport, and depth-capture sessions are the
-next native implementation gate; the app does not pretend these operations
-succeeded in this foundation build.
+The checked-in Swift and Kotlin native bridge classes currently provide real
+device capability detection. Swift and Kotlin TAK bridges now import the issued
+data-package format directly, keep PKCS#12 passphrases native-only, store client
+identities in Keychain/Android KeyStore, pin the issued CA, require TLS 1.2 or
+newer, verify the server identity, stream CoT bidirectionally, and maintain live
+contacts. ARKit and ARCore depth-capture sessions remain an implementation gate.
 
 ## Development
 
