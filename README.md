@@ -133,6 +133,11 @@ Secret-gated TestFlight and Google Play internal-testing setup is documented in
 The physical-device execution matrix and controlled-evidence rules are in
 [docs/physical-release-validation.md](docs/physical-release-validation.md).
 
+The engineering baseline for the Castalia Guardian people-safety subsystem,
+including wearable constraints, protobuf, BLE GATT, CoT detail, PostGIS schema,
+APIs, deployment, privacy, and acceptance criteria, is in
+[docs/castalia-guardian-architecture.md](docs/castalia-guardian-architecture.md).
+
 ## Server endpoints
 
 The Pi deployment currently advertises the `192.168.86.0/24` subnet through
