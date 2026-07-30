@@ -139,13 +139,18 @@ async function uploadMedia(
 ) {
   if (item.entityType !== 'media' || item.operation === 'delete') return
   const media = mediaCaptureSchema.parse(item.payload)
+  if (!media.sha256) {
+    throw new Error(
+      'Media integrity must be recorded before an evidence artifact can synchronize.',
+    )
+  }
   const response = await transport.upload({
     mediaId: media.id,
     uri: media.localUri,
     contentType: media.mimeType,
     ...(media.observationId ? { observationId: media.observationId } : {}),
     ...(media.depthMetadata?.role ? { role: media.depthMetadata.role } : {}),
-    ...(media.sha256 ? { sha256: media.sha256 } : {}),
+    sha256: media.sha256,
   })
   if (response.status < 200 || response.status >= 300) {
     throw new FieldSyncHttpError(response)

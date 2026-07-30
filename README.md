@@ -20,7 +20,8 @@ client and inside Capacitor shells for iOS and Android.
   MapLibre raster protocol for authorized tile sources.
 - Structured field/ecology observation capture with category, title, notes,
   geotagged native photo/video, selectable depth output, app-private media,
-  streaming SHA-256 photo/video integrity, and an atomic sync outbox.
+  streaming SHA-256 integrity for photo, video, depth, confidence, point-cloud,
+  and model evidence, and an atomic sync outbox.
 - Bidirectional field-record and media synchronization with durable revisions,
   conflict preservation, paginated cursors, mTLS uploads/downloads, checksum
   verification, and atomic app-private file hydration.

@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { db, queueMutation } from '../data/database'
-import type { Property } from '../domain/models'
+import type { MediaCapture, Property } from '../domain/models'
 import { demoSnapshot } from '../domain/seed'
 import type { NativeFieldResponse } from '../platform/tak'
 import {
@@ -29,6 +29,26 @@ const property: Property = {
   ],
   timezone: 'America/Denver',
   updatedAt: '2026-07-30T06:00:00.000Z',
+  syncState: 'queued',
+}
+
+const media: MediaCapture = {
+  id: '29271ccb-27e9-41af-b4a6-4c4385a2200c',
+  observationId: null,
+  kind: 'point_cloud',
+  localUri: 'file:///private/DepthScans/scan/point-cloud.ply',
+  previewUri: 'file:///private/DepthScans/scan/preview.jpg',
+  mimeType: 'model/ply',
+  coordinate: property.center,
+  capturedAt: '2026-07-30T06:10:00.000Z',
+  deviceModel: null,
+  sha256: 'd'.repeat(64),
+  depthMetadata: {
+    scanId: '3e3ed46b-290e-455a-a763-c59fab2a4321',
+    provider: 'arkit-lidar',
+    role: 'point_cloud',
+    measurements: [],
+  },
   syncState: 'queued',
 }
 
@@ -155,6 +175,80 @@ describe('Aether Field durable synchronization', () => {
     expect(retained?.attempts).toBe(1)
     expect(new Date(retained!.nextAttemptAt).getTime()).toBeGreaterThan(
       now.getTime(),
+    )
+  })
+
+  it('binds a verified evidence digest into upload and mutation metadata', async () => {
+    await db.media.add(media)
+    const queued = await queueMutation({
+      entityType: 'media',
+      entityId: media.id,
+      operation: 'create',
+      payload: media,
+    })
+    const upload = vi.fn(async () => ({ status: 201, body: {} }))
+    const mutate = vi.fn(async () => ({
+      status: 200,
+      body: {
+        accepted: true,
+        mutationId: queued.id,
+        entityType: 'media',
+        entityId: media.id,
+        revision: 1,
+        cursor: 1,
+        serverUpdatedAt: '2026-07-30T06:45:00.000Z',
+        idempotentReplay: false,
+      },
+    }))
+    const transport = {
+      upload,
+      download: vi.fn(),
+      mutate,
+      changes: vi.fn(),
+    }
+
+    expect(await flushFieldOutbox(100, transport)).toMatchObject({
+      sent: 1,
+      failed: 0,
+    })
+    expect(upload).toHaveBeenCalledWith(expect.objectContaining({
+      mediaId: media.id,
+      uri: media.localUri,
+      contentType: 'model/ply',
+      sha256: media.sha256,
+    }))
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({
+      payload: expect.objectContaining({
+        sha256: media.sha256,
+      }),
+    }))
+  })
+
+  it('refuses to upload evidence without precomputed integrity metadata', async () => {
+    const unchecked = { ...media, sha256: null }
+    await db.media.add(unchecked)
+    const queued = await queueMutation({
+      entityType: 'media',
+      entityId: unchecked.id,
+      operation: 'create',
+      payload: unchecked,
+    })
+    const transport = {
+      upload: vi.fn(),
+      download: vi.fn(),
+      mutate: vi.fn(),
+      changes: vi.fn(),
+    }
+
+    expect(await flushFieldOutbox(100, transport)).toMatchObject({
+      sent: 0,
+      failed: 1,
+      remaining: 1,
+    })
+    expect(transport.upload).not.toHaveBeenCalled()
+    expect(transport.mutate).not.toHaveBeenCalled()
+    expect((await db.outbox.get(queued.id))?.lastError).toMatch(
+      /integrity must be recorded/,
     )
   })
 

@@ -62,14 +62,16 @@ PLI.
 ## AetherMediaIntegrity
 
 Native video capture requests persistent application storage from the Capacitor
-camera implementation. Before a video observation is committed to IndexedDB or
-its offline outbox, `inspect({ uri })` streams the app-private file through
-SHA-256 and returns its digest and byte count. Swift accepts only files within
-the application sandbox; Kotlin accepts only regular files beneath the
-application files, cache, or no-backup directories. Empty media and paths
-outside those roots fail closed. This avoids loading a potentially large video
-through the JavaScript bridge while ensuring both photo and video evidence have
-integrity metadata before synchronization.
+camera implementation, while ARKit and ARCore exporters write depth,
+confidence, point-cloud, and model artifacts into private application-support
+or files directories. Before an observation is committed to IndexedDB or its
+offline outbox, `inspect({ uri })` streams each app-private file through SHA-256
+and returns its digest and byte count. Swift accepts only files within the
+application sandbox; Kotlin accepts only regular files beneath the application
+files, cache, or no-backup directories. Empty media and paths outside those
+roots fail closed. This avoids loading potentially large video and geometry
+files through the JavaScript bridge while ensuring every synchronized evidence
+artifact has integrity metadata.
 
 ## AetherDepthScanner
 
@@ -118,7 +120,8 @@ versioned report records:
 - ARKit LiDAR or ARCore Depth capability and supported artifact types;
 - field and TAK queue state, conflicts, sync cursor, and last synchronization;
 - ready/partial offline-map counts and downloaded tile totals; and
-- media counts, queue state, and photo/video SHA-256 coverage.
+- media counts, queue state, and SHA-256 coverage across photo, video, depth,
+  confidence, point-cloud, and model evidence.
 
 The export deliberately excludes private keys, certificates, enrollment
 passwords, server addresses, profile/device identifiers, personal device

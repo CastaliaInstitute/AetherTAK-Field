@@ -38,7 +38,7 @@ companion-device session that covers the capability.
 | Geotagged video | Structured metadata, location, playback, digest, and synchronized artifact agree. |
 | Media round trip | A removed local artifact hydrates again with matching type, byte count, and SHA-256. |
 | Known-dimension depth accuracy | A controlled target is measured against a predeclared tolerance. |
-| Depth artifact export | Preview, metric depth, supported confidence, point cloud, measurements, and supported model open correctly. |
+| Depth artifact export | Preview, metric depth, supported confidence, point cloud, measurements, and supported model open correctly; every synchronized artifact retains its originating SHA-256. |
 | Unsupported-depth fallback | Unsupported hardware reports capability honestly and provides a safe fallback without a crash. |
 | Screen-lock team tracking | PLI continues at the expected cadence with the iOS indicator or Android foreground notification. |
 | Permission revocation | Location/camera permission loss produces a safe, recoverable error. On Android, revoking notification visibility stops background PLI without leaving a stale sharing state. |

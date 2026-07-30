@@ -41,11 +41,11 @@ const database: DatabaseMetrics = {
     downloadedTiles: 84,
   },
   media: {
-    total: 2,
+    total: 4,
     queued: 0,
-    checksumEligible: 2,
-    checksummed: 2,
-    byKind: { photo: 1, video: 1 },
+    checksumEligible: 4,
+    checksummed: 4,
+    byKind: { photo: 1, video: 1, depth: 1, point_cloud: 1 },
   },
   synchronization: {
     cursor: 42,
@@ -156,6 +156,25 @@ describe('device readiness evidence', () => {
       expect.objectContaining({ id: 'tak-enrollment', status: 'fail' }),
       expect.objectContaining({ id: 'field-sync', status: 'fail' }),
     ]))
+  })
+
+  it('flags any photo video or depth artifact missing integrity metadata', () => {
+    const report = buildDeviceReadinessReport({
+      ...healthySnapshot(),
+      database: {
+        ...database,
+        media: {
+          ...database.media,
+          checksummed: 3,
+        },
+      },
+    })
+
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      id: 'media-integrity',
+      status: 'attention',
+      detail: '3 of 4 evidence artifacts have SHA-256 metadata.',
+    }))
   })
 
   it('omits personal device names, profile IDs, errors, and record contents', () => {

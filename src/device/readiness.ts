@@ -191,9 +191,7 @@ async function collectDatabaseMetrics(): Promise<DatabaseMetrics> {
     counts[artifact.kind] = (counts[artifact.kind] ?? 0) + 1
     return counts
   }, {})
-  const checksumEligible = media.filter(
-    (artifact) => artifact.kind === 'photo' || artifact.kind === 'video',
-  )
+  const checksumEligible = media
   return databaseMetricsSchema.parse({
     records: {
       properties,
@@ -382,8 +380,8 @@ export function buildDeviceReadinessReport(
           ? 'pass'
           : 'attention',
       detail: database.media.checksumEligible === 0
-        ? 'No photo or video evidence has been captured.'
-        : `${database.media.checksummed} of ${database.media.checksumEligible} photo/video artifacts have SHA-256 evidence.`,
+        ? 'No media or depth evidence has been captured.'
+        : `${database.media.checksummed} of ${database.media.checksumEligible} evidence artifacts have SHA-256 metadata.`,
     },
     {
       id: 'network',
