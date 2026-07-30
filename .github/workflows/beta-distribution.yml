@@ -70,6 +70,8 @@ jobs:
           test -n "$ITAK_VERSION"
           test -n "$ATAK_VERSION"
           test -n "$TAK_SERVER_VERSION"
+      - name: Verify native and store compliance declarations
+        run: node scripts/store-compliance.mjs
       - name: Verify private physical release evidence
         env:
           RELEASE_EVIDENCE_BUNDLE_BASE64: ${{ secrets.RELEASE_EVIDENCE_BUNDLE_BASE64 }}

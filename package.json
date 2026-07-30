@@ -11,6 +11,7 @@
     "test": "vitest",
     "test:run": "vitest run && npm run test:release",
     "test:release": "node --test scripts/*.node.mjs",
+    "compliance": "node scripts/store-compliance.mjs",
     "cap:sync": "npm run build && cap sync",
     "android": "cap open android",
     "ios": "cap open ios"
