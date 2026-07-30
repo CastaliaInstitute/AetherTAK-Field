@@ -123,10 +123,11 @@ class AetherTakTransportPlugin : Plugin() {
                     call.resolve(JSObject().put("accepted", true))
                 },
                 onFailure = { error ->
+                    val exception = error as? Exception ?: Exception(error)
                     call.reject(
                         error.message ?: "CoT send failed.",
                         "SEND_FAILED",
-                        error,
+                        exception,
                     )
                 },
             )

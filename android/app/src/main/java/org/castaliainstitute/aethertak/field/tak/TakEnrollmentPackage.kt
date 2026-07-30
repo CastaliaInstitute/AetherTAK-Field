@@ -8,7 +8,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import java.util.zip.ZipInputStream
-import javax.xml.XMLConstants
 import javax.xml.parsers.DocumentBuilderFactory
 
 data class TakEnrollmentMaterial(
@@ -114,8 +113,14 @@ object TakEnrollmentPackage {
             setFeature("http://xml.org/sax/features/external-general-entities", false)
             setFeature("http://xml.org/sax/features/external-parameter-entities", false)
             setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "")
-            setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "")
+            setAttribute(
+                "http://javax.xml.XMLConstants/property/accessExternalDTD",
+                "",
+            )
+            setAttribute(
+                "http://javax.xml.XMLConstants/property/accessExternalSchema",
+                "",
+            )
             isXIncludeAware = false
             isExpandEntityReferences = false
         }
